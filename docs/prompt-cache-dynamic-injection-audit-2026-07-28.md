@@ -121,6 +121,17 @@ The direct mutation inventory behind this classification is:
 > Telemetry reason code `agent_model_routing_hint_injected` is replaced by
 > `agent_model_routing_resolved`, with `resolver_prompt_context=trace_only`.
 
+> **Runtime-context correction — 2026-08-04:** The default `lite` managed
+> context now substitutes a versioned compact runtime contract only for the
+> built-in fallback or the exact reviewed canonical concise-skill fingerprint.
+> Unknown/custom bodies fail open to passthrough, while `review`/`commit`, mode
+> precedence, off behavior, reloads, managed ordering, and the session cache
+> boundary remain unchanged. In the fixed canonical + `session-fixed` fixture,
+> concise/session context falls from 1,548 to 656 characters: 892 fewer (57.6%).
+> The mode source remains in state/audit rather than provider prose. This is a
+> recurring input/context reduction, not evidence of cache-hit, latency, cost,
+> or provider-budget improvement.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.

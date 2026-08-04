@@ -9,12 +9,24 @@ import { managedRuntimeSystemMarker, RUNTIME_CONCISE_CONTEXT_MARKER, RUNTIME_SES
 const SYSTEM_CONTEXT_MARKER = RUNTIME_SESSION_CONTEXT_MARKER;
 const CONCISE_CONTEXT_MARKER = RUNTIME_CONCISE_CONTEXT_MARKER;
 const VALID_MODES = new Set(["off", "lite", "full", "ultra", "review", "commit"]);
-const DEFAULT_CONCISE_SKILL_BODY = [
-    "Use concise/caveman-style communication only when active.",
-    "Remove filler and weak hedging first. Keep technical terms, commands, identifiers, filenames, and exact errors unchanged.",
-    "lite: concise full sentences. full: terse fragments OK when meaning stays obvious. ultra: strongest safe compression.",
-    "Relax concise mode for destructive warnings, security/privacy guidance, or multi-step instructions where clarity matters more than compression.",
+const COMPACT_CONCISE_RUNTIME_CONTRACT = [
+    "Cut filler, pleasantries, and weak hedging; preserve technical substance.",
+    "Keep code blocks, technical terms, paths, identifiers, commands, flags, and exact errors unchanged.",
+    "lite: concise sentences. full: terse fragments when clear. ultra: strongest safe compression.",
+    "Expand for destructive warnings, security/privacy, blockers, ordered steps, repeated confusion, or requests for detail.",
+    "Pattern: [problem]. [cause]. [fix]. [next step].",
 ].join("\n");
+// Derived from agents_md/skills/concise-mode/SKILL.md after frontmatter removal
+// and trim. New canonical revisions must register a reviewed additive mapping.
+const CANONICAL_CONCISE_RUNTIME_CONTRACTS = new Map([
+    [
+        "bf27645f37241c9c852c030192f582a341d04376286a90e9c34bf5635d596580",
+        {
+            compactKind: "canonical-v1",
+            body: COMPACT_CONCISE_RUNTIME_CONTRACT,
+        },
+    ],
+]);
 function resolveSessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId];
     for (const value of candidates) {
@@ -42,8 +54,7 @@ export function stablePromptFingerprint(entries) {
 function buildSystemContext(sessionId) {
     return [
         `${SYSTEM_CONTEXT_MARKER} ${sessionId}`,
-        "Use this exact runtime session id for commits, logs, telemetry, and external tooling created during this session.",
-        "If the user asks for the current runtime session id, return it exactly.",
+        "Use this exact runtime session ID for session-scoped commits/logs/telemetry/external tooling; if asked for the current runtime session ID, return only it.",
     ].join("\n");
 }
 function reconcileRuntimeContexts(system, conciseContext, sessionContext) {
@@ -124,19 +135,37 @@ function loadConciseSkillBody(directory, candidateCacheByDirectory, bodyCacheByP
         const signature = pathSignature(path);
         const cached = bodyCacheByPath.get(path);
         if (cached?.signature === signature) {
-            return cached.body;
+            return { body: cached.body, sourceKind: "file" };
         }
         try {
             const text = readFileSync(path, "utf-8");
             const body = text.replace(/^---[\s\S]*?---\s*/, "").trim();
             bodyCacheByPath.set(path, { signature, body });
-            return body;
+            return { body, sourceKind: "file" };
         }
         catch {
             continue;
         }
     }
-    return DEFAULT_CONCISE_SKILL_BODY;
+    return { body: COMPACT_CONCISE_RUNTIME_CONTRACT, sourceKind: "fallback" };
+}
+function resolveRuntimeConciseSkillBody(loaded) {
+    if (loaded.sourceKind === "fallback") {
+        return {
+            ...loaded,
+            body: COMPACT_CONCISE_RUNTIME_CONTRACT,
+            compactKind: "fallback",
+        };
+    }
+    const registered = CANONICAL_CONCISE_RUNTIME_CONTRACTS.get(exactPromptFingerprint([loaded.body]));
+    if (registered) {
+        return {
+            ...loaded,
+            body: registered.body,
+            compactKind: registered.compactKind,
+        };
+    }
+    return { ...loaded, compactKind: "passthrough" };
 }
 function modeSpecificRules(mode) {
     if (mode === "review") {
@@ -153,13 +182,16 @@ function modeSpecificRules(mode) {
     }
     return "Active level: full. Prefer short direct fragments when they stay clear and technically exact.";
 }
-function buildConciseModeContext(directory, mode, source, candidateCacheByDirectory, bodyCacheByPath) {
+function buildConciseModeContext(directory, mode, candidateCacheByDirectory, bodyCacheByPath) {
+    const loaded = resolveRuntimeConciseSkillBody(loadConciseSkillBody(directory, candidateCacheByDirectory, bodyCacheByPath));
+    const includeModeRule = loaded.compactKind === "passthrough" || mode === "review" || mode === "commit";
     return [
         `${CONCISE_CONTEXT_MARKER} ${mode}`,
-        `Concise mode active from ${source}.`,
-        modeSpecificRules(mode),
-        loadConciseSkillBody(directory, candidateCacheByDirectory, bodyCacheByPath),
-    ].join("\n\n");
+        includeModeRule ? modeSpecificRules(mode) : "",
+        loaded.body,
+    ]
+        .filter((entry) => entry.length > 0)
+        .join("\n");
 }
 export function createSessionRuntimeSystemContextHook(options) {
     const conciseSkillCandidateCacheByDirectory = new Map();
@@ -190,7 +222,7 @@ export function createSessionRuntimeSystemContextHook(options) {
             const shouldInjectSessionId = injectSessionIdContext &&
                 (!options.injectSessionIdWhenConciseModeOnly || (concise && concise.mode !== "off"));
             const nextConcise = concise && concise.mode !== "off"
-                ? buildConciseModeContext(directory, concise.mode, concise.source, conciseSkillCandidateCacheByDirectory, conciseSkillBodyCacheByPath)
+                ? buildConciseModeContext(directory, concise.mode, conciseSkillCandidateCacheByDirectory, conciseSkillBodyCacheByPath)
                 : null;
             const nextSession = shouldInjectSessionId ? buildSystemContext(sessionId) : null;
             const reconciliation = reconcileRuntimeContexts(system, nextConcise, nextSession);
