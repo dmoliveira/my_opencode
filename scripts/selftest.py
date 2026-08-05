@@ -3227,7 +3227,7 @@ exit 0
             "session doctor should leave generic stale sessions untouched without --include-generic",
         )
 
-        generic_only_db_path = Path(tmpdir) / "opencode-generic-only.db"
+        generic_only_db_path = runtime_db_dir / "opencode-generic-only.db"
         conn = sqlite3.connect(generic_only_db_path)
         try:
             conn.executescript(
@@ -13181,7 +13181,9 @@ exit 0
             "gateway doctor should include gateway state lock diagnostics",
         )
 
-        gateway_runtime_db_path = tmp / "gateway-doctor-runtime.db"
+        gateway_runtime_dir = tmp / "gateway-runtime"
+        gateway_runtime_dir.mkdir(mode=0o700)
+        gateway_runtime_db_path = gateway_runtime_dir / "opencode.db"
         conn = sqlite3.connect(gateway_runtime_db_path)
         try:
             conn.executescript(
