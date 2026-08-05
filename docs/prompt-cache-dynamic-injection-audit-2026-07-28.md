@@ -172,6 +172,24 @@ The direct mutation inventory behind this classification is:
 > correctness hardening change and makes no input-savings, token, cache-hit,
 > latency, cost, or provider-budget claim.
 
+> **Delegation focus compaction reassessment — 2026-08-05:** No runtime wording
+> changed. At source revision `e3e8fc8`, a local Python measurement loaded the
+> 12 sorted `agent/specs/*.json` files, selected each first `triggers` and
+> `avoid_when` value, rendered the current focus template, and measured
+> `len(text.encode("utf-8"))`. Focus lines span 166–192 UTF-8 bytes (mean
+> 174.8); adding the fixed ASCII fixture `[DELEGATION TRACE trace-fixed]` (30
+> bytes) and two canonical `\n\n` separators yields 200–226 bytes. Removing only
+> the redundant marker word
+> `delegated` would save exactly 10 UTF-8 bytes per fixture: 5.2–6.0% of the
+> focus line or 4.4–5.0% of the composed input. The fixed ASCII resolver fixture
+> would fall from 208 to 198 characters and UTF-8 bytes (4.8%); character and
+> byte counts coincide there only because that fixture is ASCII. The candidate
+> was rejected because this marginal direct-byte reduction does not justify
+> indefinitely recognizing another legacy managed form without measured token,
+> cache-hit, latency, cost, or provider-budget benefit. No runtime savings were
+> realized. Revisit only with measured provider benefit or a materially larger
+> reduction that avoids indefinite legacy recognition.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.
