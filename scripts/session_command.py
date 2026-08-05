@@ -18,6 +18,19 @@ from runtime_history_snapshot import (  # type: ignore
     create_runtime_history_snapshot,
     default_runtime_snapshot_output_dir,
 )
+from runtime_stale_pagination import (  # type: ignore
+    PARENT_CHILD_FINDING_CLASSES,
+    STALE_CURSOR_MAX_STALE_SECONDS,
+    STALE_FINDING_CLASSES,
+    STALE_FINDINGS_LOOKAHEAD_LIMIT,
+    STALE_FINDINGS_PAGE_SIZE,
+    RuntimeStaleCursorError,
+    decode_runtime_stale_cursor,
+    empty_runtime_stale_pagination,
+    encode_runtime_stale_cursor,
+    initial_runtime_stale_class_states,
+    materialize_runtime_stale_class_page,
+)
 from session_metadata_index import SessionIndexError, load_session_index  # type: ignore
 from session_sidecar_security import (  # type: ignore
     SidecarInspection,
@@ -86,6 +99,7 @@ def _default_runtime_db_path() -> Path:
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
 MAX_RUNTIME_STALE_FINDINGS = 100
+RUNTIME_STALE_CURSOR_MARKER = "/* runtime_stale_cursor */"
 RUNTIME_PERMISSION_RECONCILE_ATTEMPTS = 3
 RUNTIME_PERMISSION_TARGETS = (
     "runtime_parent",
@@ -124,7 +138,7 @@ def resolve_runtime_db_path() -> Path:
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session snapshot-runtime [--db-path <active-path>] [--output-dir <private-dir>] [--full-integrity-check] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-runtime-permissions [--db-path <active-path>] [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--stale-cursor <opaque>] [--json] | /session snapshot-runtime [--db-path <active-path>] [--output-dir <private-dir>] [--full-integrity-check] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-runtime-permissions [--db-path <active-path>] [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -172,6 +186,69 @@ def _parse_path_option(argv: list[str], name: str, default: Path) -> Path:
     if idx + 1 >= len(argv):
         raise ValueError(f"missing value for {name}")
     return Path(argv[idx + 1]).expanduser()
+
+
+def _parse_doctor_options(argv: list[str]) -> dict[str, Any]:
+    value_options = {
+        "--db-path",
+        "--generic-stale-problem-threshold",
+        "--stale-cursor",
+        "--stale-seconds",
+    }
+    seen: set[str] = set()
+    values: dict[str, str] = {}
+    json_output = False
+    index = 0
+    while index < len(argv):
+        option = argv[index]
+        if option == "--json":
+            if option in seen:
+                raise ValueError("duplicate doctor option")
+            seen.add(option)
+            json_output = True
+            index += 1
+            continue
+        if option not in value_options or option in seen or index + 1 >= len(argv):
+            raise ValueError("invalid doctor option")
+        value = argv[index + 1]
+        if not value.strip() or value.startswith("--"):
+            raise ValueError("invalid doctor option value")
+        seen.add(option)
+        values[option] = value
+        index += 2
+
+    stale_seconds_explicit = "--stale-seconds" in values
+    try:
+        stale_seconds = int(
+            values.get("--stale-seconds", str(DEFAULT_STALE_SESSION_SECONDS))
+        )
+        generic_threshold = int(
+            values.get(
+                "--generic-stale-problem-threshold",
+                str(DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD),
+            )
+        )
+    except ValueError as exc:
+        raise ValueError("invalid doctor numeric option") from exc
+    if (
+        stale_seconds <= 0
+        or stale_seconds > STALE_CURSOR_MAX_STALE_SECONDS
+        or generic_threshold <= 0
+    ):
+        raise ValueError("doctor numeric options must be positive")
+    stale_cursor = values.get("--stale-cursor")
+    if stale_cursor is not None and not json_output:
+        raise ValueError("--stale-cursor requires --json")
+    return {
+        "db_path": Path(
+            values.get("--db-path", str(resolve_runtime_db_path()))
+        ).expanduser(),
+        "stale_seconds": stale_seconds,
+        "stale_seconds_explicit": stale_seconds_explicit,
+        "generic_stale_problem_threshold": generic_threshold,
+        "stale_cursor": stale_cursor,
+        "json_output": json_output,
+    }
 
 
 def _load_index(path: Path) -> dict:
@@ -770,6 +847,98 @@ class _RuntimeScanBudget:
         return 1
 
 
+def _runtime_stale_class_states(
+    stale_cursor: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if stale_cursor is None:
+        return initial_runtime_stale_class_states()
+    raw_classes = stale_cursor.get("classes")
+    if not isinstance(raw_classes, dict):
+        raise ValueError("stale cursor classes are unavailable")
+    return {
+        issue_type: {
+            "after": list(raw_classes[issue_type]["after"])
+            if isinstance(raw_classes[issue_type].get("after"), list)
+            else None,
+            "exhausted": bool(raw_classes[issue_type].get("exhausted")),
+        }
+        for issue_type in STALE_FINDING_CLASSES
+    }
+
+
+def _runtime_stale_cursor_clause(
+    issue_type: str,
+    state: dict[str, Any],
+) -> tuple[str, tuple[Any, ...]]:
+    after = state.get("after")
+    if after is None:
+        return "", ()
+    if issue_type in PARENT_CHILD_FINDING_CLASSES:
+        timestamp, parent_id, child_id = after
+        return (
+            """
+              AND (
+                p.time_updated < ?
+                OR (p.time_updated = ? AND p.id < ?)
+                OR (p.time_updated = ? AND p.id = ? AND c.id < ?)
+              )
+            """,
+            (timestamp, timestamp, parent_id, timestamp, parent_id, child_id),
+        )
+    timestamp, session_id = after
+    return (
+        """
+          AND (
+            s.time_updated < ?
+            OR (s.time_updated = ? AND s.id < ?)
+          )
+        """,
+        (timestamp, timestamp, session_id),
+    )
+
+
+def _runtime_stale_pagination_fields(
+    *,
+    db_path: Path,
+    now_ms: int,
+    stale_seconds: int,
+    cursor_applied: bool,
+    class_states: dict[str, dict[str, Any]],
+    findings: list[dict[str, Any]],
+    generic_stale_findings: list[dict[str, Any]],
+) -> dict[str, Any]:
+    counts = {issue_type: 0 for issue_type in STALE_FINDING_CLASSES}
+    for item in [*findings, *generic_stale_findings]:
+        issue_type = str(item.get("issue_type") or "")
+        if issue_type in counts:
+            counts[issue_type] += 1
+    page_count = sum(counts.values())
+    has_more = any(
+        not bool(class_states[issue_type].get("exhausted"))
+        for issue_type in STALE_FINDING_CLASSES
+    )
+    next_cursor = (
+        encode_runtime_stale_cursor(
+            now_ms=now_ms,
+            stale_seconds=stale_seconds,
+            db_path=db_path,
+            classes=class_states,
+        )
+        if has_more
+        else None
+    )
+    return {
+        "stale_findings_page_size": STALE_FINDINGS_PAGE_SIZE,
+        "stale_findings_page_count": page_count,
+        "stale_findings_page_counts": counts,
+        "stale_findings_has_more": has_more,
+        "stale_findings_truncated": has_more,
+        "stale_findings_next_cursor": next_cursor,
+        "stale_findings_cursor_applied": cursor_applied,
+        "stale_findings_pagination_complete": not has_more,
+    }
+
+
 
 
 _INDEXED_PARENT_CHILD_FROM_SQL = """
@@ -888,8 +1057,9 @@ INDEXED_RUNTIME_STALE_SESSION_QUERIES = {
             json_extract(cm.data,'$.time.completed') IS NOT NULL
             OR json_extract(cm.data,'$.error') IS NOT NULL
           )
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
-        LIMIT 20
+        LIMIT ?
     """,
     "silent_parent_after_delegation_abort": f"""
         {_INDEXED_PARENT_CHILD_SELECT_SQL}
@@ -917,8 +1087,9 @@ INDEXED_RUNTIME_STALE_SESSION_QUERIES = {
             json_extract(cm.data,'$.time.completed') IS NOT NULL
             OR json_extract(cm.data,'$.error') IS NOT NULL
           )
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
-        LIMIT 20
+        LIMIT ?
     """,
     "stale_delegated_child_runtime_recovery_missed": f"""
         {_INDEXED_PARENT_CHILD_SELECT_SQL}
@@ -932,8 +1103,9 @@ INDEXED_RUNTIME_STALE_SESSION_QUERIES = {
           AND json_extract(cm.data,'$.time.completed') IS NULL
           AND json_extract(cm.data,'$.error') IS NULL
           AND c.time_updated > p.time_updated
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
-        LIMIT 20
+        LIMIT ?
     """,
     "stale_running_tool": f"""
         SELECT
@@ -952,8 +1124,9 @@ INDEXED_RUNTIME_STALE_SESSION_QUERIES = {
           AND COALESCE(json_extract(p.data,'$.type'),'') = 'tool'
           AND COALESCE(json_extract(p.data,'$.state.status'),'') = 'running'
           AND COALESCE(json_extract(p.data,'$.tool'),'') IN ('question', 'apply_patch')
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY s.time_updated DESC, s.id DESC
-        LIMIT 20
+        LIMIT ?
     """,
     "generic_stale_rows": f"""
         SELECT
@@ -968,8 +1141,9 @@ INDEXED_RUNTIME_STALE_SESSION_QUERIES = {
           COALESCE(json_extract(p.data,'$.state.status'),'') AS last_tool_status
         {_INDEXED_SINGLE_SESSION_FROM_SQL}
         {_INDEXED_GENERIC_WHERE_SQL}
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY s.time_updated DESC, s.id DESC
-        LIMIT 20
+        LIMIT ?
     """,
     "generic_stale_count": f"""
         SELECT COUNT(*)
@@ -1023,25 +1197,49 @@ def _scan_runtime_stuck_sessions_indexed_queries(
     *,
     stale_seconds: int,
     now_ms: int,
+    stale_cursor: dict[str, Any] | None = None,
+    page_state_output: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     cutoff_ms = now_ms - stale_seconds * 1000
     parent_params = (cutoff_ms, cutoff_ms)
+    class_states = _runtime_stale_class_states(stale_cursor)
+    next_class_states: dict[str, dict[str, Any]] = {}
 
     def bounded_rows(
         query_name: str,
-        params: tuple[int, ...],
+        params: tuple[Any, ...],
         *,
         drop: tuple[str, ...] = (),
         issue_type: str | None = None,
     ) -> list[dict[str, Any]]:
+        resolved_issue_type = issue_type or query_name
+        previous_state = class_states[resolved_issue_type]
+        if previous_state["exhausted"]:
+            next_class_states[resolved_issue_type] = previous_state
+            return []
+        cursor_clause, cursor_params = _runtime_stale_cursor_clause(
+            resolved_issue_type,
+            previous_state,
+        )
+        query = INDEXED_RUNTIME_STALE_SESSION_QUERIES[query_name].replace(
+            RUNTIME_STALE_CURSOR_MARKER,
+            cursor_clause,
+        )
+        rows = conn.execute(
+            query,
+            (*params, *cursor_params, STALE_FINDINGS_LOOKAHEAD_LIMIT),
+        ).fetchall()
+        materialized, next_state = materialize_runtime_stale_class_page(
+            resolved_issue_type,
+            rows,
+            previous_state,
+        )
+        next_class_states[resolved_issue_type] = next_state
         output: list[dict[str, Any]] = []
-        for row in conn.execute(
-            INDEXED_RUNTIME_STALE_SESSION_QUERIES[query_name], params
-        ).fetchall():
-            item = dict(row)
+        for item in materialized:
             for key in drop:
                 item.pop(key, None)
-            item["issue_type"] = issue_type or query_name
+            item["issue_type"] = resolved_issue_type
             output.append(item)
         return output
 
@@ -1073,6 +1271,8 @@ def _scan_runtime_stuck_sessions_indexed_queries(
         ).fetchone()[0]
     )
     findings = parent_child + silent_abort + stale_delegated_child + stale_tool
+    if page_state_output is not None:
+        page_state_output.update(next_class_states)
     return findings, generic_stale_findings, generic_stale_count
 
 
@@ -1110,10 +1310,44 @@ _LEGACY_LATEST_PART_CTE_SQL = """
 def _scan_runtime_stuck_sessions_legacy_queries(
     conn: sqlite3.Connection,
     stale_seconds: int,
+    *,
+    stale_cursor: dict[str, Any] | None = None,
+    page_state_output: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     findings: list[dict[str, Any]] = []
     generic_stale_findings: list[dict[str, Any]] = []
-    parent_child_rows = conn.execute(
+    class_states = _runtime_stale_class_states(stale_cursor)
+    next_class_states: dict[str, dict[str, Any]] = {}
+
+    def paginated_rows(
+        issue_type: str,
+        query: str,
+        params: tuple[Any, ...],
+    ) -> list[dict[str, Any]]:
+        previous_state = class_states[issue_type]
+        if previous_state["exhausted"]:
+            next_class_states[issue_type] = previous_state
+            return []
+        cursor_clause, cursor_params = _runtime_stale_cursor_clause(
+            issue_type,
+            previous_state,
+        )
+        rows = conn.execute(
+            query.replace(RUNTIME_STALE_CURSOR_MARKER, cursor_clause),
+            (*params, *cursor_params, STALE_FINDINGS_LOOKAHEAD_LIMIT),
+        ).fetchall()
+        materialized, next_state = materialize_runtime_stale_class_page(
+            issue_type,
+            rows,
+            previous_state,
+        )
+        next_class_states[issue_type] = next_state
+        for item in materialized:
+            item["issue_type"] = issue_type
+        return materialized
+
+    parent_child_rows = paginated_rows(
+        "parent_child_mismatch",
         f"""
         WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
              {_LEGACY_LATEST_PART_CTE_SQL}
@@ -1160,17 +1394,16 @@ def _scan_runtime_stuck_sessions_legacy_queries(
             json_extract(cm.data,'$.time.completed') IS NOT NULL
             OR json_extract(cm.data,'$.error') IS NOT NULL
           )
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
-        LIMIT 20
+        LIMIT ?
         """,
         (stale_seconds, stale_seconds),
-    ).fetchall()
-    for row in parent_child_rows:
-        item = dict(row)
-        item["issue_type"] = "parent_child_mismatch"
-        findings.append(item)
+    )
+    findings.extend(parent_child_rows)
 
-    silent_abort_rows = conn.execute(
+    silent_abort_rows = paginated_rows(
+        "silent_parent_after_delegation_abort",
         f"""
         WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
              {_LEGACY_LATEST_PART_CTE_SQL}
@@ -1235,17 +1468,16 @@ def _scan_runtime_stuck_sessions_legacy_queries(
             json_extract(cm.data,'$.time.completed') IS NOT NULL
             OR json_extract(cm.data,'$.error') IS NOT NULL
           )
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
-        LIMIT 20
+        LIMIT ?
         """,
         (stale_seconds, stale_seconds),
-    ).fetchall()
-    for row in silent_abort_rows:
-        item = dict(row)
-        item["issue_type"] = "silent_parent_after_delegation_abort"
-        findings.append(item)
+    )
+    findings.extend(silent_abort_rows)
 
-    stale_delegated_child_rows = conn.execute(
+    stale_delegated_child_rows = paginated_rows(
+        "stale_delegated_child_runtime_recovery_missed",
         f"""
         WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
              {_LEGACY_LATEST_PART_CTE_SQL}
@@ -1293,17 +1525,16 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           AND json_extract(cm.data,'$.time.completed') IS NULL
           AND json_extract(cm.data,'$.error') IS NULL
           AND c.time_updated > p.time_updated
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY p.time_updated DESC, p.id DESC, c.id DESC
-        LIMIT 20
+        LIMIT ?
         """,
         (stale_seconds, stale_seconds),
-    ).fetchall()
-    for row in stale_delegated_child_rows:
-        item = dict(row)
-        item["issue_type"] = "stale_delegated_child_runtime_recovery_missed"
-        findings.append(item)
+    )
+    findings.extend(stale_delegated_child_rows)
 
-    stale_tool_rows = conn.execute(
+    stale_tool_rows = paginated_rows(
+        "stale_running_tool",
         f"""
         WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
              {_LEGACY_LATEST_PART_CTE_SQL}
@@ -1328,15 +1559,13 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           AND COALESCE(json_extract(p.data,'$.type'),'') = 'tool'
           AND COALESCE(json_extract(p.data,'$.state.status'),'') = 'running'
           AND COALESCE(json_extract(p.data,'$.tool'),'') IN ('question', 'apply_patch')
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY s.time_updated DESC, s.id DESC
-        LIMIT 20
+        LIMIT ?
         """,
         (stale_seconds,),
-    ).fetchall()
-    for row in stale_tool_rows:
-        item = dict(row)
-        item["issue_type"] = "stale_running_tool"
-        findings.append(item)
+    )
+    findings.extend(stale_tool_rows)
 
     generic_stale_with_sql = f"""
         WITH {_LEGACY_LATEST_MESSAGE_CTE_SQL},
@@ -1365,7 +1594,8 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           )
     """
 
-    generic_stale_rows = conn.execute(
+    generic_stale_findings = paginated_rows(
+        "generic_stale_incomplete_assistant",
         f"""
         {generic_stale_with_sql}
         SELECT
@@ -1379,16 +1609,12 @@ def _scan_runtime_stuck_sessions_legacy_queries(
           COALESCE(json_extract(p.data,'$.tool'),'') AS last_tool,
           COALESCE(json_extract(p.data,'$.state.status'),'') AS last_tool_status
         {generic_stale_from_sql}
+        {RUNTIME_STALE_CURSOR_MARKER}
         ORDER BY s.time_updated DESC, s.id DESC
-        LIMIT 20
+        LIMIT ?
         """,
         (stale_seconds,),
-    ).fetchall()
-    generic_stale_findings: list[dict] = []
-    for row in generic_stale_rows:
-        item = dict(row)
-        item["issue_type"] = "generic_stale_incomplete_assistant"
-        generic_stale_findings.append(item)
+    )
 
     generic_stale_count = int(
         conn.execute(
@@ -1400,6 +1626,8 @@ def _scan_runtime_stuck_sessions_legacy_queries(
             (stale_seconds,),
         ).fetchone()[0]
     )
+    if page_state_output is not None:
+        page_state_output.update(next_class_states)
     return findings, generic_stale_findings, generic_stale_count
 
 
@@ -1409,9 +1637,17 @@ def _scan_runtime_stuck_sessions(
     generic_stale_problem_threshold: int = DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
     *,
     now_ms: int | None = None,
+    stale_cursor: dict[str, Any] | None = None,
 ) -> dict:
     started_at = time.perf_counter()
-    scan_now_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    cursor_applied = stale_cursor is not None
+    if stale_cursor is not None:
+        cursor_stale_seconds = int(stale_cursor["stale_seconds"])
+        if cursor_stale_seconds != stale_seconds:
+            raise ValueError("stale cursor threshold does not match scan threshold")
+        scan_now_ms = int(stale_cursor["now_ms"])
+    else:
+        scan_now_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
     warnings: list[str] = []
     problems: list[str] = []
     remediation_codes: list[str] = []
@@ -1453,6 +1689,9 @@ def _scan_runtime_stuck_sessions(
     runtime_db_query_only = False
     runtime_db_snapshot_started = False
     runtime_db_scan_complete = False
+    stale_pagination = empty_runtime_stale_pagination(
+        cursor_applied=cursor_applied,
+    )
 
     def add_remediation(code: str) -> None:
         if code not in remediation_codes:
@@ -1496,6 +1735,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_wal_bytes": runtime_db_wal_bytes,
             "runtime_db_size_warn_bytes": RUNTIME_DB_SIZE_WARN_BYTES,
             "runtime_db_scan_duration_ms": runtime_db_scan_duration_ms,
+            **stale_pagination,
         }
 
     if not db_path.exists():
@@ -1583,6 +1823,7 @@ def _scan_runtime_stuck_sessions(
             missing_index_prefixes = _missing_runtime_index_prefixes(
                 runtime_db_index_columns
             )
+            page_states: dict[str, dict[str, Any]] = {}
             if missing_index_prefixes:
                 runtime_db_scan_mode = "legacy_fallback"
                 warnings.append(
@@ -1590,7 +1831,12 @@ def _scan_runtime_stuck_sessions(
                     f"(missing index prefixes: {', '.join(missing_index_prefixes)})"
                 )
                 findings, generic_stale_findings, generic_stale_count = (
-                    _scan_runtime_stuck_sessions_legacy_queries(conn, stale_seconds)
+                    _scan_runtime_stuck_sessions_legacy_queries(
+                        conn,
+                        stale_seconds,
+                        stale_cursor=stale_cursor,
+                        page_state_output=page_states,
+                    )
                 )
             else:
                 runtime_db_scan_mode = "indexed_snapshot"
@@ -1599,13 +1845,27 @@ def _scan_runtime_stuck_sessions(
                         conn,
                         stale_seconds=stale_seconds,
                         now_ms=scan_now_ms,
+                        stale_cursor=stale_cursor,
+                        page_state_output=page_states,
                     )
                 )
+            stale_pagination = _runtime_stale_pagination_fields(
+                db_path=db_path,
+                now_ms=scan_now_ms,
+                stale_seconds=stale_seconds,
+                cursor_applied=cursor_applied,
+                class_states=page_states,
+                findings=findings,
+                generic_stale_findings=generic_stale_findings,
+            )
             runtime_db_scan_complete = True
     except sqlite3.DatabaseError as exc:
         findings = []
         generic_stale_findings = []
         generic_stale_count = 0
+        stale_pagination = empty_runtime_stale_pagination(
+            cursor_applied=cursor_applied,
+        )
         if budget is not None and budget.timed_out:
             runtime_db_scan_mode = "timeout"
             problems.append(
@@ -1620,6 +1880,9 @@ def _scan_runtime_stuck_sessions(
         findings = []
         generic_stale_findings = []
         generic_stale_count = 0
+        stale_pagination = empty_runtime_stale_pagination(
+            cursor_applied=cursor_applied,
+        )
         runtime_db_scan_mode = "query_failed"
         problems.append(f"failed to query runtime session database: {exc}")
         add_remediation("runtime_query_failed")
@@ -1670,6 +1933,14 @@ def _runtime_doctor_fields(runtime: dict[str, Any]) -> dict[str, Any]:
         "generic_stale_findings",
         "generic_stale_count",
         "generic_stale_problem_threshold",
+        "stale_findings_page_size",
+        "stale_findings_page_count",
+        "stale_findings_page_counts",
+        "stale_findings_has_more",
+        "stale_findings_truncated",
+        "stale_findings_next_cursor",
+        "stale_findings_cursor_applied",
+        "stale_findings_pagination_complete",
         "runtime_db_busy_timeout_ms",
         "runtime_db_scan_timeout_ms",
         "runtime_db_query_only",
@@ -1693,6 +1964,36 @@ def _runtime_doctor_fields(runtime: dict[str, Any]) -> dict[str, Any]:
         "runtime_permission_findings",
     )
     return {name: runtime.get(name) for name in names}
+
+
+def _runtime_stale_cursor_failure_payload(
+    *,
+    index_path: Path,
+    db_path: Path,
+    stale_seconds: int,
+    generic_stale_problem_threshold: int,
+    error: RuntimeStaleCursorError,
+) -> dict[str, Any]:
+    return {
+        "result": "FAIL",
+        "command": "doctor",
+        "reason_code": error.reason_code,
+        "error": str(error),
+        "index_path": str(index_path),
+        "runtime_db_path": str(db_path),
+        "warnings": [],
+        "problems": [str(error)],
+        "remediation_codes": [error.reason_code],
+        "stuck_findings": [],
+        "generic_stale_findings": [],
+        "generic_stale_count": 0,
+        "generic_stale_problem_threshold": generic_stale_problem_threshold,
+        "runtime_db_scan_mode": "cursor_invalid",
+        "runtime_db_scan_complete": False,
+        "stale_seconds": stale_seconds,
+        "quick_fixes": [],
+        **empty_runtime_stale_pagination(cursor_applied=False),
+    }
 
 
 def _repair_message_and_tool(
@@ -2632,19 +2933,39 @@ def _command_search(argv: list[str], index_path: Path) -> int:
 
 
 def _command_doctor(argv: list[str], index_path: Path) -> int:
-    json_output = "--json" in argv
     try:
-        db_path = _parse_path_option(argv, "--db-path", resolve_runtime_db_path())
-        stale_seconds = _parse_positive_int_option(
-            argv, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
-        )
-        generic_stale_problem_threshold = _parse_positive_int_option(
-            argv,
-            "--generic-stale-problem-threshold",
-            DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
-        )
+        options = _parse_doctor_options(argv)
     except ValueError:
         return _usage()
+    json_output = bool(options["json_output"])
+    db_path = Path(options["db_path"])
+    stale_seconds = int(options["stale_seconds"])
+    generic_stale_problem_threshold = int(
+        options["generic_stale_problem_threshold"]
+    )
+    stale_cursor: dict[str, Any] | None = None
+    raw_stale_cursor = options["stale_cursor"]
+    if isinstance(raw_stale_cursor, str):
+        try:
+            stale_cursor = decode_runtime_stale_cursor(
+                raw_stale_cursor,
+                db_path=db_path,
+                explicit_stale_seconds=stale_seconds
+                if options["stale_seconds_explicit"]
+                else None,
+            )
+        except RuntimeStaleCursorError as exc:
+            return _emit(
+                _runtime_stale_cursor_failure_payload(
+                    index_path=index_path,
+                    db_path=db_path,
+                    stale_seconds=stale_seconds,
+                    generic_stale_problem_threshold=generic_stale_problem_threshold,
+                    error=exc,
+                ),
+                True,
+            )
+        stale_seconds = int(stale_cursor["stale_seconds"])
     warnings: list[str] = []
     problems: list[str] = []
     sidecar_findings, alias_error = _inspect_active_sidecars(index_path)
@@ -2653,7 +2974,6 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
         _blocked_inspection("index", index_path, "session_sidecar_unsafe_target"),
     )
     index_state = str(index_sidecar.get("state") or "blocked")
-    exists = index_state != "missing"
     index_permission_mode = index_sidecar.get("before_mode")
     repair_needed = any(
         item.get("state") == "repairable" for item in sidecar_findings
@@ -2688,7 +3008,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
         elif state == "missing" and target == "digest":
             warnings.append("digest does not exist yet; run /digest run first")
     runtime = _scan_runtime_stuck_sessions(
-        db_path, stale_seconds, generic_stale_problem_threshold
+        db_path,
+        stale_seconds,
+        generic_stale_problem_threshold,
+        stale_cursor=stale_cursor,
     )
     warnings.extend(runtime["warnings"])
     problems.extend(runtime["problems"])

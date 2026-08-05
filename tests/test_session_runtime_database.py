@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import base64
+import contextlib
 import hashlib
 import importlib
+import io
 import json
 import os
 import sqlite3
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -114,6 +117,25 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             "generic_stale_findings": [],
             "generic_stale_count": 0,
         }
+
+    def _assert_empty_pagination(
+        self,
+        result: dict,
+        *,
+        cursor_applied: bool = False,
+    ) -> None:
+        self.assertEqual(0, result["stale_findings_page_count"])
+        self.assertTrue(
+            all(value == 0 for value in result["stale_findings_page_counts"].values())
+        )
+        self.assertFalse(result["stale_findings_has_more"])
+        self.assertFalse(result["stale_findings_truncated"])
+        self.assertIsNone(result["stale_findings_next_cursor"])
+        self.assertEqual(
+            cursor_applied,
+            result["stale_findings_cursor_applied"],
+        )
+        self.assertFalse(result["stale_findings_pagination_complete"])
 
     def _create_tied_family_fixture(
         self,
@@ -467,6 +489,54 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             with self.assertRaises(sqlite3.OperationalError):
                 module._connect_runtime_database_readonly(db_path)
             self.assertFalse(db_path.exists())
+
+            result = module._scan_runtime_stuck_sessions(db_path, 300)
+            self.assertFalse(db_path.exists())
+            self.assertEqual("unavailable", result["runtime_db_scan_mode"])
+            self.assertFalse(result["runtime_db_scan_complete"])
+            self._assert_empty_pagination(result)
+
+    def test_empty_compatible_database_returns_complete_empty_page(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "empty.db"
+            connection = sqlite3.connect(db_path)
+            connection.executescript(
+                """
+                CREATE TABLE session (
+                  id TEXT PRIMARY KEY,
+                  parent_id TEXT,
+                  title TEXT NOT NULL,
+                  time_created INTEGER NOT NULL,
+                  time_updated INTEGER NOT NULL
+                );
+                CREATE TABLE message (
+                  id TEXT PRIMARY KEY,
+                  session_id TEXT NOT NULL,
+                  time_created INTEGER NOT NULL,
+                  data TEXT NOT NULL
+                );
+                CREATE TABLE part (
+                  id TEXT PRIMARY KEY,
+                  message_id TEXT NOT NULL,
+                  session_id TEXT NOT NULL,
+                  time_created INTEGER NOT NULL,
+                  data TEXT NOT NULL
+                );
+                CREATE INDEX empty_parent ON session(parent_id, time_updated);
+                CREATE INDEX empty_message ON message(session_id, time_created, id);
+                CREATE INDEX empty_part ON part(message_id, id);
+                """
+            )
+            connection.close()
+            result = module._scan_runtime_stuck_sessions(db_path, 300)
+        self.assertEqual("indexed_snapshot", result["runtime_db_scan_mode"])
+        self.assertTrue(result["runtime_db_scan_complete"])
+        self.assertEqual(0, result["stale_findings_page_count"])
+        self.assertFalse(result["stale_findings_has_more"])
+        self.assertFalse(result["stale_findings_truncated"])
+        self.assertIsNone(result["stale_findings_next_cursor"])
+        self.assertTrue(result["stale_findings_pagination_complete"])
 
 
     def test_runtime_metadata_failure_closes_readonly_connection(self) -> None:
@@ -1126,6 +1196,277 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                             )
                         )
 
+    def test_cursor_paginates_each_tied_family_with_indexed_fallback_parity(
+        self,
+    ) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        families = (
+            "parent_child_mismatch",
+            "silent_parent_after_delegation_abort",
+            "stale_delegated_child_runtime_recovery_missed",
+            "stale_running_tool",
+            "generic_stale_incomplete_assistant",
+        )
+
+        def family_rows(result: dict, family: str) -> list[dict]:
+            source = (
+                result["generic_stale_findings"]
+                if family == "generic_stale_incomplete_assistant"
+                else result["stuck_findings"]
+            )
+            return [item for item in source if item["issue_type"] == family]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            for family in families:
+                mode_pages: dict[bool, list[list[str]]] = {}
+                for indexes in (True, False):
+                    with self.subTest(family=family, indexes=indexes):
+                        db_path = Path(tmp) / f"{family}-{indexes}.db"
+                        fixture = self._create_tied_family_fixture(
+                            db_path,
+                            family=family,
+                            indexes=indexes,
+                            now_ms=now_ms,
+                        )
+                        owner_field = (
+                            "session_id"
+                            if family
+                            in {
+                                "stale_running_tool",
+                                "generic_stale_incomplete_assistant",
+                            }
+                            else "parent_session_id"
+                        )
+                        expected = sorted(fixture["positive_ids"], reverse=True)
+
+                        first = module._scan_runtime_stuck_sessions(
+                            db_path,
+                            300,
+                            now_ms=now_ms,
+                        )
+                        first_rows = family_rows(first, family)
+                        self.assertEqual(
+                            expected[:20],
+                            [str(item[owner_field]) for item in first_rows],
+                        )
+                        self.assertEqual(
+                            20,
+                            first["stale_findings_page_counts"][family],
+                        )
+                        self.assertTrue(first["stale_findings_has_more"])
+                        self.assertTrue(first["stale_findings_truncated"])
+                        self.assertFalse(
+                            first["stale_findings_pagination_complete"]
+                        )
+                        self.assertEqual(
+                            first["stale_findings_page_count"],
+                            sum(first["stale_findings_page_counts"].values()),
+                        )
+
+                        decoded_cursor = module.decode_runtime_stale_cursor(
+                            first["stale_findings_next_cursor"],
+                            db_path=db_path,
+                            explicit_stale_seconds=300,
+                            validation_now_ms=now_ms,
+                        )
+                        second = module._scan_runtime_stuck_sessions(
+                            db_path,
+                            300,
+                            stale_cursor=decoded_cursor,
+                        )
+                        second_rows = family_rows(second, family)
+                        self.assertEqual(
+                            expected[20:],
+                            [str(item[owner_field]) for item in second_rows],
+                        )
+                        self.assertEqual(
+                            2,
+                            second["stale_findings_page_counts"][family],
+                        )
+                        self.assertFalse(second["stale_findings_has_more"])
+                        self.assertFalse(second["stale_findings_truncated"])
+                        self.assertTrue(
+                            second["stale_findings_pagination_complete"]
+                        )
+                        self.assertIsNone(second["stale_findings_next_cursor"])
+                        combined = [*first_rows, *second_rows]
+                        identities = [str(item[owner_field]) for item in combined]
+                        self.assertEqual(expected, identities)
+                        self.assertEqual(len(expected), len(set(identities)))
+                        age_field = (
+                            "parent_stale_seconds"
+                            if family in module.PARENT_CHILD_FINDING_CLASSES
+                            else "stale_seconds"
+                        )
+                        self.assertEqual(
+                            {1_000},
+                            {int(item[age_field]) for item in combined},
+                        )
+                        mode_pages[indexes] = [
+                            [str(item[owner_field]) for item in first_rows],
+                            [str(item[owner_field]) for item in second_rows],
+                        ]
+                self.assertEqual(mode_pages[True], mode_pages[False])
+
+    def test_combined_first_page_preserves_twenty_per_class_and_hundred_total(
+        self,
+    ) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        families = (
+            "parent_child_mismatch",
+            "silent_parent_after_delegation_abort",
+            "stale_delegated_child_runtime_recovery_missed",
+            "stale_running_tool",
+            "generic_stale_incomplete_assistant",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "combined.db"
+            self._create_tied_family_fixture(
+                db_path,
+                family=families[0],
+                indexes=True,
+                now_ms=now_ms,
+            )
+            connection = sqlite3.connect(db_path)
+            try:
+                for family in families[1:]:
+                    source_path = root / f"{family}.db"
+                    self._create_tied_family_fixture(
+                        source_path,
+                        family=family,
+                        indexes=True,
+                        now_ms=now_ms,
+                    )
+                    connection.execute("ATTACH DATABASE ? AS source", (str(source_path),))
+                    for table in ("session", "message", "part"):
+                        connection.execute(
+                            f"INSERT INTO {table} SELECT * FROM source.{table}"
+                        )
+                    connection.commit()
+                    connection.execute("DETACH DATABASE source")
+            finally:
+                connection.close()
+
+            result = module._scan_runtime_stuck_sessions(
+                db_path,
+                300,
+                now_ms=now_ms,
+            )
+            self.assertEqual(
+                {family: 20 for family in families},
+                result["stale_findings_page_counts"],
+            )
+            self.assertEqual(100, result["stale_findings_page_count"])
+            self.assertEqual(80, len(result["stuck_findings"]))
+            self.assertEqual(20, len(result["generic_stale_findings"]))
+            self.assertTrue(result["stale_findings_has_more"])
+            self.assertIsNotNone(result["stale_findings_next_cursor"])
+
+    def test_cursor_uses_documented_live_keyset_mutation_semantics(self) -> None:
+        module = self._module()
+        now_ms = 1_800_000_000_000
+        stale = now_ms - 1_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime.db"
+            self._create_tied_family_fixture(
+                db_path,
+                family="generic_stale_incomplete_assistant",
+                indexes=True,
+                now_ms=now_ms,
+            )
+            first = module._scan_runtime_stuck_sessions(
+                db_path,
+                300,
+                now_ms=now_ms,
+            )
+            decoded_cursor = module.decode_runtime_stale_cursor(
+                first["stale_findings_next_cursor"],
+                db_path=db_path,
+                explicit_stale_seconds=300,
+                validation_now_ms=now_ms,
+            )
+
+            connection = sqlite3.connect(db_path)
+            try:
+                connection.execute(
+                    "DELETE FROM session WHERE id = ?",
+                    ("generic-session-01",),
+                )
+
+                def add_generic(session_id: str, updated: int) -> None:
+                    connection.execute(
+                        "INSERT INTO session VALUES (?, NULL, ?, ?, ?)",
+                        (session_id, session_id, updated, updated),
+                    )
+                    connection.execute(
+                        "INSERT INTO message VALUES (?, ?, ?, ?)",
+                        (
+                            f"message-{session_id}",
+                            session_id,
+                            updated,
+                            json.dumps({"role": "assistant", "time": {}}),
+                        ),
+                    )
+
+                add_generic("new-older-generic", stale - 1_000)
+                add_generic("new-newer-generic", stale + 1_000)
+                connection.execute(
+                    "UPDATE session SET time_updated = ? WHERE id = ?",
+                    (stale - 2_000, "generic-session-21"),
+                )
+
+                add_generic("late-running-tool", stale - 3_000)
+                connection.execute(
+                    "INSERT INTO part VALUES (?, ?, ?, ?, ?)",
+                    (
+                        "part-late-running-tool",
+                        "message-late-running-tool",
+                        "late-running-tool",
+                        stale - 3_000,
+                        json.dumps(
+                            {
+                                "type": "tool",
+                                "tool": "question",
+                                "state": {"status": "running"},
+                            }
+                        ),
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            second = module._scan_runtime_stuck_sessions(
+                db_path,
+                300,
+                stale_cursor=decoded_cursor,
+            )
+            second_ids = [
+                str(item["session_id"])
+                for item in second["generic_stale_findings"]
+            ]
+            self.assertEqual(
+                [
+                    "generic-session-00",
+                    "new-older-generic",
+                    "generic-session-21",
+                ],
+                second_ids,
+            )
+            self.assertNotIn("new-newer-generic", second_ids)
+            self.assertEqual(23, second["generic_stale_count"])
+            self.assertFalse(
+                any(
+                    item.get("session_id") == "late-running-tool"
+                    for item in second["stuck_findings"]
+                )
+            )
+            self.assertFalse(second["stale_findings_has_more"])
+            self.assertTrue(second["stale_findings_pagination_complete"])
+
     def test_no_index_tied_history_completes_within_scan_budget(self) -> None:
         module = self._module()
         now_ms = 1_800_000_000_000
@@ -1152,6 +1493,42 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                     for item in result["generic_stale_findings"]
                 ],
             )
+            observed = [
+                str(item["session_id"])
+                for item in result["generic_stale_findings"]
+            ]
+            page_count = 1
+            while result["stale_findings_has_more"]:
+                decoded_cursor = module.decode_runtime_stale_cursor(
+                    result["stale_findings_next_cursor"],
+                    db_path=db_path,
+                    explicit_stale_seconds=300,
+                    validation_now_ms=now_ms,
+                )
+                result = module._scan_runtime_stuck_sessions(
+                    db_path,
+                    300,
+                    stale_cursor=decoded_cursor,
+                )
+                page_count += 1
+                self.assertEqual(
+                    "legacy_fallback", result["runtime_db_scan_mode"]
+                )
+                self.assertTrue(result["runtime_db_scan_complete"])
+                self.assertNotIn(
+                    "runtime_scan_timeout", result["remediation_codes"]
+                )
+                self.assertEqual(100, result["generic_stale_count"])
+                observed.extend(
+                    str(item["session_id"])
+                    for item in result["generic_stale_findings"]
+                )
+            self.assertEqual(5, page_count)
+            self.assertEqual(
+                sorted(fixture["positive_ids"], reverse=True),
+                observed,
+            )
+            self.assertEqual(len(observed), len(set(observed)))
 
     def test_fallback_repair_preview_uses_deterministic_tied_evidence(self) -> None:
         module = self._module()
@@ -1361,6 +1738,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                     self.assertEqual([], result["stuck_findings"])
                     self.assertEqual([], result["generic_stale_findings"])
                     self.assertEqual(0, result["generic_stale_count"])
+                    self._assert_empty_pagination(result)
                     self.assertTrue(
                         any(
                             "locked" in problem.lower()
@@ -1435,6 +1813,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertNotIn("runtime_query_failed", result["remediation_codes"])
             self.assertFalse(result["runtime_db_snapshot_started"])
             self.assertEqual([], result["stuck_findings"])
+            self._assert_empty_pagination(result)
             self.assertEqual(before, db_path.read_bytes())
             self.assertEqual(
                 [], list(Path(tmp).glob("runtime.db.pre-repair-*.sqlite3"))
@@ -1489,6 +1868,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
         self.assertFalse(result["runtime_db_snapshot_started"])
         self.assertFalse(result["runtime_db_scan_complete"])
         self.assertEqual([], result["stuck_findings"])
+        self._assert_empty_pagination(result)
         connection.close.assert_called_once_with()
         self.assertFalse(
             any(call.args and call.args[0] == "BEGIN" for call in connection.execute.call_args_list)
@@ -1546,6 +1926,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertNotIn("runtime_db_open_failed", schema_result["remediation_codes"])
             self.assertEqual("incompatible", schema_result["runtime_db_scan_mode"])
             self.assertEqual([], schema_result["stuck_findings"])
+            self._assert_empty_pagination(schema_result)
             indexed_scan.assert_not_called()
             legacy_scan.assert_not_called()
 
@@ -1598,6 +1979,262 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertEqual("incompatible", json_result["runtime_db_scan_mode"])
             self.assertFalse(json_result["runtime_db_scan_complete"])
             self.assertEqual([], json_result["stuck_findings"])
+            self._assert_empty_pagination(json_result)
+
+    def test_doctor_rejects_invalid_cursor_before_opening_sqlite(self) -> None:
+        module = self._module()
+        now_ms = int(time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "runtime.db"
+            states = module.initial_runtime_stale_class_states()
+            states["parent_child_mismatch"] = {
+                "after": [now_ms - 1_000_000, "parent", "child"],
+                "exhausted": False,
+            }
+            for issue_type in module.STALE_FINDING_CLASSES[1:]:
+                states[issue_type] = {"after": None, "exhausted": True}
+            cursor_value = module.encode_runtime_stale_cursor(
+                now_ms=now_ms,
+                stale_seconds=300,
+                db_path=db_path,
+                classes=states,
+            )
+            alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            self.assertIn(len(cursor_value) % 4, {2, 3})
+            cursor_alias = cursor_value[:-1] + alphabet[
+                alphabet.index(cursor_value[-1]) + 1
+            ]
+            padding = "=" * ((4 - len(cursor_value) % 4) % 4)
+            cursor_payload = json.loads(
+                base64.urlsafe_b64decode(cursor_value + padding)
+            )
+            cursor_payload["classes"]["parent_child_mismatch"]["after"][1] = "\ud800"
+            surrogate_raw = json.dumps(
+                cursor_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            surrogate_cursor = base64.urlsafe_b64encode(surrogate_raw).decode(
+                "ascii"
+            ).rstrip("=")
+
+            for candidate in (
+                "not-a-valid-cursor",
+                cursor_alias,
+                surrogate_cursor,
+            ):
+                with (
+                    self.subTest(candidate=candidate[:20]),
+                    patch.object(
+                        module, "_connect_runtime_database_readonly"
+                    ) as connect,
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                ):
+                    code = module._command_doctor(
+                        [
+                            "--db-path",
+                            str(db_path),
+                            "--stale-cursor",
+                            candidate,
+                            "--json",
+                        ],
+                        root / "index.json",
+                    )
+                payload = json.loads(output.getvalue())
+                self.assertEqual(1, code)
+                self.assertEqual(
+                    "runtime_stale_cursor_invalid", payload["reason_code"]
+                )
+                self.assertEqual("cursor_invalid", payload["runtime_db_scan_mode"])
+                self.assertEqual(0, payload["stale_findings_page_count"])
+                self.assertFalse(payload["stale_findings_has_more"])
+                self.assertFalse(payload["stale_findings_cursor_applied"])
+                self.assertFalse(payload["stale_findings_pagination_complete"])
+                connect.assert_not_called()
+
+    def test_doctor_cursor_is_json_only_and_option_grammar_is_strict(self) -> None:
+        module = self._module()
+        invalid_arguments = (
+            ["--stale-cursor", "abc"],
+            ["--unknown"],
+            ["--json", "--json"],
+            ["--db-path", "/tmp/a", "--db-path", "/tmp/b"],
+            ["--stale-seconds", str(2**31)],
+        )
+        for arguments in invalid_arguments:
+            with self.subTest(arguments=arguments), contextlib.redirect_stdout(
+                io.StringIO()
+            ) as output:
+                code = module._command_doctor(list(arguments), Path("/tmp/index"))
+            self.assertEqual(2, code)
+            self.assertIn("usage: /session", output.getvalue())
+
+    def test_doctor_cursor_reuses_bound_threshold_when_option_is_omitted(self) -> None:
+        module = self._module()
+        now_ms = int(time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "missing.db"
+            states = module.initial_runtime_stale_class_states()
+            states["parent_child_mismatch"] = {
+                "after": [now_ms - 1_000_000, "parent", "child"],
+                "exhausted": False,
+            }
+            for issue_type in module.STALE_FINDING_CLASSES[1:]:
+                states[issue_type] = {"after": None, "exhausted": True}
+            cursor_value = module.encode_runtime_stale_cursor(
+                now_ms=now_ms,
+                stale_seconds=777,
+                db_path=db_path,
+                classes=states,
+            )
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                code = module._command_doctor(
+                    [
+                        "--db-path",
+                        str(db_path),
+                        "--stale-cursor",
+                        cursor_value,
+                        "--json",
+                    ],
+                    root / "index.json",
+                )
+            payload = json.loads(output.getvalue())
+        self.assertEqual(0, code)
+        self.assertEqual(777, payload["stale_seconds"])
+        self.assertTrue(payload["stale_findings_cursor_applied"])
+        self.assertFalse(payload["stale_findings_pagination_complete"])
+
+    def test_doctor_json_cursor_walks_real_runtime_pages(self) -> None:
+        now_ms = int(time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "runtime.db"
+            index_path = root / "index.json"
+            digest_path = root / "digest.json"
+            self._create_tied_family_fixture(
+                db_path,
+                family="generic_stale_incomplete_assistant",
+                indexes=True,
+                now_ms=now_ms,
+            )
+            index_path.write_text(
+                json.dumps({"version": 1, "sessions": []}),
+                encoding="utf-8",
+            )
+            index_path.chmod(0o600)
+            with patch.dict(
+                os.environ,
+                {
+                    "MY_OPENCODE_DIGEST_PATH": str(digest_path),
+                    "MY_OPENCODE_RUNTIME_DB_PATH": str(db_path),
+                },
+            ):
+                module = self._module()
+                with contextlib.redirect_stdout(io.StringIO()) as first_output:
+                    first_code = module._command_doctor(
+                        [
+                            "--db-path",
+                            str(db_path),
+                            "--stale-seconds",
+                            "300",
+                            "--json",
+                        ],
+                        index_path,
+                    )
+                first = json.loads(first_output.getvalue())
+                with contextlib.redirect_stdout(io.StringIO()) as second_output:
+                    second_code = module._command_doctor(
+                        [
+                            "--db-path",
+                            str(db_path),
+                            "--stale-cursor",
+                            first["stale_findings_next_cursor"],
+                            "--json",
+                        ],
+                        index_path,
+                    )
+                second = json.loads(second_output.getvalue())
+
+        self.assertEqual(1, first_code)
+        self.assertEqual(0, second_code)
+        self.assertEqual(20, len(first["generic_stale_findings"]))
+        self.assertEqual(2, len(second["generic_stale_findings"]))
+        self.assertFalse(first["stale_findings_cursor_applied"])
+        self.assertTrue(second["stale_findings_cursor_applied"])
+        self.assertEqual(300, second["stale_seconds"])
+        self.assertFalse(second["stale_findings_has_more"])
+        self.assertTrue(second["stale_findings_pagination_complete"])
+        identities = [
+            str(item["session_id"])
+            for item in [
+                *first["generic_stale_findings"],
+                *second["generic_stale_findings"],
+            ]
+        ]
+        self.assertEqual(22, len(identities))
+        self.assertEqual(22, len(set(identities)))
+
+    def test_gateway_summary_ignores_additive_pagination_metadata(self) -> None:
+        if str(SCRIPTS_DIR) not in sys.path:
+            sys.path.insert(0, str(SCRIPTS_DIR))
+        gateway = importlib.reload(importlib.import_module("gateway_command"))
+        runtime = {
+            "stuck_findings": [
+                {
+                    "issue_type": "stale_running_tool",
+                    "session_id": "stuck-session",
+                    "stale_cause_code": "tool_running_past_threshold",
+                    "stale_cause_summary": "stale tool",
+                }
+            ],
+            "generic_stale_findings": [
+                {
+                    "issue_type": "generic_stale_incomplete_assistant",
+                    "session_id": "generic-session",
+                    "stale_seconds": 600,
+                }
+            ],
+            "generic_stale_count": 3,
+            "warnings": ["warning"],
+            "problems": [],
+            "remediation_codes": [],
+            "runtime_permission_quick_fixes": [],
+        }
+        with patch.object(
+            gateway,
+            "_scan_runtime_stuck_sessions",
+            return_value=runtime,
+        ):
+            baseline = gateway.runtime_session_health_summary(
+                db_path=Path("/tmp/missing-runtime.db")
+            )
+        with patch.object(
+            gateway,
+            "_scan_runtime_stuck_sessions",
+            return_value={
+                **runtime,
+                "stale_findings_page_size": 100,
+                "stale_findings_page_count": 2,
+                "stale_findings_page_counts": {
+                    "parent_child_mismatch": 0,
+                    "silent_parent_after_delegation_abort": 0,
+                    "stale_delegated_child_runtime_recovery_missed": 0,
+                    "stale_running_tool": 1,
+                    "generic_stale_incomplete_assistant": 1,
+                },
+                "stale_findings_has_more": True,
+                "stale_findings_truncated": True,
+                "stale_findings_next_cursor": "opaque",
+                "stale_findings_cursor_applied": False,
+                "stale_findings_pagination_complete": False,
+            },
+        ):
+            paginated = gateway.runtime_session_health_summary(
+                db_path=Path("/tmp/missing-runtime.db")
+            )
+        self.assertEqual(baseline, paginated)
 
     def test_interrupted_query_is_timeout_only_when_budget_fired(self) -> None:
         module = self._module()
@@ -1609,6 +2246,18 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             timed_out_budget = MagicMock()
             timed_out_budget.timed_out = True
             timed_out_budget.progress.return_value = 1
+            cursor_classes = module.initial_runtime_stale_class_states()
+            cursor_classes["parent_child_mismatch"] = {
+                "after": [now_ms - 1_000_000, "parent", "child"],
+                "exhausted": False,
+            }
+            for issue_type in module.STALE_FINDING_CLASSES[1:]:
+                cursor_classes[issue_type] = {"after": None, "exhausted": True}
+            stale_cursor = {
+                "now_ms": now_ms,
+                "stale_seconds": 300,
+                "classes": cursor_classes,
+            }
             with (
                 patch.object(module, "_RuntimeScanBudget", return_value=timed_out_budget),
                 patch.object(
@@ -1618,12 +2267,15 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                 ),
             ):
                 timeout_result = module._scan_runtime_stuck_sessions(
-                    db_path, 300, now_ms=now_ms
+                    db_path,
+                    300,
+                    stale_cursor=stale_cursor,
                 )
             self.assertIn("runtime_scan_timeout", timeout_result["remediation_codes"])
             self.assertNotIn("runtime_query_failed", timeout_result["remediation_codes"])
             self.assertEqual("timeout", timeout_result["runtime_db_scan_mode"])
             self.assertEqual([], timeout_result["stuck_findings"])
+            self._assert_empty_pagination(timeout_result, cursor_applied=True)
 
             interrupted_budget = MagicMock()
             interrupted_budget.timed_out = False
@@ -1642,6 +2294,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertIn("runtime_query_failed", query_result["remediation_codes"])
             self.assertNotIn("runtime_scan_timeout", query_result["remediation_codes"])
             self.assertEqual("query_failed", query_result["runtime_db_scan_mode"])
+            self._assert_empty_pagination(query_result)
 
     def test_concurrent_wal_commit_does_not_mix_reader_snapshot(self) -> None:
         module = self._module()
@@ -1673,7 +2326,11 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                     writer_errors: list[BaseException] = []
 
                     def wrapped_scan(
-                        connection, *, stale_seconds: int, now_ms: int
+                        connection,
+                        *,
+                        stale_seconds: int,
+                        now_ms: int,
+                        **pagination_kwargs,
                     ):
                         reader_ready.wait()
                         writer_done.wait()
@@ -1688,6 +2345,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                             connection,
                             stale_seconds=stale_seconds,
                             now_ms=now_ms,
+                            **pagination_kwargs,
                         )
 
                     def writer() -> None:

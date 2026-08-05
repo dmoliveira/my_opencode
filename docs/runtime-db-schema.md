@@ -154,6 +154,23 @@ Use `/doctor run --json` for the consolidated session and shared-memory checks. 
 
 `stuck_findings` contains sessions backed by structural lifecycle evidence, such as a latest running tool whose completion state is inconsistent with its delegated child. `generic_stale_findings` contains age-based incomplete assistant history without that structural evidence; it is not a confirmed stuck classification. `generic_stale_count` is the uncapped logical count, while the returned generic rows are capped at 20. Indexed and compatibility scans select one latest message per session and one latest part per message by `time_created DESC, id DESC`; equal-age parent/child results then order by parent ID and child ID, and single-session results order by session ID. These stable tie-breaks are applied before the 20-row limits and before lifecycle predicates are evaluated.
 
+### Stale-finding cursor contract
+
+`/session doctor --json` returns one bounded page with at most 20 materialized rows in each class, in this stable class order: `parent_child_mismatch`, `silent_parent_after_delegation_abort`, `stale_delegated_child_runtime_recovery_missed`, `stale_running_tool`, and `generic_stale_incomplete_assistant`. The aggregate page capacity is 100. One internal lookahead row per active class determines whether continuation is available; lookahead rows never enter findings, counts, gateway samples, or repair candidates.
+
+The pagination fields have fixed meanings:
+
+- `stale_findings_page_size` is the 100-row aggregate capacity, not the number returned.
+- `stale_findings_page_count` equals the sum of all five `stale_findings_page_counts` values and the lengths of `stuck_findings` plus `generic_stale_findings`.
+- `stale_findings_has_more` is true exactly when `stale_findings_next_cursor` is non-null after a successful scan.
+- `stale_findings_truncated` has the same value as `has_more`; it means this response omitted retrievable rows, not that they were discarded permanently.
+- `stale_findings_cursor_applied` means the supplied cursor passed strict context validation.
+- `stale_findings_pagination_complete` is true only after a successful exhausted page. Missing stores, incompatible schema, cursor rejection, timeout, and query failure return zero page counts, false `has_more`/`truncated`/`pagination_complete`, and no cursor. No partial page is returned.
+
+Cursor input is accepted only with `--json`. The unpadded base64url value contains canonical versioned JSON bound to the fixed page/order contract, resolved database-path hash, original scan clock, stale threshold, and each class's complete keyset boundary/exhaustion state. It is size- and type-checked, rejects duplicate or noncanonical JSON, and is never interpolated into SQL. It is non-authenticating—not a credential or authority token—but remains local-sensitive because the encoded keysets include session IDs; do not publish it. If `--stale-seconds` is omitted on continuation, the cursor's original value is reused; an explicit mismatch is rejected before SQLite opens. `generic_stale_count` remains an exact count for each page's transaction and can change while the live database changes. Doctor warnings, problems, and result classification describe the current page plus global generic count, not a persistent cross-page snapshot.
+
+Continuation uses strict descending keyset predicates. Parent/child classes scan tuples `(parent_time_updated, parent_session_id, child_session_id) < last_emitted_tuple`; single-session classes use `(session_time_updated, session_id) < last_emitted_tuple`, with SQLite binary text ordering. Unchanged rows are not duplicated. Deleted or newly ineligible rows disappear. Eligible rows inserted or moved into the `<` (older/unvisited) range may appear, and an already emitted row moved there may repeat. Rows inserted or moved into the `>=` (newer/already-visited) range are not revisited, so an unvisited row moved there may be skipped. Once a class is marked exhausted, later rows in that class are not considered in that cursor chain. Each page is one query-only transaction under the existing five-second progress budget; no snapshot is retained between commands.
+
 ## Backup retention policy
 
 Keep at least three verified runtime-history backups: the latest pre-repair backup, the latest successful manual/export backup, and one older recovery point. Store backups outside synchronized project directories with owner-only permissions. Before pruning a backup, run `PRAGMA integrity_check` on the candidate and retain any backup referenced by an unresolved incident. Automated cleanup must be previewable and must never delete the only verified backup.
