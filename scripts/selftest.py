@@ -2198,7 +2198,11 @@ exit 0
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
         digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
-        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(tmp / "missing-runtime.db")
+        missing_runtime_dir = tmp / "missing-runtime"
+        missing_runtime_dir.mkdir(mode=0o700)
+        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(
+            missing_runtime_dir / "opencode.db"
+        )
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
         digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
 
@@ -2427,7 +2431,9 @@ exit 0
             "session repair-sidecars should preserve sidecar inode identity",
         )
 
-        runtime_db_path = Path(tmpdir) / "opencode.db"
+        runtime_db_dir = tmp / "runtime-store"
+        runtime_db_dir.mkdir(mode=0o700)
+        runtime_db_path = runtime_db_dir / "opencode.db"
         conn = sqlite3.connect(runtime_db_path)
         try:
             conn.executescript(
