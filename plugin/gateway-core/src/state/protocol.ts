@@ -731,7 +731,49 @@ function validateLockDirectory(stats: BigIntStats): void {
   }
 }
 
-function inspectExistingLock(authority: StateAuthority): "missing" | "initializing" | "locked" {
+type LockInspectionState = "missing" | "initializing" | "locked"
+
+function namedLockGeneration(
+  lockPath: string,
+  expected: FileIdentity,
+): "missing" | "changed" | "same" {
+  try {
+    return sameObject(identity(lstatExact(lockPath)), expected) ? "same" : "changed"
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) {
+      return "missing"
+    }
+    throw protocolError(
+      "gateway_state_lock_unsafe",
+      "unable to confirm gateway state lock generation",
+      "lock_acquire",
+      error,
+    )
+  }
+}
+
+function confirmTokenPathUnsafe(
+  lockPath: string,
+  expectedLock: FileIdentity,
+  error: GatewayStateProtocolError,
+  failureInjector?: (phase: string) => void,
+): Exclude<LockInspectionState, "locked"> {
+  failureInjector?.("before_lock_token_unsafe_confirmation")
+  // This detects normal pathname turnover; it is not strict same-UID ABA provenance.
+  const generation = namedLockGeneration(lockPath, expectedLock)
+  if (generation === "missing") {
+    return "missing"
+  }
+  if (generation === "changed") {
+    return "initializing"
+  }
+  throw error
+}
+
+function inspectExistingLock(
+  authority: StateAuthority,
+  failureInjector?: (phase: string) => void,
+): LockInspectionState {
   const lockPath = join(authority.directory, LOCK_DIRECTORY_NAME)
   let metadata: BigIntStats
   try {
@@ -777,24 +819,37 @@ function inspectExistingLock(authority: StateAuthority): "missing" | "initializi
       if (isErrno(error, "ENOENT")) {
         return "initializing"
       }
-      throw protocolError(
-        "gateway_state_lock_unsafe",
-        "unable to inspect gateway state lock token",
-        "lock_acquire",
-        error,
+      return confirmTokenPathUnsafe(
+        lockPath,
+        identity(metadata),
+        protocolError(
+          "gateway_state_lock_unsafe",
+          "unable to inspect gateway state lock token",
+          "lock_acquire",
+          error,
+        ),
+        failureInjector,
       )
+    }
+    if (tokenMetadata.nlink === 0n) {
+      return "initializing"
     }
     if (
       !tokenMetadata.isFile() ||
       tokenMetadata.uid !== BigInt(currentUid()) ||
-      tokenMetadata.nlink !== 1n ||
+      tokenMetadata.nlink > 1n ||
       (tokenMetadata.mode & 0o077n) !== 0n ||
       tokenMetadata.size > BigInt(TOKEN_TEXT_BYTES)
     ) {
-      throw protocolError(
-        "gateway_state_lock_unsafe",
-        "gateway state lock token is unsafe",
-        "lock_acquire",
+      return confirmTokenPathUnsafe(
+        lockPath,
+        identity(metadata),
+        protocolError(
+          "gateway_state_lock_unsafe",
+          "gateway state lock token is unsafe",
+          "lock_acquire",
+        ),
+        failureInjector,
       )
     }
     if (
@@ -803,9 +858,10 @@ function inspectExistingLock(authority: StateAuthority): "missing" | "initializi
     ) {
       return "initializing"
     }
-    const tokenFd = openSync(tokenPath, fileReadFlags())
+    let tokenFd = -1
     let token: Buffer
     try {
+      tokenFd = openSync(tokenPath, fileReadFlags())
       const openedToken = identity(fstatExact(tokenFd))
       if (!sameSnapshot(openedToken, identity(tokenMetadata))) {
         return "initializing"
@@ -814,26 +870,61 @@ function inspectExistingLock(authority: StateAuthority): "missing" | "initializi
       if (!sameSnapshot(identity(fstatExact(tokenFd)), identity(tokenMetadata))) {
         return "initializing"
       }
-    } finally {
-      closeSync(tokenFd)
-    }
-    let currentLock: FileIdentity
-    try {
-      currentLock = identity(lstatExact(lockPath))
     } catch (error) {
       if (isErrno(error, "ENOENT")) {
         return "missing"
       }
-      throw error
+      return confirmTokenPathUnsafe(
+        lockPath,
+        identity(metadata),
+        error instanceof GatewayStateProtocolError
+          ? error
+          : protocolError(
+              "gateway_state_lock_unsafe",
+              "unable to read gateway state lock token",
+              "lock_acquire",
+              error,
+            ),
+        failureInjector,
+      )
+    } finally {
+      if (tokenFd >= 0) {
+        closeSync(tokenFd)
+      }
     }
-    if (!sameObject(currentLock, identity(metadata))) {
+    const generation = namedLockGeneration(lockPath, identity(metadata))
+    if (generation === "missing") {
+      return "missing"
+    }
+    if (generation === "changed") {
       return "initializing"
     }
-    if (!TOKEN_PATTERN.test(FATAL_UTF8.decode(token))) {
-      throw protocolError(
-        "gateway_state_lock_unsafe",
-        "gateway state lock token is malformed",
-        "lock_acquire",
+    let tokenText: string
+    try {
+      tokenText = FATAL_UTF8.decode(token)
+    } catch (error) {
+      return confirmTokenPathUnsafe(
+        lockPath,
+        identity(metadata),
+        protocolError(
+          "gateway_state_lock_unsafe",
+          "gateway state lock token is not valid UTF-8",
+          "lock_acquire",
+          error,
+        ),
+        failureInjector,
+      )
+    }
+    if (!TOKEN_PATTERN.test(tokenText)) {
+      return confirmTokenPathUnsafe(
+        lockPath,
+        identity(metadata),
+        protocolError(
+          "gateway_state_lock_unsafe",
+          "gateway state lock token is malformed",
+          "lock_acquire",
+        ),
+        failureInjector,
       )
     }
     return "locked"
@@ -919,7 +1010,7 @@ function acquireLock(authority: StateAuthority, options: GatewayStateTransaction
           error,
         )
       }
-      const state = inspectExistingLock(authority)
+      const state = inspectExistingLock(authority, options.failureInjector)
       if (performance.now() >= deadline) {
         throw protocolError(
           "gateway_state_lock_timeout",

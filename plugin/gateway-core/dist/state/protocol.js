@@ -462,7 +462,30 @@ function validateLockDirectory(stats) {
         throw protocolError("gateway_state_lock_unsafe", "gateway state lock directory is unsafe", "lock_acquire");
     }
 }
-function inspectExistingLock(authority) {
+function namedLockGeneration(lockPath, expected) {
+    try {
+        return sameObject(identity(lstatExact(lockPath)), expected) ? "same" : "changed";
+    }
+    catch (error) {
+        if (isErrno(error, "ENOENT")) {
+            return "missing";
+        }
+        throw protocolError("gateway_state_lock_unsafe", "unable to confirm gateway state lock generation", "lock_acquire", error);
+    }
+}
+function confirmTokenPathUnsafe(lockPath, expectedLock, error, failureInjector) {
+    failureInjector?.("before_lock_token_unsafe_confirmation");
+    // This detects normal pathname turnover; it is not strict same-UID ABA provenance.
+    const generation = namedLockGeneration(lockPath, expectedLock);
+    if (generation === "missing") {
+        return "missing";
+    }
+    if (generation === "changed") {
+        return "initializing";
+    }
+    throw error;
+}
+function inspectExistingLock(authority, failureInjector) {
     const lockPath = join(authority.directory, LOCK_DIRECTORY_NAME);
     let metadata;
     try {
@@ -499,22 +522,26 @@ function inspectExistingLock(authority) {
             if (isErrno(error, "ENOENT")) {
                 return "initializing";
             }
-            throw protocolError("gateway_state_lock_unsafe", "unable to inspect gateway state lock token", "lock_acquire", error);
+            return confirmTokenPathUnsafe(lockPath, identity(metadata), protocolError("gateway_state_lock_unsafe", "unable to inspect gateway state lock token", "lock_acquire", error), failureInjector);
+        }
+        if (tokenMetadata.nlink === 0n) {
+            return "initializing";
         }
         if (!tokenMetadata.isFile() ||
             tokenMetadata.uid !== BigInt(currentUid()) ||
-            tokenMetadata.nlink !== 1n ||
+            tokenMetadata.nlink > 1n ||
             (tokenMetadata.mode & 63n) !== 0n ||
             tokenMetadata.size > BigInt(TOKEN_TEXT_BYTES)) {
-            throw protocolError("gateway_state_lock_unsafe", "gateway state lock token is unsafe", "lock_acquire");
+            return confirmTokenPathUnsafe(lockPath, identity(metadata), protocolError("gateway_state_lock_unsafe", "gateway state lock token is unsafe", "lock_acquire"), failureInjector);
         }
         if ((tokenMetadata.mode & 511n) !== BigInt(PRIVATE_FILE_MODE) ||
             tokenMetadata.size < BigInt(TOKEN_TEXT_BYTES)) {
             return "initializing";
         }
-        const tokenFd = openSync(tokenPath, fileReadFlags());
+        let tokenFd = -1;
         let token;
         try {
+            tokenFd = openSync(tokenPath, fileReadFlags());
             const openedToken = identity(fstatExact(tokenFd));
             if (!sameSnapshot(openedToken, identity(tokenMetadata))) {
                 return "initializing";
@@ -524,24 +551,35 @@ function inspectExistingLock(authority) {
                 return "initializing";
             }
         }
-        finally {
-            closeSync(tokenFd);
-        }
-        let currentLock;
-        try {
-            currentLock = identity(lstatExact(lockPath));
-        }
         catch (error) {
             if (isErrno(error, "ENOENT")) {
                 return "missing";
             }
-            throw error;
+            return confirmTokenPathUnsafe(lockPath, identity(metadata), error instanceof GatewayStateProtocolError
+                ? error
+                : protocolError("gateway_state_lock_unsafe", "unable to read gateway state lock token", "lock_acquire", error), failureInjector);
         }
-        if (!sameObject(currentLock, identity(metadata))) {
+        finally {
+            if (tokenFd >= 0) {
+                closeSync(tokenFd);
+            }
+        }
+        const generation = namedLockGeneration(lockPath, identity(metadata));
+        if (generation === "missing") {
+            return "missing";
+        }
+        if (generation === "changed") {
             return "initializing";
         }
-        if (!TOKEN_PATTERN.test(FATAL_UTF8.decode(token))) {
-            throw protocolError("gateway_state_lock_unsafe", "gateway state lock token is malformed", "lock_acquire");
+        let tokenText;
+        try {
+            tokenText = FATAL_UTF8.decode(token);
+        }
+        catch (error) {
+            return confirmTokenPathUnsafe(lockPath, identity(metadata), protocolError("gateway_state_lock_unsafe", "gateway state lock token is not valid UTF-8", "lock_acquire", error), failureInjector);
+        }
+        if (!TOKEN_PATTERN.test(tokenText)) {
+            return confirmTokenPathUnsafe(lockPath, identity(metadata), protocolError("gateway_state_lock_unsafe", "gateway state lock token is malformed", "lock_acquire"), failureInjector);
         }
         return "locked";
     }
@@ -607,7 +645,7 @@ function acquireLock(authority, options) {
             if (!isErrno(error, "EEXIST")) {
                 throw protocolError("gateway_state_io_failed", "unable to create gateway state lock", "lock_acquire", error);
             }
-            const state = inspectExistingLock(authority);
+            const state = inspectExistingLock(authority, options.failureInjector);
             if (performance.now() >= deadline) {
                 throw protocolError("gateway_state_lock_timeout", "gateway state lock acquisition timed out", "lock_acquire");
             }
