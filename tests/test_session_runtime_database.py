@@ -2075,7 +2075,9 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
         now_ms = int(time.time() * 1000)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            db_path = root / "missing.db"
+            runtime_root = root / "runtime"
+            runtime_root.mkdir(mode=0o700)
+            db_path = runtime_root / "missing.db"
             states = module.initial_runtime_stale_class_states()
             states["parent_child_mismatch"] = {
                 "after": [now_ms - 1_000_000, "parent", "child"],
@@ -2110,7 +2112,9 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
         now_ms = int(time.time() * 1000)
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            db_path = root / "runtime.db"
+            runtime_root = root / "runtime"
+            runtime_root.mkdir(mode=0o700)
+            db_path = runtime_root / "runtime.db"
             index_path = root / "index.json"
             digest_path = root / "digest.json"
             self._create_tied_family_fixture(
