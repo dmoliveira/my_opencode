@@ -67,6 +67,8 @@ const allowedCommands = [
   'oc add task "Improve gateway stall recovery" --scope dmoliveira/my_opencode --kind feature --priority P1',
   'oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery',
   "python3 scripts/session_command.py doctor --json",
+  "python3 scripts/session_command.py repair-sidecars --apply --json",
+  "python3 scripts/session_command.py repair-runtime-permissions --apply --json",
   "python3 scripts/session_command.py repair-stale --stale-seconds 300 --apply --json",
 ]
 
@@ -96,7 +98,7 @@ const blockedCommands = [
 ]
 
 test("protected shell policy allows the complete guard command inventory", () => {
-  assert.equal(allowedCommands.length, 64)
+  assert.equal(allowedCommands.length, 66)
   assert.equal(new Set(allowedCommands).size, allowedCommands.length)
   for (const command of allowedCommands) {
     assert.equal(isAllowedProtectedShellCommand(command), true, `expected allowed: ${command}`)

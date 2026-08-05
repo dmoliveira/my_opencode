@@ -82,18 +82,23 @@ Scope:
   apply mode changes with descriptor-bound `fchmod`;
 - reject path identity changes and unsafe parent authority;
 - provide preview/apply behavior without replacing files or mutating content;
-- verify secure creation after restart and after WAL/SHM recreation.
+- verify owner-only WAL/SHM recreation after repairing and restarting the
+  existing active database; do not claim fresh main-database creation, which
+  remains process-umask dependent.
 
 Gate:
 
-- all existing and recreated artifacts are `0600`;
+- the active runtime directory is `0700`, the existing database and present
+  WAL/SHM artifacts are `0600`, and controlled WAL/SHM recreation against the
+  tested OpenCode runtime produces `0600` artifacts;
 - symlink, hardlink, foreign-owner, non-regular, and path-race targets fail closed;
 - normal startup and writes still succeed;
 - original modes are recorded, but restoring an insecure mode is manual,
   emergency-only, and carries a confidentiality warning.
 
-Rollback: revert creation/remediation wiring if compatibility fails. Do not
-automatically restore `0644`.
+Rollback: revert reporting/remediation wiring if compatibility fails. Do not
+automatically restore `0644`; any broader-mode restoration is manual,
+emergency-only, and carries a confidentiality warning.
 
 ### P1 — `task_9`: produce a consistent snapshot/export
 

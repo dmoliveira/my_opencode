@@ -110,6 +110,133 @@ class SessionSidecarSecurityTest(unittest.TestCase):
             )
             self.assertEqual(0o400, path.stat().st_mode & 0o777)
 
+    def test_private_directory_repair_is_descriptor_bound_and_narrow_only(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "runtime"
+            runtime.mkdir(mode=0o755)
+            child = runtime / "opencode.db"
+            child.write_bytes(b"sqlite-canary")
+            before = (runtime.stat().st_dev, runtime.stat().st_ino)
+
+            inspection = module.inspect_private_directory(runtime)
+            self.assertEqual("repairable", inspection.state)
+            repaired = module.repair_private_directory_mode(
+                runtime,
+                expected_snapshot=inspection.snapshot,
+            )
+            self.assertEqual("repaired", repaired.state)
+            self.assertEqual(0o700, runtime.stat().st_mode & 0o777)
+            self.assertEqual(before, (runtime.stat().st_dev, runtime.stat().st_ino))
+            self.assertEqual(b"sqlite-canary", child.read_bytes())
+
+            runtime.chmod(0o500)
+            blocked = module.inspect_private_directory(runtime)
+            self.assertEqual("blocked", blocked.state)
+            with self.assertRaises(module.SidecarSecurityError):
+                module.repair_private_directory_mode(runtime)
+            self.assertEqual(0o500, runtime.stat().st_mode & 0o777)
+            runtime.chmod(0o700)
+
+    def test_active_file_repair_tolerates_content_metadata_changes(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "opencode.db"
+            path.write_bytes(b"before")
+            path.chmod(0o644)
+            inspection = module.inspect_sidecar(path, target="runtime_db")
+            identity = (path.stat().st_dev, path.stat().st_ino)
+
+            with path.open("ab") as handle:
+                handle.write(b"-active-write")
+            repaired = module.repair_active_file_mode(
+                path,
+                target="runtime_db",
+                expected_snapshot=inspection.snapshot,
+            )
+
+            self.assertEqual("repaired", repaired.state)
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
+            self.assertEqual(identity, (path.stat().st_dev, path.stat().st_ino))
+            self.assertEqual(b"before-active-write", path.read_bytes())
+
+    def test_active_file_repair_marks_post_chmod_verification_failure_committed(
+        self,
+    ) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "opencode.db"
+            path.write_bytes(b"database")
+            path.chmod(0o644)
+            real_fchmod = module.os.fchmod
+            real_verify = module._verify_authority
+            applied = False
+
+            def tracked_fchmod(descriptor: int, mode: int) -> None:
+                nonlocal applied
+                real_fchmod(descriptor, mode)
+                applied = True
+
+            def fail_after_chmod(authority) -> None:
+                if applied:
+                    raise module.SidecarSecurityError(
+                        "session_sidecar_snapshot_changed",
+                        "injected post-chmod authority race",
+                        phase="authority",
+                    )
+                real_verify(authority)
+
+            with (
+                patch.object(module.os, "fchmod", side_effect=tracked_fchmod),
+                patch.object(
+                    module,
+                    "_verify_authority",
+                    side_effect=fail_after_chmod,
+                ),
+                self.assertRaises(module.SidecarSecurityError) as raised,
+            ):
+                module.repair_active_file_mode(path)
+
+            self.assertTrue(raised.exception.committed)
+            self.assertEqual("mode_applied", raised.exception.durability)
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
+
+    def test_active_file_repair_marks_post_chmod_close_failure_committed(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "opencode.db"
+            path.write_bytes(b"database")
+            path.chmod(0o644)
+            real_fchmod = module.os.fchmod
+            real_close = module.os.close
+            chmod_descriptor: int | None = None
+            close_failed = False
+
+            def tracked_fchmod(descriptor: int, mode: int) -> None:
+                nonlocal chmod_descriptor
+                real_fchmod(descriptor, mode)
+                chmod_descriptor = descriptor
+
+            def fail_target_close(descriptor: int) -> None:
+                nonlocal close_failed
+                if descriptor == chmod_descriptor and not close_failed:
+                    close_failed = True
+                    real_close(descriptor)
+                    raise OSError("injected post-chmod close failure")
+                real_close(descriptor)
+
+            with (
+                patch.object(module.os, "fchmod", side_effect=tracked_fchmod),
+                patch.object(module.os, "close", side_effect=fail_target_close),
+                self.assertRaises(module.SidecarSecurityError) as raised,
+            ):
+                module.repair_active_file_mode(path)
+
+            self.assertTrue(raised.exception.committed)
+            self.assertEqual("mode_applied", raised.exception.durability)
+            self.assertEqual(0o600, path.stat().st_mode & 0o777)
+
     @unittest.skipUnless(
         hasattr(os, "symlink") and hasattr(os, "link") and hasattr(os, "mkfifo"),
         "required filesystem primitives unsupported",

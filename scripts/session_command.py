@@ -18,8 +18,11 @@ from session_sidecar_security import (  # type: ignore
     SidecarInspection,
     SidecarSecurityError,
     assert_distinct_sidecars,
+    inspect_private_directory,
     inspect_sidecar,
     read_private_json,
+    repair_active_file_mode,
+    repair_private_directory_mode,
     repair_sidecar_mode,
 )
 
@@ -79,6 +82,13 @@ def _default_runtime_db_path() -> Path:
 
 DEFAULT_RUNTIME_DB_PATH = _default_runtime_db_path()
 MAX_RUNTIME_STALE_FINDINGS = 100
+RUNTIME_PERMISSION_RECONCILE_ATTEMPTS = 3
+RUNTIME_PERMISSION_TARGETS = (
+    "runtime_parent",
+    "runtime_db",
+    "runtime_wal",
+    "runtime_shm",
+)
 RUNTIME_DB_SIZE_WARN_BYTES = max(
     1, int(os.environ.get("MY_OPENCODE_RUNTIME_DB_SIZE_WARN_BYTES", str(1024**3)))
 )
@@ -102,10 +112,15 @@ DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD = max(
 )
 
 
+def resolve_runtime_db_path() -> Path:
+    """Resolve the active runtime path at command time, including env overrides."""
+    return _default_runtime_db_path()
+
+
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-runtime-permissions [--db-path <active-path>] [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -299,6 +314,7 @@ def _emit(payload: dict, json_output: bool) -> int:
         return 0
     if payload.get("result") != "PASS" and command not in {
         "doctor",
+        "repair-runtime-permissions",
         "repair-sidecars",
         "repair-stale",
     }:
@@ -366,6 +382,17 @@ def _emit(payload: dict, json_output: bool) -> int:
         if sidecar_findings:
             print("sidecar_findings:")
             for finding in sidecar_findings:
+                print(
+                    "- "
+                    f"target={finding.get('target')} "
+                    f"state={finding.get('state')} "
+                    f"mode={finding.get('before_mode')} "
+                    f"reason={finding.get('reason_code') or 'none'}"
+                )
+        runtime_permission_findings = payload.get("runtime_permission_findings") or []
+        if runtime_permission_findings:
+            print("runtime_permission_findings:")
+            for finding in runtime_permission_findings:
                 print(
                     "- "
                     f"target={finding.get('target')} "
@@ -471,6 +498,29 @@ def _emit(payload: dict, json_output: bool) -> int:
         print(f"partial: {'yes' if payload.get('partial') else 'no'}")
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("command") == "repair-runtime-permissions":
+        print("session repair-runtime-permissions")
+        print("----------------------------------")
+        print(f"runtime_db: {payload.get('runtime_db_path')}")
+        print(f"apply: {'yes' if payload.get('apply') else 'no'}")
+        if payload.get("reason_code"):
+            print(f"reason_code: {payload.get('reason_code')}")
+        for item in payload.get("runtime_permission_findings", []):
+            print(
+                "- "
+                f"target={item.get('target')} "
+                f"state={item.get('state')} "
+                f"before={item.get('before_mode')} "
+                f"after={item.get('after_mode')} "
+                f"changed={'yes' if item.get('changed') else 'no'}"
+            )
+        print(f"changed_count: {payload.get('changed_count', 0)}")
+        print(f"partial: {'yes' if payload.get('partial') else 'no'}")
+        print(
+            f"reconciliation_attempts: {payload.get('reconciliation_attempts', 0)}"
+        )
+        print(f"result: {payload.get('result')}")
+        return 0 if payload.get("result") == "PASS" else 1
     if payload.get("command") == "handoff":
         print("session handoff")
         print("---------------")
@@ -555,6 +605,122 @@ def _inspect_active_sidecars(
         except SidecarSecurityError as exc:
             findings.append(_blocked_inspection(target, paths[target], exc.reason_code))
     return findings, alias_error
+
+
+def _runtime_path_key(path: Path) -> str:
+    return os.path.abspath(os.fspath(path.expanduser()))
+
+
+def _runtime_permission_paths(db_path: Path) -> dict[str, Path]:
+    normalized = Path(_runtime_path_key(db_path))
+    return {
+        "runtime_parent": normalized.parent,
+        "runtime_db": normalized,
+        "runtime_wal": Path(f"{normalized}-wal"),
+        "runtime_shm": Path(f"{normalized}-shm"),
+    }
+
+
+def _blocked_runtime_inspection(
+    target: str,
+    path: Path,
+    reason_code: str,
+) -> SidecarInspection:
+    return SidecarInspection(
+        target=target,
+        path=path,
+        state="blocked",
+        exists=False,
+        before_mode=None,
+        after_mode=None,
+        reason_code=reason_code,
+    )
+
+
+def _collect_runtime_permission_inspections(
+    db_path: Path,
+) -> tuple[dict[str, Path], list[SidecarInspection], SidecarSecurityError | None]:
+    paths = _runtime_permission_paths(db_path)
+    alias_error: SidecarSecurityError | None = None
+    try:
+        assert_distinct_sidecars(
+            {target: paths[target] for target in RUNTIME_PERMISSION_TARGETS[1:]}
+        )
+    except SidecarSecurityError as exc:
+        alias_error = exc
+
+    inspections: list[SidecarInspection] = []
+    try:
+        inspections.append(
+            inspect_private_directory(
+                paths["runtime_parent"],
+                target="runtime_parent",
+            )
+        )
+    except SidecarSecurityError as exc:
+        inspections.append(
+            _blocked_runtime_inspection(
+                "runtime_parent",
+                paths["runtime_parent"],
+                exc.reason_code,
+            )
+        )
+    for target in RUNTIME_PERMISSION_TARGETS[1:]:
+        try:
+            inspections.append(inspect_sidecar(paths[target], target=target))
+        except SidecarSecurityError as exc:
+            inspections.append(
+                _blocked_runtime_inspection(target, paths[target], exc.reason_code)
+            )
+    return paths, inspections, alias_error
+
+
+def _runtime_permission_summary(db_path: Path) -> dict[str, Any]:
+    _, inspections, alias_error = _collect_runtime_permission_inspections(db_path)
+    by_target = {item.target: item for item in inspections}
+    blocked = [item for item in inspections if item.state == "blocked"]
+    repairable = [item for item in inspections if item.state == "repairable"]
+    runtime_db_missing = by_target.get("runtime_db") is None or by_target[
+        "runtime_db"
+    ].state == "missing"
+    reason_code: str | None = None
+    if alias_error is not None:
+        status = "blocked"
+        reason_code = alias_error.reason_code
+    elif blocked:
+        status = "blocked"
+        reason_code = blocked[0].reason_code or "runtime_permission_check_failed"
+    elif runtime_db_missing:
+        status = "missing"
+        reason_code = "runtime_db_missing"
+    elif repairable:
+        status = "repair_required"
+        reason_code = "runtime_permission_repair_required"
+    else:
+        status = "private"
+    apply_allowed = _runtime_path_key(db_path) == _runtime_path_key(
+        resolve_runtime_db_path()
+    )
+    return {
+        "runtime_permission_status": status,
+        "runtime_permission_reason_code": reason_code,
+        "runtime_permission_repair_required": bool(repairable),
+        "runtime_permission_apply_allowed": apply_allowed,
+        "runtime_permission_findings": [item.to_payload() for item in inspections],
+    }
+
+
+def _runtime_permission_quick_fixes(
+    db_path: Path,
+    summary: dict[str, Any],
+) -> list[str]:
+    if summary.get("runtime_permission_status") != "repair_required" or not summary.get(
+        "runtime_permission_apply_allowed"
+    ):
+        return []
+    return [
+        f"/session repair-runtime-permissions --db-path {shlex.quote(str(db_path))} --json"
+    ]
 
 
 def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
@@ -1221,6 +1387,19 @@ def _scan_runtime_stuck_sessions(
     warnings: list[str] = []
     problems: list[str] = []
     remediation_codes: list[str] = []
+    runtime_permissions = _runtime_permission_summary(db_path)
+    runtime_permission_quick_fixes = _runtime_permission_quick_fixes(
+        db_path, runtime_permissions
+    )
+    permission_status = runtime_permissions["runtime_permission_status"]
+    if permission_status == "repair_required":
+        warnings.append(
+            "runtime database directory and artifacts should be owner-only"
+        )
+        remediation_codes.append("runtime_permission_repair_required")
+    elif permission_status == "blocked":
+        problems.append("runtime database permission safety check failed")
+        remediation_codes.append("runtime_permission_check_failed")
     runtime_db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     runtime_db_wal_path = Path(f"{db_path}-wal")
     runtime_db_wal_bytes = (
@@ -1267,6 +1446,8 @@ def _scan_runtime_stuck_sessions(
             "warnings": warnings,
             "problems": problems,
             "remediation_codes": remediation_codes,
+            **runtime_permissions,
+            "runtime_permission_quick_fixes": runtime_permission_quick_fixes,
             "stuck_findings": findings,
             "generic_stale_findings": generic_stale_findings,
             "generic_stale_count": generic_stale_count,
@@ -1452,6 +1633,39 @@ def _scan_runtime_stuck_sessions(
             warnings.append(generic_stale_message)
 
     return result()
+
+
+def _runtime_doctor_fields(runtime: dict[str, Any]) -> dict[str, Any]:
+    names = (
+        "remediation_codes",
+        "stuck_findings",
+        "generic_stale_findings",
+        "generic_stale_count",
+        "generic_stale_problem_threshold",
+        "runtime_db_busy_timeout_ms",
+        "runtime_db_scan_timeout_ms",
+        "runtime_db_query_only",
+        "runtime_db_snapshot_started",
+        "runtime_db_scan_complete",
+        "runtime_db_journal_mode",
+        "runtime_db_sqlite_version",
+        "runtime_db_missing_tables",
+        "runtime_db_json1_available",
+        "runtime_db_indexes",
+        "runtime_db_index_columns",
+        "runtime_db_scan_mode",
+        "runtime_db_size_bytes",
+        "runtime_db_wal_bytes",
+        "runtime_db_size_warn_bytes",
+        "runtime_db_scan_duration_ms",
+        "runtime_permission_status",
+        "runtime_permission_reason_code",
+        "runtime_permission_repair_required",
+        "runtime_permission_apply_allowed",
+        "runtime_permission_findings",
+    )
+    return {name: runtime.get(name) for name in names}
+
 
 def _repair_message_and_tool(
     conn: sqlite3.Connection,
@@ -2392,7 +2606,7 @@ def _command_search(argv: list[str], index_path: Path) -> int:
 def _command_doctor(argv: list[str], index_path: Path) -> int:
     json_output = "--json" in argv
     try:
-        db_path = _parse_path_option(argv, "--db-path", DEFAULT_RUNTIME_DB_PATH)
+        db_path = _parse_path_option(argv, "--db-path", resolve_runtime_db_path())
         stale_seconds = _parse_positive_int_option(
             argv, "--stale-seconds", DEFAULT_STALE_SESSION_SECONDS
         )
@@ -2445,13 +2659,16 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             problems.append(f"{target} sidecar safety check failed")
         elif state == "missing" and target == "digest":
             warnings.append("digest does not exist yet; run /digest run first")
+    runtime = _scan_runtime_stuck_sessions(
+        db_path, stale_seconds, generic_stale_problem_threshold
+    )
+    warnings.extend(runtime["warnings"])
+    problems.extend(runtime["problems"])
+    runtime_permission_quick_fixes = list(
+        runtime.get("runtime_permission_quick_fixes") or []
+    )
     if index_state == "missing":
         warnings.append("session index does not exist yet; run /digest run first")
-        runtime = _scan_runtime_stuck_sessions(
-            db_path, stale_seconds, generic_stale_problem_threshold
-        )
-        warnings.extend(runtime["warnings"])
-        problems.extend(runtime["problems"])
         return _emit(
             {
                 "result": "PASS" if not problems else "FAIL",
@@ -2465,32 +2682,11 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "sidecar_reason_code": sidecar_reason_code,
                 "warnings": warnings,
                 "problems": problems,
-                "remediation_codes": runtime.get("remediation_codes", []),
-                "stuck_findings": runtime["stuck_findings"],
-                "generic_stale_findings": runtime["generic_stale_findings"],
-                "generic_stale_count": runtime["generic_stale_count"],
-                "generic_stale_problem_threshold": runtime[
-                    "generic_stale_problem_threshold"
-                ],
-                "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
-                "runtime_db_scan_timeout_ms": runtime["runtime_db_scan_timeout_ms"],
-                "runtime_db_query_only": runtime["runtime_db_query_only"],
-                "runtime_db_snapshot_started": runtime["runtime_db_snapshot_started"],
-                "runtime_db_scan_complete": runtime["runtime_db_scan_complete"],
-                "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
-                "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
-                "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
-                "runtime_db_json1_available": runtime["runtime_db_json1_available"],
-                "runtime_db_indexes": runtime["runtime_db_indexes"],
-                "runtime_db_index_columns": runtime["runtime_db_index_columns"],
-                "runtime_db_scan_mode": runtime["runtime_db_scan_mode"],
-                "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
-                "runtime_db_wal_bytes": runtime["runtime_db_wal_bytes"],
-                "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
-                "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
+                **_runtime_doctor_fields(runtime),
                 "count": 0,
                 "stale_seconds": stale_seconds,
-                "quick_fixes": sidecar_quick_fixes,
+                "quick_fixes": sidecar_quick_fixes
+                + runtime_permission_quick_fixes,
             },
             json_output,
         )
@@ -2510,13 +2706,11 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 "sidecar_reason_code": sidecar_reason_code,
                 "warnings": warnings,
                 "problems": problems,
+                **_runtime_doctor_fields(runtime),
                 "count": 0,
-                "stuck_findings": [],
-                "generic_stale_findings": [],
-                "generic_stale_count": 0,
-                "generic_stale_problem_threshold": generic_stale_problem_threshold,
                 "stale_seconds": stale_seconds,
-                "quick_fixes": sidecar_quick_fixes,
+                "quick_fixes": sidecar_quick_fixes
+                + runtime_permission_quick_fixes,
                 **_index_failure_fields(exc),
             },
             json_output,
@@ -2524,11 +2718,6 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     rows = _session_rows(index)
     if not rows:
         warnings.append("session index exists but no sessions are recorded yet")
-    runtime = _scan_runtime_stuck_sessions(
-        db_path, stale_seconds, generic_stale_problem_threshold
-    )
-    warnings.extend(runtime["warnings"])
-    problems.extend(runtime["problems"])
     return _emit(
         {
             "result": "PASS" if not problems else "FAIL",
@@ -2542,30 +2731,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "sidecar_reason_code": sidecar_reason_code,
             "warnings": warnings,
             "problems": problems,
-            "remediation_codes": runtime.get("remediation_codes", []),
+            **_runtime_doctor_fields(runtime),
             "count": len(rows),
-            "stuck_findings": runtime["stuck_findings"],
-            "generic_stale_findings": runtime["generic_stale_findings"],
-            "generic_stale_count": runtime["generic_stale_count"],
-            "generic_stale_problem_threshold": runtime[
-                "generic_stale_problem_threshold"
-            ],
-            "runtime_db_busy_timeout_ms": runtime["runtime_db_busy_timeout_ms"],
-            "runtime_db_scan_timeout_ms": runtime["runtime_db_scan_timeout_ms"],
-            "runtime_db_query_only": runtime["runtime_db_query_only"],
-            "runtime_db_snapshot_started": runtime["runtime_db_snapshot_started"],
-            "runtime_db_scan_complete": runtime["runtime_db_scan_complete"],
-            "runtime_db_journal_mode": runtime["runtime_db_journal_mode"],
-            "runtime_db_sqlite_version": runtime["runtime_db_sqlite_version"],
-            "runtime_db_missing_tables": runtime["runtime_db_missing_tables"],
-            "runtime_db_json1_available": runtime["runtime_db_json1_available"],
-            "runtime_db_indexes": runtime["runtime_db_indexes"],
-            "runtime_db_index_columns": runtime["runtime_db_index_columns"],
-            "runtime_db_scan_mode": runtime["runtime_db_scan_mode"],
-            "runtime_db_size_bytes": runtime["runtime_db_size_bytes"],
-            "runtime_db_wal_bytes": runtime["runtime_db_wal_bytes"],
-            "runtime_db_size_warn_bytes": runtime["runtime_db_size_warn_bytes"],
-            "runtime_db_scan_duration_ms": runtime["runtime_db_scan_duration_ms"],
             "stale_seconds": stale_seconds,
             "quick_fixes": (
                 [
@@ -2577,7 +2744,8 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
                 if problems
                 else []
             )
-            + sidecar_quick_fixes,
+            + sidecar_quick_fixes
+            + runtime_permission_quick_fixes,
         },
         json_output,
     )
@@ -2940,6 +3108,343 @@ def _command_repair_sidecars(argv: list[str], index_path: Path) -> int:
     )
 
 
+def _runtime_permission_result_findings(
+    preflight: list[SidecarInspection],
+    final: list[SidecarInspection],
+    *,
+    original_modes: dict[str, int | None],
+    changed_targets: set[str],
+    failure_target: str | None = None,
+    failure_code: str | None = None,
+) -> list[dict[str, Any]]:
+    preflight_by_target = {item.target: item for item in preflight}
+    final_by_target = {item.target: item for item in final}
+    findings: list[dict[str, Any]] = []
+    for target in RUNTIME_PERMISSION_TARGETS:
+        initial = preflight_by_target[target]
+        current = final_by_target.get(target, initial)
+        changed = target in changed_targets
+        state = current.state
+        reason_code = current.reason_code
+        if changed and state == "private":
+            state = "repaired"
+            reason_code = None
+        if target == failure_target and failure_code:
+            state = "failed" if changed else "blocked"
+            reason_code = failure_code
+        findings.append(
+            {
+                "target": target,
+                "path": str(current.path),
+                "state": state,
+                "exists": current.exists,
+                "before_mode": original_modes.get(target, initial.before_mode),
+                "after_mode": current.before_mode,
+                "reason_code": reason_code,
+                "changed": changed,
+            }
+        )
+    return findings
+
+
+def _command_repair_runtime_permissions(argv: list[str]) -> int:
+    json_output = "--json" in argv
+    apply_changes = "--apply" in argv
+    args = [arg for arg in argv if arg not in {"--json", "--apply"}]
+    active_db_path = resolve_runtime_db_path()
+    try:
+        db_path = _parse_path_option(args, "--db-path", active_db_path)
+        if "--db-path" in args:
+            path_index = args.index("--db-path")
+            del args[path_index : path_index + 2]
+    except ValueError:
+        return _usage()
+    if args:
+        return _usage()
+
+    rollback_warning = (
+        "Restoring broader modes is manual emergency-only and can expose private "
+        "runtime history."
+    )
+    if _runtime_path_key(db_path) != _runtime_path_key(active_db_path):
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "repair-runtime-permissions",
+                "runtime_db_path": str(db_path),
+                "active_runtime_db_path": str(active_db_path),
+                "apply": apply_changes,
+                "reason_code": "runtime_permission_path_not_active",
+                "partial": False,
+                "changed_count": 0,
+                "reconciliation_attempts": 0,
+                "runtime_permission_findings": [],
+                "rollback_warning": rollback_warning,
+            },
+            json_output,
+        )
+
+    paths, preflight, alias_error = _collect_runtime_permission_inspections(db_path)
+    preflight_by_target = {item.target: item for item in preflight}
+    original_modes = {item.target: item.before_mode for item in preflight}
+    blocked = [item for item in preflight if item.state == "blocked"]
+    db_missing = preflight_by_target["runtime_db"].state == "missing"
+    preflight_reason: str | None = None
+    if alias_error is not None:
+        preflight_reason = alias_error.reason_code
+    elif blocked:
+        preflight_reason = blocked[0].reason_code or "runtime_permission_check_failed"
+    elif db_missing:
+        preflight_reason = "runtime_db_missing"
+
+    if preflight_reason is not None:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "repair-runtime-permissions",
+                "runtime_db_path": str(paths["runtime_db"]),
+                "active_runtime_db_path": str(active_db_path),
+                "apply": apply_changes,
+                "reason_code": preflight_reason,
+                "partial": False,
+                "changed_count": 0,
+                "reconciliation_attempts": 0,
+                "runtime_permission_findings": [
+                    item.to_payload() for item in preflight
+                ],
+                "rollback_warning": rollback_warning,
+            },
+            json_output,
+        )
+
+    repairable = [item for item in preflight if item.state == "repairable"]
+    if not apply_changes:
+        return _emit(
+            {
+                "result": "FAIL" if repairable else "PASS",
+                "command": "repair-runtime-permissions",
+                "runtime_db_path": str(paths["runtime_db"]),
+                "active_runtime_db_path": str(active_db_path),
+                "apply": False,
+                "reason_code": "runtime_permission_repair_required"
+                if repairable
+                else None,
+                "partial": False,
+                "changed_count": 0,
+                "reconciliation_attempts": 0,
+                "runtime_permission_findings": [
+                    item.to_payload() for item in preflight
+                ],
+                "rollback_warning": rollback_warning,
+            },
+            json_output,
+        )
+
+    changed_count = 0
+    changed_targets: set[str] = set()
+    failure_code: str | None = None
+    failure_target: str | None = None
+    reconciliation_attempts = 0
+
+    parent = preflight_by_target["runtime_parent"]
+    if parent.state == "repairable":
+        try:
+            repaired = repair_private_directory_mode(
+                paths["runtime_parent"],
+                target="runtime_parent",
+                expected_snapshot=parent.snapshot,
+            )
+            if repaired.changed:
+                changed_count += 1
+                changed_targets.add("runtime_parent")
+        except SidecarSecurityError as exc:
+            failure_code = exc.reason_code
+            failure_target = "runtime_parent"
+            if exc.committed:
+                changed_count += 1
+                changed_targets.add("runtime_parent")
+
+    runtime_db = preflight_by_target["runtime_db"]
+    if failure_code is None and runtime_db.state == "repairable":
+        try:
+            repaired = repair_active_file_mode(
+                paths["runtime_db"],
+                target="runtime_db",
+                expected_snapshot=runtime_db.snapshot,
+            )
+            if repaired.changed:
+                changed_count += 1
+                changed_targets.add("runtime_db")
+        except SidecarSecurityError as exc:
+            failure_code = exc.reason_code
+            failure_target = "runtime_db"
+            if exc.committed:
+                changed_count += 1
+                changed_targets.add("runtime_db")
+
+    for attempt in range(1, RUNTIME_PERMISSION_RECONCILE_ATTEMPTS + 1):
+        if failure_code is not None:
+            break
+        reconciliation_attempts = attempt
+        _, current, current_alias_error = _collect_runtime_permission_inspections(
+            db_path
+        )
+        current_by_target = {item.target: item for item in current}
+        if current_alias_error is not None:
+            failure_code = current_alias_error.reason_code
+            failure_target = "runtime_db"
+            break
+        fixed_targets = ("runtime_parent", "runtime_db")
+        invalid_fixed = next(
+            (
+                current_by_target[target]
+                for target in fixed_targets
+                if current_by_target[target].state != "private"
+            ),
+            None,
+        )
+        if invalid_fixed is not None:
+            failure_code = (
+                invalid_fixed.reason_code
+                or "runtime_permission_changed_during_repair"
+            )
+            failure_target = invalid_fixed.target
+            break
+        blocked_sidecar = next(
+            (
+                current_by_target[target]
+                for target in ("runtime_wal", "runtime_shm")
+                if current_by_target[target].state == "blocked"
+            ),
+            None,
+        )
+        if blocked_sidecar is not None:
+            failure_code = (
+                blocked_sidecar.reason_code or "runtime_permission_check_failed"
+            )
+            failure_target = blocked_sidecar.target
+            break
+
+        retry_after_race = False
+        for target in ("runtime_wal", "runtime_shm"):
+            inspection = current_by_target[target]
+            if inspection.state != "repairable":
+                continue
+            if original_modes.get(target) is None:
+                original_modes[target] = inspection.before_mode
+            try:
+                repaired = repair_active_file_mode(
+                    paths[target],
+                    target=target,
+                    expected_snapshot=inspection.snapshot,
+                )
+                if repaired.changed:
+                    changed_count += 1
+                    changed_targets.add(target)
+            except SidecarSecurityError as exc:
+                if exc.committed:
+                    changed_count += 1
+                    changed_targets.add(target)
+                if exc.reason_code == "session_sidecar_snapshot_changed":
+                    retry_after_race = True
+                    break
+                failure_code = exc.reason_code
+                failure_target = target
+                break
+        if failure_code is not None:
+            break
+        if retry_after_race:
+            continue
+
+        _, verified, verified_alias_error = _collect_runtime_permission_inspections(
+            db_path
+        )
+        if verified_alias_error is not None:
+            failure_code = verified_alias_error.reason_code
+            failure_target = "runtime_db"
+            break
+        verified_by_target = {item.target: item for item in verified}
+        insecure = next(
+            (
+                verified_by_target[target]
+                for target in RUNTIME_PERMISSION_TARGETS
+                if (
+                    verified_by_target[target].state != "private"
+                    and not (
+                        target in {"runtime_wal", "runtime_shm"}
+                        and verified_by_target[target].state == "missing"
+                    )
+                )
+            ),
+            None,
+        )
+        if insecure is None:
+            break
+        if insecure.state == "repairable" and insecure.target in {
+            "runtime_wal",
+            "runtime_shm",
+        }:
+            continue
+        failure_code = (
+            insecure.reason_code or "runtime_permission_changed_during_repair"
+        )
+        failure_target = insecure.target
+        break
+    else:
+        failure_code = "runtime_permission_artifact_churn"
+
+    _, final, final_alias_error = _collect_runtime_permission_inspections(db_path)
+    if failure_code is None and final_alias_error is not None:
+        failure_code = final_alias_error.reason_code
+        failure_target = "runtime_db"
+    if failure_code is None:
+        final_by_target = {item.target: item for item in final}
+        insecure = next(
+            (
+                final_by_target[target]
+                for target in RUNTIME_PERMISSION_TARGETS
+                if (
+                    final_by_target[target].state != "private"
+                    and not (
+                        target in {"runtime_wal", "runtime_shm"}
+                        and final_by_target[target].state == "missing"
+                    )
+                )
+            ),
+            None,
+        )
+        if insecure is not None:
+            failure_code = (
+                insecure.reason_code or "runtime_permission_changed_during_repair"
+            )
+            failure_target = insecure.target
+
+    findings = _runtime_permission_result_findings(
+        preflight,
+        final,
+        original_modes=original_modes,
+        changed_targets=changed_targets,
+        failure_target=failure_target,
+        failure_code=failure_code,
+    )
+    return _emit(
+        {
+            "result": "FAIL" if failure_code else "PASS",
+            "command": "repair-runtime-permissions",
+            "runtime_db_path": str(paths["runtime_db"]),
+            "active_runtime_db_path": str(active_db_path),
+            "apply": True,
+            "reason_code": failure_code,
+            "partial": bool(failure_code and changed_count),
+            "changed_count": changed_count,
+            "reconciliation_attempts": reconciliation_attempts,
+            "runtime_permission_findings": findings,
+            "rollback_warning": rollback_warning,
+        },
+        json_output,
+    )
+
+
 def _command_repair_stale(argv: list[str], index_path: Path) -> int:
     del index_path
     json_output = "--json" in argv
@@ -3043,6 +3548,8 @@ def main(argv: list[str]) -> int:
         return _command_doctor(rest, index_path)
     if command == "repair-sidecars":
         return _command_repair_sidecars(rest, index_path)
+    if command == "repair-runtime-permissions":
+        return _command_repair_runtime_permissions(rest)
     if command == "repair-stale":
         return _command_repair_stale(rest, index_path)
     return _usage()

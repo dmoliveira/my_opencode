@@ -77,6 +77,8 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS = [
     ocProtectedPattern(String.raw `done`, GIT_REQUIRED_ARGS),
     ocProtectedPattern(String.raw `end-session`, GIT_REQUIRED_ARGS),
     protectedPattern(String.raw `${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+doctor(?:\s+[^;&|]+)*`),
+    protectedPattern(String.raw `${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-sidecars(?:\s+[^;&|]+)*`),
+    protectedPattern(String.raw `${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-runtime-permissions(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-stale(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `${GH_PROTECTED_BINARY}\s+auth\s+status(?:\s+[^;&|]+)*`),
     protectedPattern(String.raw `${GH_PROTECTED_BINARY}\s+pr\s+view(?:\s+[^;&|]+)*`),

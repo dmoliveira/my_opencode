@@ -2198,7 +2198,11 @@ exit 0
         digest_env["MY_OPENCODE_SESSION_INDEX_PATH"] = str(session_index_path)
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
         digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
-        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(tmp / "missing-runtime.db")
+        missing_runtime_dir = tmp / "missing-runtime"
+        missing_runtime_dir.mkdir(mode=0o700)
+        digest_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(
+            missing_runtime_dir / "opencode.db"
+        )
         digest_env["OPENCODE_SESSION_ID"] = "selftest-session"
         digest_env["MY_OPENCODE_SESSION_ID"] = "selftest-session"
 
@@ -2427,7 +2431,9 @@ exit 0
             "session repair-sidecars should preserve sidecar inode identity",
         )
 
-        runtime_db_path = Path(tmpdir) / "opencode.db"
+        runtime_db_dir = tmp / "runtime-store"
+        runtime_db_dir.mkdir(mode=0o700)
+        runtime_db_path = runtime_db_dir / "opencode.db"
         conn = sqlite3.connect(runtime_db_path)
         try:
             conn.executescript(
@@ -2792,6 +2798,7 @@ exit 0
         finally:
             conn.close()
 
+        runtime_db_path.chmod(0o644)
         runtime_env = dict(digest_env)
         runtime_env["MY_OPENCODE_RUNTIME_DB_PATH"] = str(runtime_db_path)
         result = subprocess.run(
@@ -2837,6 +2844,78 @@ exit 0
                 for item in session_runtime_doctor_payload.get("stuck_findings") or []
             ),
             "session doctor should ignore running parts attached only to older messages in the same session",
+        )
+        expect(
+            session_runtime_doctor_payload.get("runtime_permission_status")
+            == "repair_required"
+            and len(
+                session_runtime_doctor_payload.get("runtime_permission_findings") or []
+            )
+            == 4
+            and any(
+                "repair-runtime-permissions" in item
+                for item in session_runtime_doctor_payload.get("quick_fixes") or []
+            ),
+            "session doctor should report active runtime permission remediation",
+        )
+        runtime_db_bytes = runtime_db_path.read_bytes()
+        runtime_db_identity = (
+            runtime_db_path.stat().st_dev,
+            runtime_db_path.stat().st_ino,
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-runtime-permissions",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        runtime_permission_preview = parse_json_output(result.stdout)
+        expect(
+            result.returncode == 1
+            and runtime_permission_preview.get("reason_code")
+            == "runtime_permission_repair_required"
+            and runtime_permission_preview.get("changed_count") == 0
+            and runtime_db_path.stat().st_mode & 0o777 == 0o644,
+            "runtime permission preview should report without mutation",
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "repair-runtime-permissions",
+                "--apply",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=runtime_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        runtime_permission_apply = parse_json_output(result.stdout)
+        expect(
+            result.returncode == 0
+            and runtime_permission_apply.get("result") == "PASS"
+            and runtime_permission_apply.get("changed_count") == 1
+            and runtime_permission_apply.get("partial") is False,
+            f"runtime permission apply should succeed: {result.stderr}",
+        )
+        expect(
+            runtime_db_path.stat().st_mode & 0o777 == 0o600
+            and runtime_db_path.read_bytes() == runtime_db_bytes
+            and (
+                runtime_db_path.stat().st_dev,
+                runtime_db_path.stat().st_ino,
+            )
+            == runtime_db_identity,
+            "runtime permission apply should preserve database bytes and inode",
         )
         result = subprocess.run(
             [
@@ -3148,7 +3227,7 @@ exit 0
             "session doctor should leave generic stale sessions untouched without --include-generic",
         )
 
-        generic_only_db_path = Path(tmpdir) / "opencode-generic-only.db"
+        generic_only_db_path = runtime_db_dir / "opencode-generic-only.db"
         conn = sqlite3.connect(generic_only_db_path)
         try:
             conn.executescript(
@@ -13102,7 +13181,9 @@ exit 0
             "gateway doctor should include gateway state lock diagnostics",
         )
 
-        gateway_runtime_db_path = tmp / "gateway-doctor-runtime.db"
+        gateway_runtime_dir = tmp / "gateway-runtime"
+        gateway_runtime_dir.mkdir(mode=0o700)
+        gateway_runtime_db_path = gateway_runtime_dir / "opencode.db"
         conn = sqlite3.connect(gateway_runtime_db_path)
         try:
             conn.executescript(

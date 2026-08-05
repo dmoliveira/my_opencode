@@ -126,6 +126,7 @@ _ALLOWED_DIRECT_PATTERNS = [
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_GH_BINARY}\s+api\s+user(?:\s+.+)?\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_PYTHON_BINARY}\s+[^;&|]*scripts/session_command\.py\s+doctor(?:\s+[^;&|]+)*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_PYTHON_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-sidecars(?:\s+[^;&|]+)*\s*$"),
+    re.compile(rf"^{_SAFE_ENV_PREFIX}{_PYTHON_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-runtime-permissions(?:\s+[^;&|]+)*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}{_PYTHON_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-stale(?:\s+[^;&|]+)*\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}make\s+(?:help|validate|selftest|doctor|doctor-json|install-test|release-check)\s*$"),
     re.compile(rf"^{_SAFE_ENV_PREFIX}npm\s+install\s+--yes(?:\s+--(?:no-audit|no-fund|silent|ignore-scripts))*\s*$"),

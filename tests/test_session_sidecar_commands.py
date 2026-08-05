@@ -243,6 +243,12 @@ class SessionSidecarCommandsTest(unittest.TestCase):
                         f"repair-sidecars {suffix}"
                     )
                 )
+                self.assertTrue(
+                    helper.is_direct_allowed_protected_main_command(
+                        "python3 scripts/session_command.py "
+                        f"repair-runtime-permissions {suffix}"
+                    )
+                )
 
 
 if __name__ == "__main__":

@@ -2666,6 +2666,24 @@
   {
     "language": "python",
     "file": "session_sidecar_security.py",
+    "function": "repair_active_file_mode",
+    "kind": "os.open",
+    "destination": "authority.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
+    "function": "repair_private_directory_mode",
+    "kind": "os.open",
+    "destination": "authority.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
     "function": "repair_sidecar_mode",
     "kind": "os.open",
     "destination": "authority.name",
