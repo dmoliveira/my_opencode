@@ -160,6 +160,18 @@ The direct mutation inventory behind this classification is:
 > These are fixture-qualified dynamic-tail input reductions, not evidence of
 > token, cache-hit, latency, cost, or provider-budget improvement.
 
+> **Delegation byte-preservation correction — 2026-08-05:** Prompt context
+> upserts now remove only exact gateway-managed trace lines and exact current or
+> legacy focus blocks. Their canonical LF separators are managed with them;
+> caller-owned whitespace, blank lines, CRLF endings, trailing spaces, and final
+> newline state otherwise remain byte-for-byte unchanged across repeat upserts
+> and agent reroutes. Marker lookalikes and malformed blocks fail open. Focus
+> metadata line separators (`CR`, `LF`, `U+2028`, and `U+2029`) are collapsed to
+> spaces before rendering so metadata cannot create a false block boundary.
+> Existing trace parsing and generated trace identity are unchanged. This is a
+> correctness hardening change and makes no input-savings, token, cache-hit,
+> latency, cost, or provider-budget claim.
+
 Do not raise `contextInjector.minDeltaChars` solely to chase cache hits. Small
 differences below that threshold are consumed, so an aggressive threshold can
 silently discard relevant context.

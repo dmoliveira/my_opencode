@@ -35,15 +35,21 @@ function buildHint(context) {
         `- avoid_when: ${avoid}`,
     ].join("\n");
 }
+function singleLineFocusValue(value, fallback) {
+    const normalized = String(value ?? "")
+        .replace(/[\r\n\u2028\u2029]+/g, " ")
+        .trim();
+    return normalized || fallback;
+}
 function buildTaskFocusReminder(context) {
-    const trigger = Array.isArray(context.metadata.triggers) &&
+    const trigger = singleLineFocusValue(Array.isArray(context.metadata.triggers) &&
         context.metadata.triggers.length > 0
         ? context.metadata.triggers[0]
-        : "complete the delegated objective";
-    const avoid = Array.isArray(context.metadata.avoid_when) &&
+        : undefined, "complete the delegated objective");
+    const avoid = singleLineFocusValue(Array.isArray(context.metadata.avoid_when) &&
         context.metadata.avoid_when.length > 0
         ? context.metadata.avoid_when[0]
-        : "scope drift or unrelated follow-up work";
+        : undefined, "scope drift or unrelated follow-up work");
     return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups.`;
 }
 export function createAgentContextShaperHook(options) {

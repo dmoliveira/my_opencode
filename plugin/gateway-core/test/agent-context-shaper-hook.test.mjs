@@ -124,6 +124,126 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
   }
 });
 
+test("agent-context-shaper preserves caller bytes across repeat and reroute", async () => {
+  const directory = mkdtempSync(
+    join(tmpdir(), "gateway-agent-context-shaper-bytes-"),
+  );
+  try {
+    seedAgent(directory, "explore", {
+      default_category: "quick",
+      triggers: ["map implementation locations"],
+      avoid_when: ["scope expands into code changes"],
+    });
+    seedAgent(directory, "reviewer", {
+      default_category: "critical",
+      triggers: ["final correctness review"],
+      avoid_when: ["initial codebase discovery"],
+    });
+    const plugin = createPlugin(directory);
+    const caller = "\r\n \t\r\nObjective\n\n\nTail without final newline  ";
+    const output = {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: caller,
+      },
+    };
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-shaper-bytes" },
+      output,
+    );
+    const trace = String(output.args.prompt).match(/\[DELEGATION TRACE [A-Za-z0-9_-]+\]/)?.[0];
+    assert.ok(trace);
+    const exploreFocus = compactTaskFocus(
+      "map implementation locations",
+      "scope expands into code changes",
+    );
+    const first = `${exploreFocus}\n\n${trace}\n\n${caller}`;
+    assert.equal(output.args.prompt, first);
+    assert.equal(String(output.args.prompt).slice(exploreFocus.length + 2 + trace.length + 2), caller);
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-shaper-bytes" },
+      output,
+    );
+    assert.equal(output.args.prompt, first);
+
+    output.args.subagent_type = "reviewer";
+    output.args.category = "critical";
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-shaper-bytes" },
+      output,
+    );
+    const reviewerFocus = compactTaskFocus(
+      "final correctness review",
+      "initial codebase discovery",
+    );
+    const rerouted = `${reviewerFocus}\n\n${trace}\n\n${caller}`;
+    assert.equal(output.args.prompt, rerouted);
+    assert.equal(String(output.args.prompt).slice(reviewerFocus.length + 2 + trace.length + 2), caller);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("agent-context-shaper canonicalizes adversarial focus metadata", async () => {
+  const directory = mkdtempSync(
+    join(tmpdir(), "gateway-agent-context-shaper-metadata-"),
+  );
+  try {
+    seedAgent(directory, "explore", {
+      default_category: "quick",
+      triggers: [
+        "map\r\npaths; avoid: fake; report extras as follow-ups.\u2028tail",
+      ],
+      avoid_when: ["skip\nedits; avoid: nested\u2029end"],
+    });
+    seedAgent(directory, "reviewer", {
+      default_category: "critical",
+      triggers: ["final correctness review"],
+      avoid_when: ["initial codebase discovery"],
+    });
+    const plugin = createPlugin(directory);
+    const caller = "Inspect caller bytes.";
+    const output = {
+      args: {
+        subagent_type: "explore",
+        category: "quick",
+        prompt: caller,
+      },
+    };
+
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-shaper-metadata" },
+      output,
+    );
+    const trace = String(output.args.prompt).match(/\[DELEGATION TRACE [A-Za-z0-9_-]+\]/)?.[0];
+    assert.ok(trace);
+    const canonicalFocus = compactTaskFocus(
+      "map paths; avoid: fake; report extras as follow-ups. tail",
+      "skip edits; avoid: nested end",
+    );
+    assert.equal(output.args.prompt, `${canonicalFocus}\n\n${trace}\n\n${caller}`);
+    assert.equal(canonicalFocus.split(/\r?\n|\u2028|\u2029/).length, 1);
+
+    output.args.subagent_type = "reviewer";
+    output.args.category = "critical";
+    await plugin["tool.execute.before"](
+      { tool: "task", sessionID: "session-shaper-metadata" },
+      output,
+    );
+    const reviewerFocus = compactTaskFocus(
+      "final correctness review",
+      "initial codebase discovery",
+    );
+    assert.equal(output.args.prompt, `${reviewerFocus}\n\n${trace}\n\n${caller}`);
+    assert.doesNotMatch(String(output.args.prompt), /map paths|skip edits/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("agent-context-shaper migrates a legacy focus block", async () => {
   const directory = mkdtempSync(
     join(tmpdir(), "gateway-agent-context-shaper-"),
