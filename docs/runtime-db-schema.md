@@ -64,16 +64,27 @@ LIMIT 20;
 
 ## Backup and recovery
 
-Use the SQLite online backup API rather than copying a live `opencode.db` file. `/session repair-stale --apply --json` now creates a consistent pre-repair `backup_path` automatically. Keep that artifact outside a synced or shared directory because runtime history can contain prompts and tool output.
+Use the SQLite online backup API rather than copying a live `opencode.db` file. `/session snapshot-runtime --json` creates a verified private bundle for the exact active runtime path, while `/session repair-stale --apply --json` creates a consistent pre-repair `backup_path` automatically. Keep either artifact outside synced or shared directories because runtime history can contain prompts, paths, tool inputs, and tool output.
 
-For a portable manual export, first stop OpenCode writers, then use the SQLite CLI backup command:
+The snapshot command defaults to `${XDG_STATE_HOME:-~/.local/state}/my_opencode/runtime-history-snapshots`; override it with `--output-dir` or `MY_OPENCODE_RUNTIME_SNAPSHOT_OUTPUT_DIR`. It preflights space for two logical copies plus reserve, uses SQLite Online Backup, runs `quick_check` by default or full `integrity_check` with `--full-integrity-check`, hashes the result, and asks the installed OpenCode binary to open a disposable isolated copy. A successful application open establishes readability only; it is not an import or restoration contract.
+
+Each published bundle is a private `0700` directory containing exactly:
+
+```text
+runtime.sqlite3  # 0600 consistent SQLite backup
+manifest.json    # 0600 source/application metadata, hash, checks, timing, limits
+```
+
+A completed Online Backup represents a consistent state reached while the backup ran, not necessarily the state at invocation. It does not write database or WAL content. With an active WAL database, the read-only SQLite reader can update transient coordination/read-mark bytes in the source SHM file. The command repeatedly rejects unsafe source generations and database identity replacement, but Python's path-based SQLite source API cannot exclude a malicious same-UID swap-and-restore race. Backup output, manifest creation, hashing, checks, and cleanup stay bound to open staging descriptors. Publication uses an atomic no-replace rename. If that rename succeeds but destination-directory synchronization fails, the command reports the existing bundle as committed with uncertain durability instead of deleting it.
+
+For an offline manual export, first stop OpenCode writers, then use the SQLite CLI backup command:
 
 ```text
 sqlite3 <runtime_db_path> ".backup '<destination>/opencode-runtime-backup.sqlite3'"
 sqlite3 -readonly <destination>/opencode-runtime-backup.sqlite3 "PRAGMA integrity_check;"
 ```
 
-To restore, preserve the current database first, stop OpenCode, and use SQLite's restore command rather than overwriting files while a WAL writer is active:
+There is no supported `/session` import command. For emergency manual restoration, preserve the current database first, stop OpenCode, and use SQLite's restore command rather than overwriting files while a WAL writer is active:
 
 ```text
 sqlite3 <runtime_db_path> ".backup '<destination>/opencode-runtime-before-restore.sqlite3'"

@@ -2917,6 +2917,75 @@ exit 0
             == runtime_db_identity,
             "runtime permission apply should preserve database bytes and inode",
         )
+        snapshot_validator = tmp / "snapshot-opencode"
+        snapshot_validator.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sqlite3, sys\n"
+            "from pathlib import Path\n"
+            "assert 'OPENCODE_SESSION_ID' not in os.environ\n"
+            "Path(os.environ['TMPDIR']).joinpath('validator-residue').write_text('ok')\n"
+            "if '--version' in sys.argv:\n"
+            "    print('selftest-opencode')\n"
+            "    raise SystemExit(0)\n"
+            "db = Path(os.environ['XDG_DATA_HOME']) / 'opencode' / 'opencode.db'\n"
+            "conn = sqlite3.connect(f'file:{db}?mode=ro', uri=True)\n"
+            "version = conn.execute('PRAGMA schema_version').fetchone()[0]\n"
+            "conn.close()\n"
+            "print(json.dumps([{'schema_version': version}]))\n",
+            encoding="utf-8",
+        )
+        snapshot_validator.chmod(0o700)
+        snapshot_output = tmp / "runtime-history-snapshots"
+        snapshot_output.mkdir(mode=0o700)
+        snapshot_env = dict(runtime_env)
+        snapshot_env["MY_OPENCODE_RUNTIME_SNAPSHOT_OPENCODE_BIN"] = str(
+            snapshot_validator
+        )
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SESSION_SCRIPT),
+                "snapshot-runtime",
+                "--db-path",
+                str(runtime_db_path),
+                "--output-dir",
+                str(snapshot_output),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            env=snapshot_env,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+        snapshot_payload = parse_json_output(result.stdout)
+        expect(
+            result.returncode == 0
+            and snapshot_payload.get("result") == "PASS"
+            and snapshot_payload.get("committed") is True
+            and snapshot_payload.get("durability") == "synced",
+            f"session snapshot-runtime should publish a bundle: {result.stderr}",
+        )
+        snapshot_bundle = Path(snapshot_payload["bundle_path"])
+        snapshot_artifact = snapshot_bundle / "runtime.sqlite3"
+        snapshot_manifest_path = snapshot_bundle / "manifest.json"
+        snapshot_manifest = load_json_file(snapshot_manifest_path)
+        expect(
+            sorted(path.name for path in snapshot_bundle.iterdir())
+            == ["manifest.json", "runtime.sqlite3"]
+            and snapshot_bundle.stat().st_mode & 0o777 == 0o700
+            and snapshot_artifact.stat().st_mode & 0o777 == 0o600
+            and snapshot_manifest_path.stat().st_mode & 0o777 == 0o600,
+            "session snapshot-runtime should publish only private bundle artifacts",
+        )
+        expect(
+            snapshot_manifest.get("artifact", {}).get("sha256")
+            == sha256(snapshot_artifact.read_bytes()).hexdigest()
+            and snapshot_manifest.get("integrity", {}).get("result") == "ok"
+            and snapshot_manifest.get("application_validation", {}).get("result")
+            == "readable",
+            "session snapshot-runtime manifest should verify hash and readability",
+        )
         result = subprocess.run(
             [
                 sys.executable,

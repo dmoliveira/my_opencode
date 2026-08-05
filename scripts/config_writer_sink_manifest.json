@@ -2548,6 +2548,123 @@
   },
   {
     "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_cleanup_owned_tree",
+    "kind": "os.rmdir",
+    "destination": "current_name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_clear_owned_directory",
+    "kind": "os.open",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_clear_owned_directory",
+    "kind": "os.rmdir",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_clear_owned_directory",
+    "kind": "os.unlink",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_create_private_file_at",
+    "kind": "os.open",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_create_sandbox_layout",
+    "kind": "os.mkdir",
+    "destination": "'opencode'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_create_sandbox_layout",
+    "kind": "os.mkdir",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_create_sandbox_layout",
+    "kind": "os.open",
+    "destination": "'data'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_create_sandbox_layout",
+    "kind": "os.open",
+    "destination": "'opencode'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_mkdir_owned",
+    "kind": "os.mkdir",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_mkdir_owned",
+    "kind": "os.open",
+    "destination": "name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_mkdir_owned",
+    "kind": "os.rmdir",
+    "destination": "name",
+    "count": 2,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "runtime_history_snapshot.py",
+    "function": "_prepare_private_output_root",
+    "kind": "os.open",
+    "destination": "normalized",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
     "file": "session_command.py",
     "function": "_backup_runtime_database",
     "kind": "path.unlink",
