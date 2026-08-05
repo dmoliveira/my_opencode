@@ -305,12 +305,16 @@ Use these directly in OpenCode:
 /session doctor --json
 /session repair-sidecars --json
 /session repair-sidecars --apply --json
+/session repair-runtime-permissions --json
+/session repair-runtime-permissions --apply --json
 ```
 
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
 `/session doctor` inspects the active digest and session index without changing them. `/session repair-sidecars` previews permission repairs and exits nonzero while a repair is needed. Add `--apply` to narrow a safe current-user-owned regular single-link file to `0600`. The command never changes content, inode identity, quarantine artifacts, lock files, or directories. It refuses aliases, unsafe targets, and modes such as `0400` that would require adding owner permissions. If one target changes before a later repair fails, the result reports `partial=true` and does not restore permissive bits.
+
+`/session doctor` also reports the active runtime SQLite directory, database, WAL, and SHM permission states. `/session repair-runtime-permissions` previews only that doctor-resolved active path; an explicit `--db-path` must match current runtime resolution. Apply narrows the runtime directory to `0700`, then the database and every present WAL/SHM generation to `0600` through `O_NOFOLLOW`, descriptor identity checks, and `fchmod`. It never replaces files, writes SQLite content, or broadens owner permissions. Missing databases, unsafe authority, linked or foreign targets, and persistent WAL/SHM churn fail closed. A partial result records every completed narrowing and never restores broader modes automatically. Stop OpenCode and retry if active sidecar churn cannot converge within the fixed bound.
 
 Digest and index readers require private sidecars before parsing them. A permissive corrupt index therefore needs two explicit steps: run `/session repair-sidecars --apply --json` to narrow its mode, then run `/digest run --reason manual` to classify and preserve the unchanged corrupt bytes. Digest publication uses two atomic generations around the independent index update; a final digest failure does not roll back an index that already committed. External post-session and final hooks are rechecked afterward, but the built-in flow never rewrites or tightens a hook-modified file.
 

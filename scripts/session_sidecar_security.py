@@ -229,6 +229,39 @@ def _same_snapshot(value: os.stat_result, expected: SidecarSnapshot) -> bool:
     )
 
 
+def _same_security_snapshot(
+    value: os.stat_result,
+    expected: SidecarSnapshot,
+    *,
+    directory: bool,
+) -> bool:
+    """Bind authority metadata while allowing active-file content to change."""
+    expected_type = stat.S_ISDIR(value.st_mode) if directory else stat.S_ISREG(value.st_mode)
+    return (
+        expected_type
+        and int(value.st_dev) == expected.dev
+        and int(value.st_ino) == expected.ino
+        and stat.S_IMODE(value.st_mode) == expected.mode
+        and int(value.st_uid) == expected.uid
+        and int(value.st_nlink) == expected.nlink
+    )
+
+
+def _same_bound_snapshot(
+    value: SidecarSnapshot | None,
+    expected: SidecarSnapshot | None,
+) -> bool:
+    if value is None or expected is None:
+        return value is expected
+    return (
+        value.dev == expected.dev
+        and value.ino == expected.ino
+        and value.mode == expected.mode
+        and value.uid == expected.uid
+        and value.nlink == expected.nlink
+    )
+
+
 def _validate_ancestor_namespace(path: Path) -> None:
     child = path
     while True:
@@ -630,6 +663,89 @@ def inspect_sidecar(path: Path, *, target: str = "sidecar") -> SidecarInspection
         return _inspection_for_metadata(normalized, target, metadata)
 
 
+def _directory_inspection_for_metadata(
+    path: Path,
+    target: str,
+    metadata: os.stat_result | None,
+) -> SidecarInspection:
+    if metadata is None:
+        return SidecarInspection(target, path, "missing", False, None, None, None)
+    mode = stat.S_IMODE(metadata.st_mode)
+    snapshot = _snapshot(path, metadata)
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.geteuid():
+        return SidecarInspection(
+            target,
+            path,
+            "blocked",
+            True,
+            mode,
+            None,
+            "session_sidecar_unsafe_parent",
+            snapshot=snapshot,
+        )
+    if mode == PRIVATE_DIRECTORY_MODE:
+        return SidecarInspection(
+            target,
+            path,
+            "private",
+            True,
+            mode,
+            mode,
+            None,
+            snapshot=snapshot,
+        )
+    if mode & 0o022:
+        return SidecarInspection(
+            target,
+            path,
+            "blocked",
+            True,
+            mode,
+            None,
+            "session_sidecar_unsafe_parent",
+            snapshot=snapshot,
+        )
+    if PRIVATE_DIRECTORY_MODE & ~mode == 0:
+        return SidecarInspection(
+            target,
+            path,
+            "repairable",
+            True,
+            mode,
+            PRIVATE_DIRECTORY_MODE,
+            "session_sidecar_repair_required",
+            snapshot=snapshot,
+        )
+    return SidecarInspection(
+        target,
+        path,
+        "blocked",
+        True,
+        mode,
+        None,
+        "session_sidecar_insecure_permissions",
+        snapshot=snapshot,
+    )
+
+
+def inspect_private_directory(
+    path: Path,
+    *,
+    target: str = "directory",
+) -> SidecarInspection:
+    """Inspect one directory through safe parent authority without creating it."""
+    _require_supported_platform()
+    normalized = _absolute(path)
+    with _sidecar_authority(normalized, create_parent=False) as authority:
+        if authority is None:
+            return SidecarInspection(
+                target, normalized, "missing", False, None, None, None
+            )
+        metadata = _raw_target_stat(authority)
+        _verify_authority(authority)
+        return _directory_inspection_for_metadata(normalized, target, metadata)
+
+
 def ensure_private_directory(path: Path) -> Path:
     """Create and verify a private directory without creating a content file."""
     _require_supported_platform()
@@ -1027,6 +1143,250 @@ def atomic_write_private_json(
             ) from exc
         finally:
             _cleanup_owned_name(authority, temporary_name, temporary_identity)
+
+
+def repair_private_directory_mode(
+    path: Path,
+    *,
+    target: str = "directory",
+    expected_snapshot: SidecarSnapshot | None = None,
+) -> SidecarInspection:
+    inspection = inspect_private_directory(path, target=target)
+    if expected_snapshot is not None and not _same_bound_snapshot(
+        inspection.snapshot, expected_snapshot
+    ):
+        raise _error(
+            "session_sidecar_snapshot_changed",
+            "private directory changed after repair preflight",
+            phase="repair",
+        )
+    if inspection.state in {"missing", "private"}:
+        return inspection
+    if inspection.state != "repairable":
+        raise _error(
+            inspection.reason_code or "session_sidecar_repair_failed",
+            "directory permissions cannot be safely narrowed",
+            phase="repair",
+        )
+
+    normalized = inspection.path
+    applied = False
+    try:
+        with _sidecar_authority(normalized, create_parent=False) as authority:
+            assert authority is not None
+            before = _raw_target_stat(authority)
+            if before is None:
+                raise _error(
+                    "session_sidecar_snapshot_changed",
+                    "private directory disappeared before permission repair",
+                    phase="repair",
+                )
+            current = _directory_inspection_for_metadata(normalized, target, before)
+            if (
+                current.state != "repairable"
+                or not _same_bound_snapshot(current.snapshot, inspection.snapshot)
+                or (
+                    expected_snapshot is not None
+                    and not _same_security_snapshot(
+                        before, expected_snapshot, directory=True
+                    )
+                )
+            ):
+                raise _error(
+                    "session_sidecar_snapshot_changed",
+                    "private directory changed before permission repair",
+                    phase="repair",
+                )
+            descriptor = os.open(
+                authority.name,
+                _directory_flags(),
+                dir_fd=authority.parent_fd,
+            )
+            try:
+                opened = os.fstat(descriptor)
+                if not _same_security_snapshot(
+                    opened,
+                    current.snapshot,
+                    directory=True,
+                ):
+                    raise _error(
+                        "session_sidecar_snapshot_changed",
+                        "private directory changed while opening for repair",
+                        phase="repair",
+                    )
+                os.fchmod(descriptor, PRIVATE_DIRECTORY_MODE)
+                applied = True
+                repaired = os.fstat(descriptor)
+            finally:
+                os.close(descriptor)
+            after = _raw_target_stat(authority)
+            if (
+                after is None
+                or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
+                or (after.st_dev, after.st_ino)
+                != (repaired.st_dev, repaired.st_ino)
+                or not stat.S_ISDIR(after.st_mode)
+                or after.st_uid != os.geteuid()
+                or stat.S_IMODE(after.st_mode) != PRIVATE_DIRECTORY_MODE
+            ):
+                raise _error(
+                    "session_sidecar_repair_failed",
+                    "private directory permission repair could not be verified",
+                    phase="repair",
+                    committed=True,
+                    durability="mode_applied",
+                )
+            _verify_authority(authority)
+            result = replace(
+                current,
+                state="repaired",
+                after_mode=PRIVATE_DIRECTORY_MODE,
+                reason_code=None,
+                changed=True,
+                snapshot=_snapshot(normalized, after),
+            )
+    except SidecarSecurityError as exc:
+        if applied and not exc.committed:
+            raise _error(
+                exc.reason_code,
+                str(exc),
+                phase=exc.phase,
+                committed=True,
+                durability="mode_applied",
+            ) from exc
+        raise
+    except OSError as exc:
+        raise _error(
+            "session_sidecar_repair_failed",
+            "private directory permission repair failed",
+            phase="repair",
+            committed=applied,
+            durability="mode_applied" if applied else "not_committed",
+        ) from exc
+    return result
+
+
+def repair_active_file_mode(
+    path: Path,
+    *,
+    target: str = "active_file",
+    expected_snapshot: SidecarSnapshot | None = None,
+) -> SidecarInspection:
+    """Narrow an active file while tolerating SQLite content metadata churn."""
+    inspection = inspect_sidecar(path, target=target)
+    if expected_snapshot is not None and not _same_bound_snapshot(
+        inspection.snapshot, expected_snapshot
+    ):
+        raise _error(
+            "session_sidecar_snapshot_changed",
+            "active file changed after repair preflight",
+            phase="repair",
+        )
+    if inspection.state in {"missing", "private"}:
+        return inspection
+    if inspection.state != "repairable":
+        raise _error(
+            inspection.reason_code or "session_sidecar_repair_failed",
+            "active file permissions cannot be safely narrowed",
+            phase="repair",
+        )
+
+    normalized = inspection.path
+    applied = False
+    try:
+        with _sidecar_authority(normalized, create_parent=False) as authority:
+            assert authority is not None
+            before = _raw_target_stat(authority)
+            if before is None:
+                raise _error(
+                    "session_sidecar_snapshot_changed",
+                    "active file disappeared before permission repair",
+                    phase="repair",
+                )
+            current = _inspection_for_metadata(normalized, target, before)
+            if (
+                current.state != "repairable"
+                or not _same_bound_snapshot(current.snapshot, inspection.snapshot)
+                or (
+                    expected_snapshot is not None
+                    and not _same_security_snapshot(
+                        before, expected_snapshot, directory=False
+                    )
+                )
+            ):
+                raise _error(
+                    "session_sidecar_snapshot_changed",
+                    "active file changed before permission repair",
+                    phase="repair",
+                )
+            descriptor = os.open(
+                authority.name,
+                _file_read_flags(),
+                dir_fd=authority.parent_fd,
+            )
+            try:
+                opened = os.fstat(descriptor)
+                if not _same_security_snapshot(
+                    opened,
+                    current.snapshot,
+                    directory=False,
+                ):
+                    raise _error(
+                        "session_sidecar_snapshot_changed",
+                        "active file changed while opening for repair",
+                        phase="repair",
+                    )
+                os.fchmod(descriptor, PRIVATE_FILE_MODE)
+                applied = True
+                repaired = os.fstat(descriptor)
+            finally:
+                os.close(descriptor)
+            after = _raw_target_stat(authority)
+            if (
+                after is None
+                or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
+                or (after.st_dev, after.st_ino)
+                != (repaired.st_dev, repaired.st_ino)
+                or not stat.S_ISREG(after.st_mode)
+                or after.st_uid != os.geteuid()
+                or after.st_nlink != 1
+                or stat.S_IMODE(after.st_mode) != PRIVATE_FILE_MODE
+            ):
+                raise _error(
+                    "session_sidecar_repair_failed",
+                    "active file permission repair could not be verified",
+                    phase="repair",
+                    committed=True,
+                    durability="mode_applied",
+                )
+            _verify_authority(authority)
+            result = replace(
+                current,
+                state="repaired",
+                after_mode=PRIVATE_FILE_MODE,
+                reason_code=None,
+                changed=True,
+                snapshot=_snapshot(normalized, after),
+            )
+    except SidecarSecurityError as exc:
+        if applied and not exc.committed:
+            raise _error(
+                exc.reason_code,
+                str(exc),
+                phase=exc.phase,
+                committed=True,
+                durability="mode_applied",
+            ) from exc
+        raise
+    except OSError as exc:
+        raise _error(
+            "session_sidecar_repair_failed",
+            "active file permission repair failed",
+            phase="repair",
+            committed=applied,
+            durability="mode_applied" if applied else "not_committed",
+        ) from exc
+    return result
 
 
 def repair_sidecar_mode(

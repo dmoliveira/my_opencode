@@ -832,6 +832,9 @@ def runtime_session_health_summary(
             f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
             f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
         ]
+    for command in runtime.get("runtime_permission_quick_fixes") or []:
+        if command not in repair_commands:
+            repair_commands.append(command)
     return {
         "result": result,
         "runtime_db_path": str(db_path),
@@ -842,6 +845,19 @@ def runtime_session_health_summary(
         "runtime_db_query_only": runtime.get("runtime_db_query_only"),
         "runtime_db_snapshot_started": runtime.get("runtime_db_snapshot_started"),
         "runtime_db_scan_complete": runtime.get("runtime_db_scan_complete"),
+        "runtime_permission_status": runtime.get("runtime_permission_status"),
+        "runtime_permission_reason_code": runtime.get(
+            "runtime_permission_reason_code"
+        ),
+        "runtime_permission_repair_required": runtime.get(
+            "runtime_permission_repair_required"
+        ),
+        "runtime_permission_apply_allowed": runtime.get(
+            "runtime_permission_apply_allowed"
+        ),
+        "runtime_permission_findings": list(
+            runtime.get("runtime_permission_findings") or []
+        ),
         "remediation_codes": list(runtime.get("remediation_codes") or []),
         "stale_seconds": stale_seconds,
         "generic_stale_problem_threshold": generic_stale_problem_threshold,
