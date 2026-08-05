@@ -13,6 +13,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from runtime_history_snapshot import (  # type: ignore
+    RuntimeSnapshotError,
+    create_runtime_history_snapshot,
+    default_runtime_snapshot_output_dir,
+)
 from session_metadata_index import SessionIndexError, load_session_index  # type: ignore
 from session_sidecar_security import (  # type: ignore
     SidecarInspection,
@@ -25,7 +30,6 @@ from session_sidecar_security import (  # type: ignore
     repair_private_directory_mode,
     repair_sidecar_mode,
 )
-
 
 DEFAULT_INDEX_PATH = Path(
     os.environ.get(
@@ -120,7 +124,7 @@ def resolve_runtime_db_path() -> Path:
 def _usage() -> int:
     print(
         "usage: /session current [--json] | /session list [--limit <n>] [--json] | /session show <id> [--json] "
-        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-runtime-permissions [--db-path <active-path>] [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
+        "| /session search <query> [--limit <n>] [--json] | /session handoff [--id <session_id>] [--launch-cwd <path>] [--fork] [--json] | /session doctor [--db-path <path>] [--stale-seconds <n>] [--generic-stale-problem-threshold <n>] [--json] | /session snapshot-runtime [--db-path <active-path>] [--output-dir <private-dir>] [--full-integrity-check] [--json] | /session repair-sidecars [--apply] [--json] | /session repair-runtime-permissions [--db-path <active-path>] [--apply] [--json] | /session repair-stale [--db-path <path>] [--stale-seconds <n>] [--session-id <id>] [--include-generic --confirm-generic] [--apply] [--json]"
     )
     return 2
 
@@ -317,6 +321,7 @@ def _emit(payload: dict, json_output: bool) -> int:
         "repair-runtime-permissions",
         "repair-sidecars",
         "repair-stale",
+        "snapshot-runtime",
     }:
         print("result: FAIL")
         if payload.get("reason_code"):
@@ -447,6 +452,29 @@ def _emit(payload: dict, json_output: bool) -> int:
                     f"last_part={finding.get('last_part_type') or 'none'} "
                     f"cause={finding.get('stale_cause_summary') or 'unknown'}"
                 )
+        print(f"result: {payload.get('result')}")
+        return 0 if payload.get("result") == "PASS" else 1
+    if payload.get("command") == "snapshot-runtime":
+        print("session snapshot-runtime")
+        print("------------------------")
+        print(f"runtime_db: {payload.get('runtime_db_path')}")
+        print(f"output_dir: {payload.get('output_dir')}")
+        if payload.get("reason_code"):
+            print(f"reason_code: {payload.get('reason_code')}")
+        if payload.get("phase"):
+            print(f"phase: {payload.get('phase')}")
+        if payload.get("bundle_path"):
+            print(f"bundle: {payload.get('bundle_path')}")
+        if payload.get("manifest_path"):
+            print(f"manifest: {payload.get('manifest_path')}")
+        if payload.get("bytes") is not None:
+            print(f"bytes: {payload.get('bytes')}")
+        if payload.get("sha256"):
+            print(f"sha256: {payload.get('sha256')}")
+        if payload.get("check"):
+            print(f"check: {payload.get('check')}={payload.get('check_result')}")
+        print(f"committed: {'yes' if payload.get('committed') else 'no'}")
+        print(f"durability: {payload.get('durability') or 'not_committed'}")
         print(f"result: {payload.get('result')}")
         return 0 if payload.get("result") == "PASS" else 1
     if payload.get("command") == "repair-stale":
@@ -2944,6 +2972,95 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
     return _emit(payload, json_output)
 
 
+def _parse_snapshot_runtime_options(
+    argv: list[str],
+) -> tuple[bool, bool, Path, Path] | None:
+    if argv.count("--json") > 1 or argv.count("--full-integrity-check") > 1:
+        return None
+    json_output = "--json" in argv
+    full_integrity_check = "--full-integrity-check" in argv
+    db_path = resolve_runtime_db_path()
+    output_dir = default_runtime_snapshot_output_dir()
+    seen_values: set[str] = set()
+    cursor = 0
+    while cursor < len(argv):
+        token = argv[cursor]
+        if token in {"--json", "--full-integrity-check"}:
+            cursor += 1
+            continue
+        if token not in {"--db-path", "--output-dir"} or token in seen_values:
+            return None
+        if cursor + 1 >= len(argv) or argv[cursor + 1].startswith("--"):
+            return None
+        seen_values.add(token)
+        value = Path(argv[cursor + 1]).expanduser()
+        if token == "--db-path":
+            db_path = value
+        else:
+            output_dir = value
+        cursor += 2
+    return json_output, full_integrity_check, db_path, output_dir
+
+
+def _command_snapshot_runtime(argv: list[str]) -> int:
+    parsed = _parse_snapshot_runtime_options(argv)
+    if parsed is None:
+        return _usage()
+    json_output, full_integrity_check, db_path, output_dir = parsed
+    active_db_path = resolve_runtime_db_path()
+    if _runtime_path_key(db_path) != _runtime_path_key(active_db_path):
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "snapshot-runtime",
+                "runtime_db_path": str(db_path),
+                "active_runtime_db_path": str(active_db_path),
+                "output_dir": str(output_dir),
+                "reason_code": "runtime_snapshot_path_not_active",
+                "phase": "source_authority",
+                "committed": False,
+                "durability": "not_committed",
+                "error": "runtime snapshot source path is not the active runtime database",
+            },
+            json_output,
+        )
+    try:
+        snapshot = create_runtime_history_snapshot(
+            db_path,
+            output_dir,
+            full_integrity_check=full_integrity_check,
+        )
+    except RuntimeSnapshotError as exc:
+        return _emit(
+            {
+                "result": "FAIL",
+                "command": "snapshot-runtime",
+                "runtime_db_path": str(db_path),
+                "active_runtime_db_path": str(active_db_path),
+                "output_dir": str(output_dir),
+                "reason_code": exc.reason_code,
+                "phase": exc.phase,
+                "committed": exc.committed,
+                "durability": exc.durability,
+                "bundle_path": str(exc.bundle_path) if exc.bundle_path else None,
+                "error": "runtime snapshot creation failed",
+            },
+            json_output,
+        )
+    return _emit(
+        {
+            **snapshot,
+            "command": "snapshot-runtime",
+            "runtime_db_path": str(db_path),
+            "active_runtime_db_path": str(active_db_path),
+            "output_dir": str(output_dir),
+            "full_integrity_check": full_integrity_check,
+            "committed": True,
+        },
+        json_output,
+    )
+
+
 def _repair_inspection_payload(inspection: SidecarInspection) -> dict[str, Any]:
     return {
         "target": inspection.target,
@@ -3546,6 +3663,8 @@ def main(argv: list[str]) -> int:
         return _command_handoff(rest, index_path)
     if command == "doctor":
         return _command_doctor(rest, index_path)
+    if command == "snapshot-runtime":
+        return _command_snapshot_runtime(rest)
     if command == "repair-sidecars":
         return _command_repair_sidecars(rest, index_path)
     if command == "repair-runtime-permissions":
