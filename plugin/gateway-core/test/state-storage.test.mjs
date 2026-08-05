@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -86,6 +87,38 @@ function seedRawState(directory) {
   )
   chmodSync(path, PRIVATE_FILE_MODE)
   return path
+}
+
+function lockNodeSnapshot(path) {
+  const stats = lstatSync(path, { bigint: true })
+  return {
+    dev: stats.dev,
+    ino: stats.ino,
+    mode: stats.mode,
+    nlink: stats.nlink,
+    size: stats.size,
+    kind: stats.isFile() ? "file" : stats.isSymbolicLink() ? "symlink" : stats.isDirectory() ? "directory" : "other",
+    content: stats.isFile()
+      ? readFileSync(path)
+      : stats.isSymbolicLink()
+        ? readlinkSync(path)
+        : null,
+  }
+}
+
+function replaceLockGeneration(lock, tokenMode) {
+  const displaced = `${lock}.displaced`
+  renameSync(lock, displaced)
+  mkdirSync(lock, { mode: PRIVATE_DIRECTORY_MODE })
+  chmodSync(lock, PRIVATE_DIRECTORY_MODE)
+  const token = join(lock, OWNER_TOKEN_NAME)
+  writeFileSync(token, `${"b".repeat(64)}\n`, { mode: tokenMode })
+  chmodSync(token, tokenMode)
+  return {
+    displaced,
+    lock: lockNodeSnapshot(lock),
+    owner: lockNodeSnapshot(token),
+  }
 }
 
 function runWriter(directory, domain, count = 30) {
@@ -599,23 +632,165 @@ test("valid and incomplete locks time out without reclamation", () => {
   }
 })
 
-test("unsafe lock token fails immediately", () => {
+test("stable unsafe lock tokens fail immediately without mutation", () => {
+  const cases = [
+    {
+      name: "world-readable",
+      setup(ownerPath) {
+        writeFileSync(ownerPath, `${"a".repeat(64)}\n`, { mode: 0o644 })
+        chmodSync(ownerPath, 0o644)
+      },
+    },
+    {
+      name: "symlink",
+      setup(ownerPath, stateDirectory) {
+        const victim = join(stateDirectory, "owner-victim-symlink")
+        writeFileSync(victim, `${"a".repeat(64)}\n`, { mode: PRIVATE_FILE_MODE })
+        symlinkSync(victim, ownerPath)
+      },
+    },
+    {
+      name: "hardlink",
+      setup(ownerPath, stateDirectory) {
+        const victim = join(stateDirectory, "owner-victim-hardlink")
+        writeFileSync(victim, `${"a".repeat(64)}\n`, { mode: PRIVATE_FILE_MODE })
+        linkSync(victim, ownerPath)
+      },
+    },
+    {
+      name: "directory",
+      setup(ownerPath) {
+        mkdirSync(ownerPath, { mode: PRIVATE_DIRECTORY_MODE })
+      },
+    },
+    {
+      name: "oversized",
+      setup(ownerPath) {
+        writeFileSync(ownerPath, "a".repeat(66), { mode: PRIVATE_FILE_MODE })
+      },
+    },
+    {
+      name: "malformed",
+      setup(ownerPath) {
+        writeFileSync(ownerPath, `${"g".repeat(64)}\n`, { mode: PRIVATE_FILE_MODE })
+      },
+    },
+  ]
+
+  for (const fixture of cases) {
+    withTempDir((directory) => {
+      const statePath = seedRawState(directory)
+      const stateBefore = readFileSync(statePath)
+      const stateDirectory = join(directory, ".opencode")
+      const lock = join(stateDirectory, LOCK_DIRECTORY_NAME)
+      mkdirSync(lock, { mode: PRIVATE_DIRECTORY_MODE })
+      chmodSync(lock, PRIVATE_DIRECTORY_MODE)
+      const ownerPath = join(lock, OWNER_TOKEN_NAME)
+      fixture.setup(ownerPath, stateDirectory)
+      const lockBefore = lockNodeSnapshot(lock)
+      const ownerBefore = lockNodeSnapshot(ownerPath)
+      const started = performance.now()
+      assert.throws(
+        () =>
+          updateGatewayStateDomain(directory, "activeLoop", null, {}, { timeoutMs: 500 }),
+        (error) =>
+          error instanceof GatewayStateProtocolError &&
+          error.reasonCode === "gateway_state_lock_unsafe",
+        fixture.name,
+      )
+      assert.ok(performance.now() - started < 300, fixture.name)
+      assert.deepEqual(lockNodeSnapshot(lock), lockBefore, fixture.name)
+      assert.deepEqual(lockNodeSnapshot(ownerPath), ownerBefore, fixture.name)
+      assert.deepEqual(readFileSync(statePath), stateBefore, fixture.name)
+    })
+  }
+})
+
+test("unsafe token metadata from a replaced lock generation retries", () => {
   withTempDir((directory) => {
+    const statePath = seedRawState(directory)
+    const stateBefore = readFileSync(statePath)
     const lock = join(directory, ".opencode", LOCK_DIRECTORY_NAME)
-    mkdirSync(lock, { recursive: true, mode: PRIVATE_DIRECTORY_MODE })
+    mkdirSync(lock, { mode: PRIVATE_DIRECTORY_MODE })
     chmodSync(lock, PRIVATE_DIRECTORY_MODE)
-    const token = join(lock, OWNER_TOKEN_NAME)
-    writeFileSync(token, `${"a".repeat(64)}\n`, { mode: 0o644 })
-    chmodSync(token, 0o644)
-    const started = performance.now()
+    const ownerPath = join(lock, OWNER_TOKEN_NAME)
+    writeFileSync(ownerPath, `${"a".repeat(64)}\n`, { mode: 0o644 })
+    chmodSync(ownerPath, 0o644)
+    let confirmationCount = 0
+    let replacement
+
     assert.throws(
       () =>
-        updateGatewayStateDomain(directory, "activeLoop", null, {}, { timeoutMs: 500 }),
+        updateGatewayStateDomain(
+          directory,
+          "activeLoop",
+          null,
+          {},
+          {
+            timeoutMs: 80,
+            failureInjector(phase) {
+              if (phase !== "before_lock_token_unsafe_confirmation") return
+              confirmationCount += 1
+              if (confirmationCount === 1) {
+                replacement = replaceLockGeneration(lock, PRIVATE_FILE_MODE)
+              }
+            },
+          },
+        ),
       (error) =>
-        error instanceof GatewayStateProtocolError && error.reasonCode === "gateway_state_lock_unsafe",
+        error instanceof GatewayStateProtocolError &&
+        error.reasonCode === "gateway_state_lock_timeout",
     )
-    assert.ok(performance.now() - started < 200)
-    assert.equal(lstatSync(lock).isDirectory(), true)
+    assert.equal(confirmationCount, 1)
+    assert.ok(replacement)
+    assert.deepEqual(lockNodeSnapshot(lock), replacement.lock)
+    assert.deepEqual(lockNodeSnapshot(join(lock, OWNER_TOKEN_NAME)), replacement.owner)
+    assert.deepEqual(readFileSync(statePath), stateBefore)
+    assert.equal(lstatSync(replacement.displaced).isDirectory(), true)
+  })
+})
+
+test("an unsafe replacement generation retries once then fails closed", () => {
+  withTempDir((directory) => {
+    const statePath = seedRawState(directory)
+    const stateBefore = readFileSync(statePath)
+    const lock = join(directory, ".opencode", LOCK_DIRECTORY_NAME)
+    mkdirSync(lock, { mode: PRIVATE_DIRECTORY_MODE })
+    chmodSync(lock, PRIVATE_DIRECTORY_MODE)
+    const ownerPath = join(lock, OWNER_TOKEN_NAME)
+    writeFileSync(ownerPath, `${"a".repeat(64)}\n`, { mode: 0o644 })
+    chmodSync(ownerPath, 0o644)
+    let confirmationCount = 0
+    let replacement
+
+    assert.throws(
+      () =>
+        updateGatewayStateDomain(
+          directory,
+          "activeLoop",
+          null,
+          {},
+          {
+            timeoutMs: 500,
+            failureInjector(phase) {
+              if (phase !== "before_lock_token_unsafe_confirmation") return
+              confirmationCount += 1
+              if (confirmationCount === 1) {
+                replacement = replaceLockGeneration(lock, 0o644)
+              }
+            },
+          },
+        ),
+      (error) =>
+        error instanceof GatewayStateProtocolError &&
+        error.reasonCode === "gateway_state_lock_unsafe",
+    )
+    assert.equal(confirmationCount, 2)
+    assert.ok(replacement)
+    assert.deepEqual(lockNodeSnapshot(lock), replacement.lock)
+    assert.deepEqual(lockNodeSnapshot(join(lock, OWNER_TOKEN_NAME)), replacement.owner)
+    assert.deepEqual(readFileSync(statePath), stateBefore)
+    assert.equal(lstatSync(replacement.displaced).isDirectory(), true)
   })
 })
 
