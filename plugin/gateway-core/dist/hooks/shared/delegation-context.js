@@ -44,23 +44,92 @@ const GENERATED_LINE_PATTERNS = [
         pattern: /^\[delegation-fallback-orchestrator\] previous delegation failed; applying fallback route category=general and removing explicit subagent_type\.$/,
     },
 ];
+const TASK_FOCUS_MARKER = "[agent-context-shaper] delegated task focus";
+const FOCUS_VALUE_PATTERN = String.raw `[^\r\n\u2028\u2029]+`;
 function isGeneratedLine(line, prefixes) {
     return GENERATED_LINE_PATTERNS.some(({ prefix, pattern }) => prefixes.includes(prefix) && pattern.test(line));
 }
-function stripGeneratedLines(original, prefixes) {
-    let changed = false;
-    const result = original.replace(/[^\r\n]*(?:\r?\n|$)/g, (lineWithEnding) => {
-        const line = lineWithEnding.replace(/\r?\n$/, "");
-        if (!isGeneratedLine(line, prefixes)) {
-            return lineWithEnding;
-        }
-        changed = true;
-        return "";
-    });
-    if (!changed) {
+function removeManagedRanges(original, ranges) {
+    if (ranges.length === 0) {
         return original;
     }
-    return result.replace(/^(?:\r?\n)+/, "");
+    const ordered = [...ranges].sort((left, right) => left.start - right.start || left.end - right.end);
+    const output = [];
+    let cursor = 0;
+    for (const range of ordered) {
+        if (range.end <= cursor) {
+            continue;
+        }
+        const start = Math.max(cursor, range.start);
+        output.push(original.slice(cursor, start));
+        cursor = Math.max(cursor, range.end);
+    }
+    output.push(original.slice(cursor));
+    return output.join("");
+}
+function generatedLineRanges(original, prefixes) {
+    const ranges = [];
+    let lineStart = 0;
+    while (lineStart < original.length) {
+        const lfIndex = original.indexOf("\n", lineStart);
+        const segmentEnd = lfIndex >= 0 ? lfIndex : original.length;
+        const hasCrLf = lfIndex >= 0 && segmentEnd > lineStart && original[segmentEnd - 1] === "\r";
+        const contentEnd = hasCrLf ? segmentEnd - 1 : segmentEnd;
+        const line = original.slice(lineStart, contentEnd);
+        if (isGeneratedLine(line, prefixes)) {
+            let rangeEnd = contentEnd;
+            if (lfIndex >= 0 && !hasCrLf) {
+                rangeEnd = lfIndex + 1;
+                if (original[rangeEnd] === "\n") {
+                    rangeEnd += 1;
+                }
+            }
+            ranges.push({ start: lineStart, end: rangeEnd });
+        }
+        if (lfIndex < 0) {
+            break;
+        }
+        lineStart = lfIndex + 1;
+    }
+    return ranges;
+}
+function stripGeneratedLines(original, prefixes) {
+    return removeManagedRanges(original, generatedLineRanges(original, prefixes));
+}
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function isGeneratedPromptBlock(paragraph, marker, block) {
+    if (paragraph === block) {
+        return true;
+    }
+    if (marker !== TASK_FOCUS_MARKER) {
+        return false;
+    }
+    const escapedMarker = escapeRegExp(marker);
+    const compact = new RegExp(`^${escapedMarker}: one objective, then return; prioritize: ${FOCUS_VALUE_PATTERN}; avoid: ${FOCUS_VALUE_PATTERN}; report extras as follow-ups\\.$`);
+    const legacy = new RegExp(`^${escapedMarker}\n- execute one delegated objective for this task call before returning control\n- prioritize: ${FOCUS_VALUE_PATTERN}\n- avoid: ${FOCUS_VALUE_PATTERN}\n- if you uncover extra work, report it as a follow-up instead of expanding scope in the same delegation$`);
+    return compact.test(paragraph) || legacy.test(paragraph);
+}
+function generatedPromptBlockRanges(original, marker, block) {
+    const ranges = [];
+    let paragraphStart = 0;
+    while (paragraphStart <= original.length) {
+        const separatorStart = original.indexOf("\n\n", paragraphStart);
+        const paragraphEnd = separatorStart >= 0 ? separatorStart : original.length;
+        const paragraph = original.slice(paragraphStart, paragraphEnd);
+        if (isGeneratedPromptBlock(paragraph, marker, block)) {
+            ranges.push({
+                start: paragraphStart,
+                end: separatorStart >= 0 ? separatorStart + 2 : paragraphEnd,
+            });
+        }
+        if (separatorStart < 0) {
+            break;
+        }
+        paragraphStart = separatorStart + 2;
+    }
+    return ranges;
 }
 export function stripDelegationDescriptionContext(original) {
     return stripGeneratedLines(original, GENERATED_LINE_PATTERNS.map(({ prefix }) => prefix));
@@ -77,12 +146,9 @@ export function stripDelegationPromptContext(original) {
 }
 export function upsertDelegationPromptLine(original, prefix, line) {
     const cleaned = stripGeneratedLines(original, [prefix]);
-    return cleaned.trim() ? `${line}\n\n${cleaned}` : line;
+    return cleaned.length > 0 ? `${line}\n\n${cleaned}` : line;
 }
 export function upsertDelegationPromptBlock(original, marker, block) {
-    const paragraphs = original.includes(marker)
-        ? original.split(/\r?\n\r?\n/).filter((paragraph) => !paragraph.startsWith(marker))
-        : [original];
-    const cleaned = paragraphs.join("\n\n").replace(/^(?:\r?\n)+/, "");
-    return cleaned.trim() ? `${block}\n\n${cleaned}` : block;
+    const cleaned = removeManagedRanges(original, generatedPromptBlockRanges(original, marker, block));
+    return cleaned.length > 0 ? `${block}\n\n${cleaned}` : block;
 }

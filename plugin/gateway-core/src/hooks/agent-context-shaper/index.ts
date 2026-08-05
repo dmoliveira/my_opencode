@@ -111,17 +111,28 @@ function buildHint(context: StoredContext): string {
   ].join("\n");
 }
 
+function singleLineFocusValue(value: unknown, fallback: string): string {
+  const normalized = String(value ?? "")
+    .replace(/[\r\n\u2028\u2029]+/g, " ")
+    .trim();
+  return normalized || fallback;
+}
+
 function buildTaskFocusReminder(context: StoredContext): string {
-  const trigger =
+  const trigger = singleLineFocusValue(
     Array.isArray(context.metadata.triggers) &&
-    context.metadata.triggers.length > 0
+      context.metadata.triggers.length > 0
       ? context.metadata.triggers[0]
-      : "complete the delegated objective";
-  const avoid =
+      : undefined,
+    "complete the delegated objective",
+  );
+  const avoid = singleLineFocusValue(
     Array.isArray(context.metadata.avoid_when) &&
-    context.metadata.avoid_when.length > 0
+      context.metadata.avoid_when.length > 0
       ? context.metadata.avoid_when[0]
-      : "scope drift or unrelated follow-up work";
+      : undefined,
+    "scope drift or unrelated follow-up work",
+  );
   return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups.`;
 }
 
