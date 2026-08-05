@@ -605,6 +605,18 @@ export interface AdaptiveValidationSchedulerConfig {
   reminderEditThreshold: number;
 }
 
+// Declares privacy-safe aggregate hook dispatch latency measurement settings.
+export const HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS = 60 * 1000;
+export const HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS = 60 * 60 * 1000;
+export const HOOK_DISPATCH_LATENCY_MIN_SAMPLES = 20;
+export const HOOK_DISPATCH_LATENCY_MAX_SAMPLES = 10_000;
+
+export interface HookDispatchLatencyConfig {
+  enabled: boolean;
+  windowMs: number;
+  minimumSamples: number;
+}
+
 // Declares top-level gateway plugin configuration.
 export interface GatewayConfig {
   hooks: {
@@ -612,6 +624,7 @@ export interface GatewayConfig {
     disabled: string[];
     order: string[];
   };
+  hookDispatchLatency: HookDispatchLatencyConfig;
   autopilotLoop: AutopilotLoopConfig;
   toolOutputTruncator: ToolOutputTruncatorConfig;
   contextWindowMonitor: ContextWindowMonitorConfig;
@@ -790,6 +803,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
       "post-merge-sync-guard",
       "safety",
     ],
+  },
+  hookDispatchLatency: {
+    enabled: true,
+    windowMs: 15 * 60 * 1000,
+    minimumSamples: 100,
   },
   autopilotLoop: {
     enabled: true,

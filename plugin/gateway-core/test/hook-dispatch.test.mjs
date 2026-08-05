@@ -167,6 +167,115 @@ test("hook dispatch does not treat generic must-include wording as intentional b
   }
 });
 
+test("hook dispatch records body timing in success order", async () => {
+  const events = [];
+  const result = await dispatchGatewayHookEvent({
+    hook: {
+      id: "continuation",
+      priority: 1,
+      async event() {
+        events.push("hook");
+      },
+    },
+    eventType: "session.idle",
+    payload: {},
+    directory: "/tmp",
+    latency: {
+      start() {
+        events.push("start");
+        return 10;
+      },
+      capture(startedAt) {
+        events.push(`capture:${startedAt}`);
+        return { completedAt: 15, durationMs: 5 };
+      },
+      record(input) {
+        events.push(`record:${input.outcome}:${input.measurement.durationMs}`);
+      },
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(events, ["start", "hook", "capture:10", "record:success:5"]);
+});
+
+test("hook dispatch preserves blocked error identity while recording outcome", async () => {
+  const blockedError = new Error(
+    "Task/TodoWrite tools are disabled in this workflow by gateway configuration.",
+  );
+  const outcomes = [];
+  const result = await dispatchGatewayHookEvent({
+    hook: {
+      id: "tasks-todowrite-disabler",
+      priority: 1,
+      async event() {
+        throw blockedError;
+      },
+    },
+    eventType: "tool.execute.before",
+    payload: {},
+    directory: "/tmp",
+    latency: {
+      start: () => 1,
+      capture: () => ({ completedAt: 2, durationMs: 1 }),
+      record: (input) => outcomes.push(input.outcome),
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.blocked, true);
+  assert.equal(result.error, blockedError);
+  assert.deepEqual(outcomes, ["blocked"]);
+});
+
+test("hook dispatch isolates every latency recorder failure", async () => {
+  const success = await dispatchGatewayHookEvent({
+    hook: {
+      id: "continuation",
+      priority: 1,
+      async event() {},
+    },
+    eventType: "session.idle",
+    payload: {},
+    directory: "/tmp",
+    latency: {
+      start() {
+        throw new Error("start failed");
+      },
+      capture() {
+        throw new Error("capture failed");
+      },
+      record() {
+        throw new Error("record failed");
+      },
+    },
+  });
+  assert.equal(success.ok, true);
+
+  const original = new Error("original hook failure");
+  const failure = await dispatchGatewayHookEvent({
+    hook: {
+      id: "task-resume-info",
+      priority: 1,
+      async event() {
+        throw original;
+      },
+    },
+    eventType: "tool.execute.after",
+    payload: {},
+    directory: "/tmp",
+    latency: {
+      start: () => 1,
+      capture() {
+        throw new Error("capture failed");
+      },
+      record() {
+        throw new Error("record failed");
+      },
+    },
+  });
+  assert.equal(failure.ok, false);
+  assert.equal(failure.error, original);
+});
+
 test("hook dispatch sanitizes secret failure details before audit and stderr", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-hook-dispatch-"));
   const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT;

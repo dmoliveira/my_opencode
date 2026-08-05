@@ -11,6 +11,10 @@ import {
 import {
   DEFAULT_GATEWAY_CONFIG,
   DEFAULT_GATEWAY_HOOK_ORDER,
+  HOOK_DISPATCH_LATENCY_MAX_SAMPLES,
+  HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS,
+  HOOK_DISPATCH_LATENCY_MIN_SAMPLES,
+  HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS,
   type GatewayConfig,
 } from "./schema.js";
 
@@ -464,6 +468,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
   const source =
     raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const hooksSource = optionalConfigRecord(source.hooks, "hooks");
+  const hookDispatchLatencySource = optionalConfigRecord(
+    source.hookDispatchLatency,
+    "hookDispatchLatency",
+  );
   const autopilotSource =
     source.autopilotLoop && typeof source.autopilotLoop === "object"
       ? (source.autopilotLoop as Record<string, unknown>)
@@ -913,6 +921,32 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
           : DEFAULT_GATEWAY_CONFIG.hooks.enabled,
       disabled: disabledHooks,
       order: hookOrder,
+    },
+    hookDispatchLatency: {
+      enabled:
+        typeof hookDispatchLatencySource.enabled === "boolean"
+          ? hookDispatchLatencySource.enabled
+          : DEFAULT_GATEWAY_CONFIG.hookDispatchLatency.enabled,
+      windowMs: Math.min(
+        HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS,
+        Math.max(
+          HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS,
+          positiveInt(
+            hookDispatchLatencySource.windowMs,
+            DEFAULT_GATEWAY_CONFIG.hookDispatchLatency.windowMs,
+          ),
+        ),
+      ),
+      minimumSamples: Math.min(
+        HOOK_DISPATCH_LATENCY_MAX_SAMPLES,
+        Math.max(
+          HOOK_DISPATCH_LATENCY_MIN_SAMPLES,
+          positiveInt(
+            hookDispatchLatencySource.minimumSamples,
+            DEFAULT_GATEWAY_CONFIG.hookDispatchLatency.minimumSamples,
+          ),
+        ),
+      ),
     },
     autopilotLoop: {
       enabled:

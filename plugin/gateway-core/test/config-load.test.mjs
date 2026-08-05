@@ -15,6 +15,9 @@ import {
 
 test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   const config = loadGatewayConfig({})
+  assert.equal(config.hookDispatchLatency.enabled, true)
+  assert.equal(config.hookDispatchLatency.windowMs, 900000)
+  assert.equal(config.hookDispatchLatency.minimumSamples, 100)
   assert.equal(config.secretCommitGuard.enabled, true)
   assert.equal(config.secretLeakGuard.providerMaxMessages, 20000)
   assert.equal(config.secretLeakGuard.providerMaxNodes, 1000000)
@@ -131,6 +134,44 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("hook dispatch latency config is typed and bounded", () => {
+  const disabled = loadGatewayConfig({
+    hookDispatchLatency: {
+      enabled: false,
+      windowMs: 1,
+      minimumSamples: 1,
+    },
+  })
+  assert.equal(disabled.hookDispatchLatency.enabled, false)
+  assert.equal(disabled.hookDispatchLatency.windowMs, 60000)
+  assert.equal(disabled.hookDispatchLatency.minimumSamples, 20)
+
+  const capped = loadGatewayConfig({
+    hookDispatchLatency: {
+      windowMs: 999999999,
+      minimumSamples: 999999999,
+    },
+  })
+  assert.equal(capped.hookDispatchLatency.windowMs, 3600000)
+  assert.equal(capped.hookDispatchLatency.minimumSamples, 10000)
+
+  const defaults = loadGatewayConfig({
+    hookDispatchLatency: {
+      enabled: "yes",
+      windowMs: "fast",
+      minimumSamples: false,
+    },
+  })
+  assert.equal(defaults.hookDispatchLatency.enabled, true)
+  assert.equal(defaults.hookDispatchLatency.windowMs, 900000)
+  assert.equal(defaults.hookDispatchLatency.minimumSamples, 100)
+
+  assert.throws(
+    () => loadGatewayConfig({ hookDispatchLatency: true }),
+    /hookDispatchLatency must be an object/,
+  )
 })
 
 test("loadGatewayConfig bounds prompt cache routing config strictly", () => {
@@ -739,7 +780,7 @@ test("loadGatewayConfigSourceWithMeta falls back to bundled default when no side
   }
 })
 
-test("npm package includes bundled disabled gateway defaults", () => {
+test("npm package includes bundled defaults and hook manifest", () => {
   const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
   const output = execFileSync(
     "npm",
@@ -749,6 +790,7 @@ test("npm package includes bundled disabled gateway defaults", () => {
   const payload = JSON.parse(output)
   const files = payload[0].files.map((item) => item.path)
   assert.ok(files.includes("config/default-gateway-core.config.json"))
+  assert.ok(files.includes("config/hook-ids.json"))
 })
 
 test("loadGatewayConfigSourceWithMeta uses home sidecar before bundled default", () => {
