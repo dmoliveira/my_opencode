@@ -317,6 +317,7 @@ Use these directly in OpenCode:
 /session handoff --json
 /session handoff --launch-cwd ../my_opencode-wt-task --fork --json
 /session doctor --json
+/session doctor --stale-cursor <opaque-cursor-from-prior-json-response> --json
 /session snapshot-runtime --json
 /session snapshot-runtime --output-dir ~/.local/state/my_opencode/runtime-history-snapshots --full-integrity-check --json
 /session repair-sidecars --json
@@ -329,6 +330,10 @@ Use these directly in OpenCode:
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
 `/session doctor` inspects the active digest and session index without changing them. `/session repair-sidecars` previews permission repairs and exits nonzero while a repair is needed. Add `--apply` to narrow a safe current-user-owned regular single-link file to `0600`. The command never changes content, inode identity, quarantine artifacts, lock files, or directories. It refuses aliases, unsafe targets, and modes such as `0400` that would require adding owner permissions. If one target changes before a later repair fails, the result reports `partial=true` and does not restore permissive bits.
+
+Stale runtime findings in `/session doctor --json` are paginated in fixed per-class chunks: up to 20 rows for each of five finding classes and up to 100 rows in one response. When `stale_findings_has_more` is true, pass the opaque `stale_findings_next_cursor` back with `--stale-cursor` and `--json`; cursor input is JSON-only. Do not decode or edit it. A continuation reuses the original scan clock and stale threshold, so omit `--stale-seconds` or repeat the same value. The cursor is bound to the resolved database path and is not an authentication token, but it is local-sensitive because its encoded payload includes session identifiers; do not publish it.
+
+`stale_findings_page_count` is the sum of the five stable keys in `stale_findings_page_counts`. `stale_findings_truncated=true` means this response omitted rows that can be requested with the non-null cursor. `stale_findings_pagination_complete=true` means a successful cursor chain is exhausted. Invalid cursors fail before SQLite opens; missing/incompatible stores, timeout, and query failures return no partial page or continuation cursor. Pages are independent read-only transactions, not one persistent SQLite snapshot, so active-row updates can move, skip, or repeat a finding across a boundary; see `docs/runtime-db-schema.md` for the exact keyset semantics.
 
 `/session doctor` also reports the active runtime SQLite directory, database, WAL, and SHM permission states. `/session repair-runtime-permissions` previews only that doctor-resolved active path; an explicit `--db-path` must match current runtime resolution. Apply narrows the runtime directory to `0700`, then the database and every present WAL/SHM generation to `0600` through `O_NOFOLLOW`, descriptor identity checks, and `fchmod`. It never replaces files, writes SQLite content, or broadens owner permissions. Missing databases, unsafe authority, linked or foreign targets, and persistent WAL/SHM churn fail closed. A partial result records every completed narrowing and never restores broader modes automatically. Stop OpenCode and retry if active sidecar churn cannot converge within the fixed bound.
 
