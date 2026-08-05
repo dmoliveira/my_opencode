@@ -52,6 +52,22 @@ def completed(
 
 
 class GitGuardTimeoutTest(unittest.TestCase):
+    def test_worktree_helper_supports_isolated_runpy_loading(self) -> None:
+        script = (
+            "import runpy; "
+            f"runpy.run_path({str(SCRIPTS_DIR / 'worktree_helper_command.py')!r}, "
+            "run_name='worktree_helper_command_test')"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", script],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
     def test_worktree_probes_fail_closed_with_cli_reason(self) -> None:
         diagnostics: list[str] = []
         with patch.object(
