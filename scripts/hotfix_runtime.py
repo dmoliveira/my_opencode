@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -23,7 +25,6 @@ from flow_reason_codes import (  # type: ignore
     HOTFIX_TIMELINE_EVENT_MISSING,
     HOTFIX_VALIDATE_FAILED,
 )
-
 
 RUNTIME_FILE_NAME = "hotfix_mode.json"
 ALLOWED_SCOPES = {"patch", "rollback", "config_only"}
@@ -107,20 +108,51 @@ def save_runtime(write_path: Path, state: dict[str, Any]) -> Path:
     return path
 
 
-def run_git(repo_root: Path, args: list[str]) -> tuple[int, str]:
-    proc = __import__("subprocess").run(
-        ["git", *args], cwd=repo_root, capture_output=True, text=True, check=False
-    )
+def run_git(
+    repo_root: Path,
+    args: list[str],
+    *,
+    operation: str,
+    diagnostics: list[str] | None = None,
+) -> tuple[int, str]:
+    try:
+        proc = run_bounded(
+            ["git", *args],
+            operation=operation,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return -1, ""
     return proc.returncode, proc.stdout.strip()
 
 
-def current_branch(repo_root: Path) -> str | None:
-    rc, out = run_git(repo_root, ["rev-parse", "--abbrev-ref", "HEAD"])
+def current_branch(
+    repo_root: Path,
+    diagnostics: list[str] | None = None,
+) -> str | None:
+    rc, out = run_git(
+        repo_root,
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        operation="hotfix_git_current_branch",
+        diagnostics=diagnostics,
+    )
     return out if rc == 0 and out else None
 
 
-def clean_worktree(repo_root: Path) -> bool:
-    rc, out = run_git(repo_root, ["status", "--porcelain"])
+def clean_worktree(
+    repo_root: Path,
+    diagnostics: list[str] | None = None,
+) -> bool:
+    rc, out = run_git(
+        repo_root,
+        ["status", "--porcelain"],
+        operation="hotfix_git_worktree_status",
+        diagnostics=diagnostics,
+    )
     if rc != 0:
         return False
     lines = [line for line in out.splitlines() if not line.strip().endswith(".beads/")]
@@ -232,9 +264,16 @@ def command_start(args: list[str], write_path: Path, repo_root: Path) -> int:
         remediation.append("provide --impact sev1|sev2|sev3")
     elif impact not in ALLOWED_IMPACTS:
         return usage()
-    if not clean_worktree(repo_root):
+    git_diagnostics: list[str] = []
+    branch = current_branch(repo_root, git_diagnostics)
+    if not clean_worktree(repo_root, git_diagnostics):
         reason_codes.append("dirty_worktree")
         remediation.append("commit or stash local changes before starting hotfix mode")
+    reason_codes.extend(code for code in git_diagnostics if code not in reason_codes)
+    remediation.extend(
+        f"retry after resolving bounded Git probe failure: {code}"
+        for code in git_diagnostics
+    )
 
     if reason_codes:
         payload = {
@@ -250,7 +289,7 @@ def command_start(args: list[str], write_path: Path, repo_root: Path) -> int:
     state["incident_id"] = incident_id
     state["scope"] = scope
     state["impact"] = impact
-    state["branch"] = current_branch(repo_root)
+    state["branch"] = branch
     state["started_at"] = now_iso()
     state["closed_at"] = None
     state["rollback_checkpoint"] = None
@@ -291,7 +330,22 @@ def command_checkpoint(args: list[str], write_path: Path, repo_root: Path) -> in
         emit({"result": "FAIL", "reason_codes": [HOTFIX_NOT_ACTIVE]}, as_json)
         return 1
 
-    _, head = run_git(repo_root, ["rev-parse", "HEAD"])
+    git_diagnostics: list[str] = []
+    rc, head = run_git(
+        repo_root,
+        ["rev-parse", "HEAD"],
+        operation="hotfix_git_head",
+        diagnostics=git_diagnostics,
+    )
+    if git_diagnostics or rc != 0 or not head:
+        emit(
+            {
+                "result": "FAIL",
+                "reason_codes": git_diagnostics or ["hotfix_git_head_unavailable"],
+            },
+            as_json,
+        )
+        return 1
     checkpoint_id = f"hkcp_{now_iso().replace(':', '').replace('-', '')}"
     checkpoint = {
         "id": checkpoint_id,

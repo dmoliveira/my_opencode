@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
+
 VALIDATION_CATEGORIES = {"lint", "test", "typecheck", "build", "security", "custom"}
 EVIDENCE_MODES = {"ledger_only", "text_fallback", "hybrid"}
 FINGERPRINT_VERSION = "git-state-v1"
@@ -101,13 +103,20 @@ def normalize_completion_gates(
     }
 
 
-def _git_bytes(directory: Path, args: list[str]) -> bytes:
-    completed = subprocess.run(
+def _git_bytes(directory: Path, args: list[str], *, operation: str) -> bytes:
+    completed = run_bounded(
         ["git", *args],
+        operation=operation,
         cwd=str(directory),
         capture_output=True,
-        check=True,
     )
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
     if len(completed.stdout) > MAX_GIT_OUTPUT_BYTES:
         raise ValueError("git output exceeds fingerprint budget")
     return completed.stdout
@@ -164,13 +173,25 @@ def _contained_path(root: Path, raw_path: bytes) -> tuple[Path, str]:
     return absolute, relative_text
 
 
-def git_state_fingerprint(directory: Path) -> dict[str, str] | None:
+def git_state_fingerprint(
+    directory: Path,
+    *,
+    diagnostics: list[str] | None = None,
+) -> dict[str, str] | None:
     try:
-        root_text = _git_bytes(directory, ["rev-parse", "--show-toplevel"]).decode(
+        root_text = _git_bytes(
+            directory,
+            ["rev-parse", "--show-toplevel"],
+            operation="completion_git_repo_root",
+        ).decode(
             "utf-8", errors="strict"
         ).strip()
         root = Path(root_text).resolve()
-        head = _git_bytes(root, ["rev-parse", "--verify", "HEAD"]).decode(
+        head = _git_bytes(
+            root,
+            ["rev-parse", "--verify", "HEAD"],
+            operation="completion_git_head",
+        ).decode(
             "ascii", errors="strict"
         ).strip().lower()
         if not root_text or len(head) not in {40, 64} or any(
@@ -191,6 +212,7 @@ def git_state_fingerprint(directory: Path) -> dict[str, str] | None:
                 ".",
                 ":(exclude).opencode/runtime/validation-evidence.json",
             ],
+            operation="completion_git_staged_diff",
         )
         tracked = _git_bytes(
             root,
@@ -204,11 +226,14 @@ def git_state_fingerprint(directory: Path) -> dict[str, str] | None:
                 ".",
                 ":(exclude).opencode/runtime/validation-evidence.json",
             ],
+            operation="completion_git_tracked_diff",
         )
         untracked = sorted(
             entry
             for entry in _git_bytes(
-                root, ["ls-files", "--others", "--exclude-standard", "-z"]
+                root,
+                ["ls-files", "--others", "--exclude-standard", "-z"],
+                operation="completion_git_untracked_files",
             ).split(b"\0")
             if entry and entry != EVIDENCE_RELATIVE_PATH
         )
@@ -257,6 +282,10 @@ def git_state_fingerprint(directory: Path) -> dict[str, str] | None:
             "worktree": worktree_value,
             "digest": final.hexdigest(),
         }
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return None
     except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
         return None
 
@@ -294,8 +323,12 @@ def _safe_evidence_file(path: Path) -> bool:
     )
 
 
-def load_validation_snapshot(directory: Path) -> dict[str, Any]:
-    fingerprint = git_state_fingerprint(directory)
+def load_validation_snapshot(
+    directory: Path,
+    *,
+    diagnostics: list[str] | None = None,
+) -> dict[str, Any]:
+    fingerprint = git_state_fingerprint(directory, diagnostics=diagnostics)
     if not fingerprint:
         return {}
     path = Path(fingerprint["root"]) / ".opencode" / "runtime" / "validation-evidence.json"
@@ -346,7 +379,8 @@ def evaluate_completion_gates(
     completion_text: str = "",
 ) -> dict[str, Any]:
     normalized = normalize_completion_gates(gates)
-    snapshot = load_validation_snapshot(directory)
+    diagnostics: list[str] = []
+    snapshot = load_validation_snapshot(directory, diagnostics=diagnostics)
     required_validation = list(normalized.get("required_validation") or [])
     required_markers = list(normalized.get("required_markers") or [])
     required_task_ids = list(normalized.get("required_task_ids") or [])
@@ -403,4 +437,5 @@ def evaluate_completion_gates(
         "missing_task_ids": missing_task_ids,
         "owner_mismatch": owner_mismatch,
         "blockers": blockers,
+        "diagnostics": diagnostics,
     }

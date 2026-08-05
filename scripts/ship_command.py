@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 from flow_reason_codes import (  # type: ignore
     SHIP_PREPARE_BLOCKED,
     SHIP_READY,
@@ -22,7 +23,6 @@ from reviewer_policy import (  # type: ignore
     parse_reviewer_flags,
     resolve_reviewer_policy,
 )
-
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RELEASE_TRAIN_SCRIPT = SCRIPT_DIR / "release_train_command.py"
@@ -37,14 +37,21 @@ def _delivery_state_path() -> Path:
     ).expanduser()
 
 
-def _repo_root() -> Path:
-    completed = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def _repo_root(diagnostics: list[str] | None = None) -> Path:
+    try:
+        completed = run_bounded(
+            ["git", "rev-parse", "--show-toplevel"],
+            operation="ship_git_repo_root",
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return Path.cwd()
     if completed.returncode != 0:
+        if diagnostics is not None and "ship_git_repo_root_failed" not in diagnostics:
+            diagnostics.append("ship_git_repo_root_failed")
         return Path.cwd()
     return Path(completed.stdout.strip()).resolve()
 
@@ -206,12 +213,19 @@ def _build_pr_template(
 
 
 def _gh_health() -> dict[str, Any]:
-    completed = subprocess.run(
-        ["gh", "--version"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = run_bounded(
+            ["gh", "--version"],
+            operation="ship_github_version",
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        return {
+            "available": False,
+            "detail": str(exc),
+            "reason_code": exc.reason_code,
+        }
     if completed.returncode != 0:
         return {
             "available": False,
@@ -226,14 +240,22 @@ def _gh_health() -> dict[str, Any]:
     }
 
 
-def _current_branch(repo_root: Path) -> str | None:
-    completed = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=repo_root,
-    )
+def _current_branch(
+    repo_root: Path,
+    diagnostics: list[str] | None = None,
+) -> str | None:
+    try:
+        completed = run_bounded(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            operation="ship_git_current_branch",
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return None
     if completed.returncode != 0:
         return None
     value = completed.stdout.strip()
@@ -471,10 +493,11 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
     if args:
         return usage()
 
+    diagnostics: list[str] = []
     repo_root = (
         Path(repo_root_arg).expanduser().resolve()
         if repo_root_arg
-        else _repo_root().resolve()
+        else _repo_root(diagnostics).resolve()
     )
     gh_health = _gh_health()
     release_train_ready, release_train_report = _release_train_doctor(repo_root)
@@ -530,7 +553,7 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
         "result": "PASS" if not problems else "FAIL",
         "command": "doctor",
         "repo_root": str(repo_root),
-        "branch": _current_branch(repo_root),
+        "branch": _current_branch(repo_root, diagnostics),
         "gh": gh_health,
         "release_train_ready": release_train_ready,
         "release_train": release_train_report,
@@ -545,6 +568,7 @@ def _command_doctor(args: list[str], as_json: bool) -> int:
         "warnings": warnings,
         "problems": problems,
         "quick_fixes": quick_fixes,
+        "diagnostics": diagnostics,
     }
     if as_json:
         print(json.dumps(payload, indent=2))
@@ -585,7 +609,20 @@ def _command_create_pr(args: list[str], as_json: bool) -> int:
         source=policy_source,
     )
 
-    repo_root = _repo_root()
+    repo_diagnostics: list[str] = []
+    repo_root = _repo_root(repo_diagnostics)
+    if repo_diagnostics:
+        payload = {
+            "result": "FAIL",
+            "reason_codes": repo_diagnostics,
+            "remediation": ["retry after restoring bounded Git repository probes"],
+        }
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"result: {payload['result']}")
+            print(f"reason_codes: {payload['reason_codes']}")
+        return 1
     auto_reviewers = _codeowners_reviewers(repo_root) if auto_assign_reviewers else []
     reviewers = explicit_reviewers[:]
     for reviewer in auto_reviewers:

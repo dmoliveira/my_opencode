@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHANGELOG_PATH = "CHANGELOG.md"
@@ -50,18 +51,64 @@ def run_git(repo_root: Path, args: list[str]) -> tuple[int, str, str]:
     return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
 
 
-def latest_tag(repo_root: Path) -> str | None:
-    rc, out, _ = run_git(repo_root, ["describe", "--tags", "--abbrev=0"])
+def run_git_probe(
+    repo_root: Path,
+    args: list[str],
+    *,
+    operation: str,
+    diagnostics: list[str] | None = None,
+) -> tuple[int, str, str]:
+    try:
+        proc = run_bounded(
+            ["git", *args],
+            operation=operation,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return -1, "", str(exc)
+    return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+
+
+def latest_tag(
+    repo_root: Path,
+    diagnostics: list[str] | None = None,
+) -> str | None:
+    rc, out, _ = run_git_probe(
+        repo_root,
+        ["describe", "--tags", "--abbrev=0"],
+        operation="release_git_latest_tag",
+        diagnostics=diagnostics,
+    )
     return out if rc == 0 and out else None
 
 
-def current_branch(repo_root: Path) -> str | None:
-    rc, out, _ = run_git(repo_root, ["rev-parse", "--abbrev-ref", "HEAD"])
+def current_branch(
+    repo_root: Path,
+    diagnostics: list[str] | None = None,
+) -> str | None:
+    rc, out, _ = run_git_probe(
+        repo_root,
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        operation="release_git_current_branch",
+        diagnostics=diagnostics,
+    )
     return out if rc == 0 and out else None
 
 
-def is_clean_tree(repo_root: Path) -> bool:
-    rc, out, _ = run_git(repo_root, ["status", "--porcelain"])
+def is_clean_tree(
+    repo_root: Path,
+    diagnostics: list[str] | None = None,
+) -> bool:
+    rc, out, _ = run_git_probe(
+        repo_root,
+        ["status", "--porcelain"],
+        operation="release_git_worktree_status",
+        diagnostics=diagnostics,
+    )
     if rc != 0:
         return False
     filtered = [
@@ -70,20 +117,41 @@ def is_clean_tree(repo_root: Path) -> bool:
     return len(filtered) == 0
 
 
-def branch_behind_remote(repo_root: Path, branch: str) -> bool:
+def branch_behind_remote(
+    repo_root: Path,
+    branch: str,
+    diagnostics: list[str] | None = None,
+) -> bool:
     upstream = f"origin/{branch}"
-    rc, _, _ = run_git(repo_root, ["rev-parse", "--verify", upstream])
-    if rc != 0:
-        return False
-    rc, out, _ = run_git(
-        repo_root, ["rev-list", "--left-right", "--count", f"HEAD...{upstream}"]
+    rc, _, _ = run_git_probe(
+        repo_root,
+        ["rev-parse", "--verify", upstream],
+        operation="release_git_upstream_probe",
+        diagnostics=diagnostics,
     )
     if rc != 0:
         return False
+    rc, out, _ = run_git_probe(
+        repo_root,
+        ["rev-list", "--left-right", "--count", f"HEAD...{upstream}"],
+        operation="release_git_divergence",
+        diagnostics=diagnostics,
+    )
+    if rc != 0:
+        if diagnostics is not None:
+            diagnostics.append("release_git_divergence_failed")
+        return False
     parts = out.split()
     if len(parts) != 2:
+        if diagnostics is not None:
+            diagnostics.append("release_git_divergence_invalid")
         return False
-    behind = int(parts[1])
+    try:
+        behind = int(parts[1])
+    except ValueError:
+        if diagnostics is not None:
+            diagnostics.append("release_git_divergence_invalid")
+        return False
     return behind > 0
 
 
@@ -128,10 +196,14 @@ def evaluate_prepare(
     reason_codes: list[str] = []
     remediation: list[str] = []
 
-    branch = current_branch(repo_root)
-    clean = is_clean_tree(repo_root)
+    git_diagnostics: list[str] = []
+    branch = current_branch(repo_root, git_diagnostics)
+    clean = is_clean_tree(repo_root, git_diagnostics)
     validations = check_validation_targets(repo_root)
-    tag = latest_tag(repo_root)
+    tag = latest_tag(repo_root, git_diagnostics)
+    reason_codes.extend(git_diagnostics)
+    for code in git_diagnostics:
+        remediation.append(f"retry after resolving bounded Git probe failure: {code}")
 
     if not clean:
         reason_codes.append("dirty_worktree")
@@ -141,9 +213,13 @@ def evaluate_prepare(
         reason_codes.append("branch_not_allowed")
         remediation.append("switch to main or a release/* branch")
 
-    if branch and branch_behind_remote(repo_root, branch):
+    if branch and branch_behind_remote(repo_root, branch, git_diagnostics):
         reason_codes.append("branch_behind_remote")
         remediation.append("pull/rebase to align with origin before release")
+    for code in git_diagnostics:
+        if code not in reason_codes:
+            reason_codes.append(code)
+            remediation.append(f"retry after resolving bounded Git probe failure: {code}")
 
     if not validations.get("validate", False):
         reason_codes.append("validate_failed")
@@ -227,12 +303,36 @@ def draft_release_notes(
     head: str,
     include_milestones: bool = False,
 ) -> dict[str, Any]:
-    start = base_tag or latest_tag(repo_root)
+    git_diagnostics: list[str] = []
+    start = base_tag or latest_tag(repo_root, git_diagnostics)
+    if git_diagnostics:
+        return {
+            "result": "FAIL",
+            "reason_codes": git_diagnostics,
+            "error": "unable to resolve the release base tag within its deadline",
+            "base_tag": start,
+            "head": head,
+            "entries": [],
+        }
     if start:
         range_ref = f"{start}..{head}"
         rc, out, err = run_git(repo_root, ["log", "--oneline", range_ref])
     else:
-        rc, out, err = run_git(repo_root, ["log", "--oneline", "-20", head])
+        rc, out, err = run_git_probe(
+            repo_root,
+            ["log", "--oneline", "-20", head],
+            operation="release_git_fallback_log",
+            diagnostics=git_diagnostics,
+        )
+    if git_diagnostics:
+        return {
+            "result": "FAIL",
+            "reason_codes": git_diagnostics,
+            "error": err or "bounded release log probe failed",
+            "base_tag": start,
+            "head": head,
+            "entries": [],
+        }
     if rc != 0:
         return {
             "result": "FAIL",

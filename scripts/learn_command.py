@@ -153,7 +153,8 @@ def command_capture(args: list[str]) -> int:
         else write_path.parent / "digests"
     )
 
-    pr_signals = collect_pr_signals(repo, limit=limit)
+    diagnostics: list[str] = []
+    pr_signals = collect_pr_signals(repo, limit=limit, diagnostics=diagnostics)
     digest_signals = collect_task_digest_signals(digest_dir, limit=limit)
     drafts = generate_draft_entries(pr_signals + digest_signals)
 
@@ -172,6 +173,7 @@ def command_capture(args: list[str]) -> int:
         "total_entries": len(merged),
         "entries_path": str(entries_path),
         "entries": merged[: min(10, len(merged))],
+        "diagnostics": diagnostics,
     }
     emit(payload, as_json=as_json)
     return 0

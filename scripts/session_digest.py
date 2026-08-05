@@ -11,6 +11,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 from config_layering import (  # type: ignore
     _load_json_or_jsonc,
     load_layered_config,
@@ -38,7 +39,6 @@ from session_sidecar_security import (  # type: ignore
 )
 from todo_enforcement import normalize_todo_state  # type: ignore
 
-
 DEFAULT_DIGEST_PATH = Path(
     os.environ.get(
         "MY_OPENCODE_DIGEST_PATH", "~/.config/opencode/digests/last-session.json"
@@ -59,15 +59,22 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def run_text(command: list[str]) -> str:
+def run_text(
+    command: list[str],
+    *,
+    operation: str,
+    diagnostics: list[str] | None = None,
+) -> str:
     try:
-        result = subprocess.run(
+        result = run_bounded(
             command,
+            operation=operation,
             capture_output=True,
             text=True,
-            check=False,
         )
-    except Exception:
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
         return ""
     if result.returncode != 0:
         return ""
@@ -75,9 +82,22 @@ def run_text(command: list[str]) -> str:
 
 
 def collect_git_snapshot(cwd: Path) -> dict:
-    branch = run_text(["git", "-C", str(cwd), "branch", "--show-current"])
-    status = run_text(["git", "-C", str(cwd), "status", "--short"])
-    ahead_behind = run_text(["git", "-C", str(cwd), "status", "--short", "--branch"])
+    diagnostics: list[str] = []
+    branch = run_text(
+        ["git", "-C", str(cwd), "branch", "--show-current"],
+        operation="session_git_branch",
+        diagnostics=diagnostics,
+    )
+    status = run_text(
+        ["git", "-C", str(cwd), "status", "--short"],
+        operation="session_git_status",
+        diagnostics=diagnostics,
+    )
+    ahead_behind = run_text(
+        ["git", "-C", str(cwd), "status", "--short", "--branch"],
+        operation="session_git_ahead_behind",
+        diagnostics=diagnostics,
+    )
 
     status_lines = [line for line in status.splitlines() if line.strip()]
     return {
@@ -85,6 +105,7 @@ def collect_git_snapshot(cwd: Path) -> dict:
         "status_count": len(status_lines),
         "status_preview": status_lines[:20],
         "branch_header": ahead_behind.splitlines()[0] if ahead_behind else None,
+        "diagnostics": diagnostics,
     }
 
 

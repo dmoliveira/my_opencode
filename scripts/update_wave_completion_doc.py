@@ -5,11 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 PLAN_NAME_RE = re.compile(r"^(v\d+\.\d+)-flow-wave-plan\.md$")
 EPIC_HEADING_RE = re.compile(r"^###\s+E\d+\s+(.+)$")
@@ -64,7 +64,7 @@ def load_pr_metadata_from_file(path: Path) -> list[dict[str, Any]]:
 
 
 def gh_pr_metadata(pr_number: int, repo_root: Path) -> dict[str, Any]:
-    completed = subprocess.run(
+    completed = run_bounded(
         [
             "gh",
             "pr",
@@ -73,9 +73,9 @@ def gh_pr_metadata(pr_number: int, repo_root: Path) -> dict[str, Any]:
             "--json",
             "number,title,mergedAt,mergeCommit,url",
         ],
+        operation="wave_github_pr_metadata",
         capture_output=True,
         text=True,
-        check=False,
         cwd=repo_root,
     )
     if completed.returncode != 0:
@@ -184,16 +184,31 @@ def main(argv: list[str] | None = None) -> int:
     plan_text = plan_path.read_text(encoding="utf-8", errors="replace")
     scope_lines = plan_scope_lines(plan_text)
 
-    if args.pr_metadata_file:
-        source_items = load_pr_metadata_from_file(Path(args.pr_metadata_file).resolve())
-    else:
-        pr_values: list[int] = []
-        for raw in args.pr:
-            value = str(raw).strip()
-            if not value:
-                continue
-            pr_values.append(int(value))
-        source_items = [gh_pr_metadata(number, repo_root) for number in pr_values]
+    try:
+        if args.pr_metadata_file:
+            source_items = load_pr_metadata_from_file(
+                Path(args.pr_metadata_file).resolve()
+            )
+        else:
+            pr_values: list[int] = []
+            for raw in args.pr:
+                value = str(raw).strip()
+                if not value:
+                    continue
+                pr_values.append(int(value))
+            source_items = [gh_pr_metadata(number, repo_root) for number in pr_values]
+    except BoundedCommandError as exc:
+        payload = {
+            "result": "FAIL",
+            "reason_codes": [exc.reason_code],
+            "error": str(exc),
+            "wave": args.wave,
+        }
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"{exc.reason_code}: {exc}", file=sys.stderr)
+        return 1
 
     rows = [normalize_pr_row(item) for item in source_items]
     markdown = build_markdown(args.wave, scope_lines, rows)

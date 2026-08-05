@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-import math
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 
 def usage() -> int:
@@ -355,24 +361,46 @@ def invalid_command_report(directory: Path, blocked_command: str | None, message
     }
 
 
-def is_valid_git_branch_name(branch: str) -> bool:
-    result = subprocess.run(
-        ["git", "check-ref-format", "--branch", branch],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def _append_probe_reason(
+    diagnostics: list[str] | None,
+    error: BoundedCommandError,
+) -> None:
+    if diagnostics is not None and error.reason_code not in diagnostics:
+        diagnostics.append(error.reason_code)
+
+
+def is_valid_git_branch_name(
+    branch: str,
+    diagnostics: list[str] | None = None,
+) -> bool:
+    try:
+        result = run_bounded(
+            ["git", "check-ref-format", "--branch", branch],
+            operation="worktree_git_branch_name_check",
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        _append_probe_reason(diagnostics, exc)
+        return False
     return result.returncode == 0
 
 
-def is_git_repository(directory: Path) -> bool:
-    result = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=directory,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def is_git_repository(
+    directory: Path,
+    diagnostics: list[str] | None = None,
+) -> bool:
+    try:
+        result = run_bounded(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            operation="worktree_git_repository_probe",
+            cwd=directory,
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        _append_probe_reason(diagnostics, exc)
+        return False
     return result.returncode == 0 and result.stdout.strip() == "true"
 
 
@@ -412,16 +440,20 @@ def has_disallowed_shell_syntax(command: str) -> bool:
     return False
 
 
-def has_head_commit(directory: Path) -> bool:
+def has_head_commit(
+    directory: Path,
+    diagnostics: list[str] | None = None,
+) -> bool:
     try:
-        result = subprocess.run(
+        result = run_bounded(
             ["git", "rev-parse", "--verify", "HEAD"],
+            operation="worktree_git_head_probe",
             cwd=directory,
             capture_output=True,
             text=True,
-            check=False,
         )
-    except OSError:
+    except BoundedCommandError as exc:
+        _append_probe_reason(diagnostics, exc)
         return False
     return result.returncode == 0
 
@@ -560,16 +592,22 @@ def command_maintenance(args: list[str]) -> int:
             print(report["error"], file=sys.stderr)
         return 1
 
-    if not is_git_repository(directory):
+    probe_diagnostics: list[str] = []
+    if not is_git_repository(directory, probe_diagnostics):
         report = invalid_repository_report(directory, blocked_command, f"directory is not a git repository: {directory}")
+        if probe_diagnostics:
+            report["reason_code"] = probe_diagnostics[0]
         if json_output:
             print(json.dumps(report, indent=2))
         else:
             print(report["error"], file=sys.stderr)
         return 1
 
-    if branch and not is_valid_git_branch_name(branch):
+    branch_diagnostics: list[str] = []
+    if branch and not is_valid_git_branch_name(branch, branch_diagnostics):
         report = invalid_branch_report(directory, blocked_command, branch, f"branch is not a valid git branch name: {branch}")
+        if branch_diagnostics:
+            report["reason_code"] = branch_diagnostics[0]
         if json_output:
             print(json.dumps(report, indent=2))
         else:
@@ -661,17 +699,30 @@ def command_maintenance(args: list[str]) -> int:
         blocked_slug = slugify(blocked_command or "maintenance")
         suggested_branch = branch or f"chore/{unique_slug(blocked_command or 'maintenance', 40)}"
         suggested_worktree = suggested_worktree_path(directory, repo_name, suggested_branch, blocked_slug)
-        if has_head_commit(directory):
+        head_diagnostics: list[str] = []
+        if has_head_commit(directory, head_diagnostics):
             commands = [
                 f"git worktree add -b {shell_quote(suggested_branch)} {shell_quote(str(suggested_worktree))} HEAD",
                 f"git -C {shell_quote(str(suggested_worktree))} status --short --branch",
             ]
-        else:
+        elif not head_diagnostics:
             commands = [
                 f"git -C {shell_quote(str(directory))} add .",
                 f'git -C {shell_quote(str(directory))} commit -m "Initial commit"',
                 f"git -C {shell_quote(str(directory))} status --short --branch",
             ]
+        else:
+            report = invalid_repository_report(
+                directory,
+                blocked_command,
+                "unable to determine whether the repository has a HEAD commit",
+            )
+            report["reason_code"] = head_diagnostics[0]
+            if json_output:
+                print(json.dumps(report, indent=2))
+            else:
+                print(report["error"], file=sys.stderr)
+            return 1
         report = {
             "result": "FAIL",
             "mode": "maintenance_worktree",
