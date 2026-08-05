@@ -450,12 +450,22 @@ export interface AdaptiveValidationSchedulerConfig {
     enabled: boolean;
     reminderEditThreshold: number;
 }
+export declare const HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS: number;
+export declare const HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS: number;
+export declare const HOOK_DISPATCH_LATENCY_MIN_SAMPLES = 20;
+export declare const HOOK_DISPATCH_LATENCY_MAX_SAMPLES = 10000;
+export interface HookDispatchLatencyConfig {
+    enabled: boolean;
+    windowMs: number;
+    minimumSamples: number;
+}
 export interface GatewayConfig {
     hooks: {
         enabled: boolean;
         disabled: string[];
         order: string[];
     };
+    hookDispatchLatency: HookDispatchLatencyConfig;
     autopilotLoop: AutopilotLoopConfig;
     toolOutputTruncator: ToolOutputTruncatorConfig;
     contextWindowMonitor: ContextWindowMonitorConfig;

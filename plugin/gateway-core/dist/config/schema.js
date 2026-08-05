@@ -1,3 +1,8 @@
+// Declares privacy-safe aggregate hook dispatch latency measurement settings.
+export const HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS = 60 * 1000;
+export const HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS = 60 * 60 * 1000;
+export const HOOK_DISPATCH_LATENCY_MIN_SAMPLES = 20;
+export const HOOK_DISPATCH_LATENCY_MAX_SAMPLES = 10_000;
 // Defines safe gateway defaults for production usage.
 export const DEFAULT_GATEWAY_CONFIG = {
     hooks: {
@@ -92,6 +97,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
             "post-merge-sync-guard",
             "safety",
         ],
+    },
+    hookDispatchLatency: {
+        enabled: true,
+        windowMs: 15 * 60 * 1000,
+        minimumSamples: 100,
     },
     autopilotLoop: {
         enabled: true,

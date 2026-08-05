@@ -8,7 +8,11 @@ import {
   resolvePromptCacheScopeIdentity,
   stablePromptCacheKey,
 } from "./cache/prompt-cache.js";
-import { writeGatewayEventAudit } from "./audit/event-audit.js";
+import {
+  enqueueGatewayLocalAggregateAudit,
+  gatewayEventAuditEnabled,
+  writeGatewayEventAudit,
+} from "./audit/event-audit.js";
 import { createAutopilotLoopHook } from "./hooks/autopilot-loop/index.js";
 import { createAutoSlashCommandHook } from "./hooks/auto-slash-command/index.js";
 import { createAdaptiveDelegationPolicyHook } from "./hooks/adaptive-delegation-policy/index.js";
@@ -100,6 +104,7 @@ import {
 } from "./hooks/shared/llm-decision-runtime.js";
 import { safeCreateHook } from "./hooks/shared/safe-create-hook.js";
 import { dispatchGatewayHookEvent } from "./hooks/shared/hook-dispatch.js";
+import { createHookDispatchLatencyCollector } from "./hooks/shared/hook-dispatch-latency.js";
 import {
   clearDelegationChildSessionLink,
   delegationTerminalChildSessionId,
@@ -1408,6 +1413,21 @@ export default function GatewayCorePlugin(
         })
       : null;
   const hooks = configuredHooks(ctx, runtime);
+  const hookDispatchLatency =
+    cfg.hookDispatchLatency.enabled && gatewayEventAuditEnabled()
+      ? createHookDispatchLatencyCollector({
+          enabled: true,
+          windowMs: cfg.hookDispatchLatency.windowMs,
+          minimumSamples: cfg.hookDispatchLatency.minimumSamples,
+          allowedHookIds: hooks.map((hook) => hook.id),
+          publish: (records, complete) =>
+            enqueueGatewayLocalAggregateAudit(directory, records, complete),
+        })
+      : undefined;
+  const dispatchHook: typeof dispatchGatewayHookEvent = hookDispatchLatency
+    ? (input): ReturnType<typeof dispatchGatewayHookEvent> =>
+        dispatchGatewayHookEvent({ ...input, latency: hookDispatchLatency })
+    : dispatchGatewayHookEvent;
   const noisyDispatchSampleCounters = new Map<string, number>();
   const noisyDispatchSampleRate = dispatchSampleRate();
   const validationEvidenceLedger = hooks.find(
@@ -1458,7 +1478,7 @@ export default function GatewayCorePlugin(
       await dispatchDelegationTerminalHooks({
         hooks: selectedHooks,
         dispatch: (hook) =>
-          dispatchGatewayHookEvent({
+          dispatchHook({
             hook,
             eventType,
             payload,
@@ -1471,7 +1491,7 @@ export default function GatewayCorePlugin(
       return;
     }
     for (const hook of selectedHooks) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook,
         eventType,
         payload,
@@ -1505,7 +1525,7 @@ export default function GatewayCorePlugin(
       for (const hook of selectedHooks.filter(
         (candidate) => candidate.id !== "validation-evidence-ledger",
       )) {
-        const result = await dispatchGatewayHookEvent({
+        const result = await dispatchHook({
           hook,
           eventType: "tool.execute.before",
           payload: { input, output, directory },
@@ -1523,7 +1543,7 @@ export default function GatewayCorePlugin(
         validationEvidenceLedger &&
         selectedHooks.includes(validationEvidenceLedger)
       ) {
-        const result = await dispatchGatewayHookEvent({
+        const result = await dispatchHook({
           hook: validationEvidenceLedger,
           eventType: "tool.execute.before",
           payload: { input, output, directory },
@@ -1547,7 +1567,7 @@ export default function GatewayCorePlugin(
       });
       for (const hook of executedHooks.reverse()) {
         try {
-          const result = await dispatchGatewayHookEvent({
+          const result = await dispatchHook({
             hook,
             eventType: "tool.execute.before.error",
             payload: {
@@ -1583,7 +1603,7 @@ export default function GatewayCorePlugin(
       hook_count: hooks.length,
     });
     for (const hook of hooksForEvent(hooks, "command.execute.before")) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook,
         eventType: "command.execute.before",
         payload: { input, output, directory },
@@ -1612,7 +1632,7 @@ export default function GatewayCorePlugin(
       has_output: output.output !== undefined,
     });
     for (const hook of hooksForEvent(hooks, "command.execute.after")) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook,
         eventType: "command.execute.after",
         payload: { input, output, directory },
@@ -1644,7 +1664,7 @@ export default function GatewayCorePlugin(
       validationEvidenceLedger &&
       selectedHooks.includes(validationEvidenceLedger)
     ) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook: validationEvidenceLedger,
         eventType: "tool.execute.after",
         payload: { input, output, directory },
@@ -1657,7 +1677,7 @@ export default function GatewayCorePlugin(
     for (const hook of selectedHooks.filter(
       (candidate) => candidate.id !== "validation-evidence-ledger",
     )) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook,
         eventType: "tool.execute.after",
         payload: { input, output, directory },
@@ -1715,7 +1735,7 @@ export default function GatewayCorePlugin(
       hook_count: hooks.length,
     });
     for (const hook of hooks) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook,
         eventType: "chat.message",
         payload: {
@@ -1846,7 +1866,7 @@ export default function GatewayCorePlugin(
     try {
       for (const hook of selectedHooks) {
         loopAttemptCount += 1;
-        const result = await dispatchGatewayHookEvent({
+        const result = await dispatchHook({
           hook,
           eventType,
           payload: {
@@ -1912,7 +1932,7 @@ export default function GatewayCorePlugin(
     try {
       for (const hook of selectedHooks) {
         loopAttemptCount += 1;
-        const result = await dispatchGatewayHookEvent({
+        const result = await dispatchHook({
           hook,
           eventType,
           payload: {
@@ -1973,7 +1993,7 @@ export default function GatewayCorePlugin(
       hook_count: hooks.length,
     });
     for (const hook of hooks) {
-      const result = await dispatchGatewayHookEvent({
+      const result = await dispatchHook({
         hook,
         eventType: "experimental.text.complete",
         payload: {

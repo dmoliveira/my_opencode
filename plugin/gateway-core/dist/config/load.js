@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GATEWAY_LLM_DECISION_HOOK_IDS, GATEWAY_LLM_DECISION_MODES, } from "../llm-decision-bindings.js";
-import { DEFAULT_GATEWAY_CONFIG, DEFAULT_GATEWAY_HOOK_ORDER, } from "./schema.js";
+import { DEFAULT_GATEWAY_CONFIG, DEFAULT_GATEWAY_HOOK_ORDER, HOOK_DISPATCH_LATENCY_MAX_SAMPLES, HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS, HOOK_DISPATCH_LATENCY_MIN_SAMPLES, HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS, } from "./schema.js";
 const KNOWN_GATEWAY_HOOK_IDS = new Set(DEFAULT_GATEWAY_HOOK_ORDER);
 const LLM_DECISION_HOOK_IDS = new Set(GATEWAY_LLM_DECISION_HOOK_IDS);
 const LLM_DECISION_MODES = new Set(GATEWAY_LLM_DECISION_MODES);
@@ -305,6 +305,7 @@ function llmDecisionHookModes(value) {
 export function loadGatewayConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
     const hooksSource = optionalConfigRecord(source.hooks, "hooks");
+    const hookDispatchLatencySource = optionalConfigRecord(source.hookDispatchLatency, "hookDispatchLatency");
     const autopilotSource = source.autopilotLoop && typeof source.autopilotLoop === "object"
         ? source.autopilotLoop
         : {};
@@ -631,6 +632,13 @@ export function loadGatewayConfig(raw) {
                 : DEFAULT_GATEWAY_CONFIG.hooks.enabled,
             disabled: disabledHooks,
             order: hookOrder,
+        },
+        hookDispatchLatency: {
+            enabled: typeof hookDispatchLatencySource.enabled === "boolean"
+                ? hookDispatchLatencySource.enabled
+                : DEFAULT_GATEWAY_CONFIG.hookDispatchLatency.enabled,
+            windowMs: Math.min(HOOK_DISPATCH_LATENCY_MAX_WINDOW_MS, Math.max(HOOK_DISPATCH_LATENCY_MIN_WINDOW_MS, positiveInt(hookDispatchLatencySource.windowMs, DEFAULT_GATEWAY_CONFIG.hookDispatchLatency.windowMs))),
+            minimumSamples: Math.min(HOOK_DISPATCH_LATENCY_MAX_SAMPLES, Math.max(HOOK_DISPATCH_LATENCY_MIN_SAMPLES, positiveInt(hookDispatchLatencySource.minimumSamples, DEFAULT_GATEWAY_CONFIG.hookDispatchLatency.minimumSamples))),
         },
         autopilotLoop: {
             enabled: typeof autopilotSource.enabled === "boolean"

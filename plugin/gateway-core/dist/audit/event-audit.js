@@ -10,10 +10,44 @@ const MAX_AUDIT_KEY_CHARS = 128;
 const MAX_OTLP_ATTRIBUTE_CHARS = 256;
 const MAX_OTLP_BODY_BYTES = 32 * 1024;
 const MAX_OTLP_QUEUE = 256;
+const MAX_LOCAL_AGGREGATE_AUDIT_QUEUE = 256;
 const MIN_OTLP_TIMEOUT_MS = 100;
 const MAX_OTLP_TIMEOUT_MS = 2000;
 const DEFAULT_OTLP_TIMEOUT_MS = 1500;
 const PROCESS_UID = typeof process.getuid === "function" ? process.getuid() : null;
+const LOCAL_AGGREGATE_AUDIT_KEYS = new Set([
+    "hook",
+    "stage",
+    "reason_code",
+    "event_class",
+    "window_ms",
+    "minimum_samples",
+    "sample_count",
+    "success_count",
+    "failure_count",
+    "blocked_count",
+    "bucket_upper_bounds_ms",
+    "bucket_counts",
+    "overflow_count",
+    "elapsed_total_ms",
+    "event_class_elapsed_total_ms",
+    "p50_upper_bound_ms",
+    "p50_overflow",
+    "p95_upper_bound_ms",
+    "p95_overflow",
+    "p99_upper_bound_ms",
+    "p99_overflow",
+    "latency_share_pct",
+    "optimization_candidate",
+    "candidate_gate_names",
+    "window_series_total",
+    "window_series_enqueued",
+    "window_series_dropped",
+    "detached_windows_dropped",
+    "audit_batches_rejected",
+    "audit_batches_failed",
+    "series_samples_dropped",
+]);
 const SENSITIVE_AUDIT_KEYS = new Set([
     "api_key",
     "apikey",
@@ -90,6 +124,7 @@ const OTLP_NUMBER_ATTRIBUTES = new Set([
 const observabilityCache = new Map();
 const auditWriterCache = new Map();
 const otelQueue = [];
+const localAggregateAuditQueue = [];
 const otelFlushWaiters = new Set();
 let auditEnvCache = null;
 let otelEnvCache = null;
@@ -98,6 +133,9 @@ let otelGeneration = 0;
 let activeOtelController = null;
 let activeOtelTimeout = null;
 let otelStats = emptyOtelStats();
+let localAggregateAuditScheduled = false;
+let localAggregateAuditGeneration = 0;
+let localAggregateAuditQueuedRecords = 0;
 function emptyOtelStats() {
     return {
         enqueued: 0,
@@ -823,6 +861,10 @@ export function resetGatewayEventAuditStateForTest() {
     otelQueue.splice(0, otelQueue.length);
     otelInFlight = false;
     otelStats = emptyOtelStats();
+    localAggregateAuditGeneration += 1;
+    localAggregateAuditQueue.splice(0, localAggregateAuditQueue.length);
+    localAggregateAuditQueuedRecords = 0;
+    localAggregateAuditScheduled = false;
     observabilityCache.clear();
     auditWriterCache.clear();
     auditEnvCache = null;
@@ -1057,6 +1099,112 @@ function dedupeControls(entry) {
         return { key: "", windowMs: 0 };
     }
 }
+function sanitizedAuditPayload(entry) {
+    const sanitized = sanitizeAuditEntry(entry);
+    delete sanitized.audit_dedupe_key;
+    delete sanitized.audit_dedupe_window_ms;
+    return {
+        ...sanitized,
+        ts: new Date().toISOString(),
+    };
+}
+function appendLocalAggregateAudit(directory, entry) {
+    try {
+        const auditState = resolveAuditEnvState();
+        if (!auditState.auditEnabled) {
+            return false;
+        }
+        const path = auditState.auditPathOverride
+            ? auditState.auditPathOverride
+            : join(directory, ".opencode", "gateway-events.jsonl");
+        appendAuditLine(path, boundedAuditLine(sanitizedAuditPayload({ ...entry })), auditState.maxBytes, auditState.maxBackups);
+        return true;
+    }
+    catch {
+        // Aggregate audit remains best-effort and isolated from hook dispatch.
+        return false;
+    }
+}
+function drainOneLocalAggregateAuditRecord() {
+    const batch = localAggregateAuditQueue[0];
+    if (!batch) {
+        return;
+    }
+    const entry = batch.entries[batch.nextIndex];
+    if (entry) {
+        batch.succeeded =
+            appendLocalAggregateAudit(batch.directory, entry) && batch.succeeded;
+        batch.nextIndex += 1;
+        localAggregateAuditQueuedRecords = Math.max(0, localAggregateAuditQueuedRecords - 1);
+    }
+    if (batch.nextIndex >= batch.entries.length) {
+        localAggregateAuditQueue.shift();
+        try {
+            batch.complete(batch.succeeded);
+        }
+        catch {
+            // Completion acknowledgement is an isolation boundary.
+        }
+    }
+}
+function scheduleLocalAggregateAuditDrain() {
+    if (localAggregateAuditScheduled || localAggregateAuditQueue.length === 0) {
+        return;
+    }
+    localAggregateAuditScheduled = true;
+    const generation = localAggregateAuditGeneration;
+    const handle = setImmediate(() => {
+        if (generation !== localAggregateAuditGeneration) {
+            return;
+        }
+        localAggregateAuditScheduled = false;
+        drainOneLocalAggregateAuditRecord();
+        scheduleLocalAggregateAuditDrain();
+    });
+    handle.unref?.();
+}
+/** Queues an all-or-none local-only aggregate audit batch without OTLP export. */
+export function enqueueGatewayLocalAggregateAudit(directory, entries, complete) {
+    try {
+        if (entries.length === 0) {
+            return true;
+        }
+        if (!gatewayEventAuditEnabled() ||
+            entries.length > MAX_LOCAL_AGGREGATE_AUDIT_QUEUE ||
+            localAggregateAuditQueuedRecords + entries.length >
+                MAX_LOCAL_AGGREGATE_AUDIT_QUEUE) {
+            return false;
+        }
+        const allowedEntries = entries.map((entry) => {
+            const allowedEntry = Object.fromEntries(Object.entries(entry).filter(([key]) => LOCAL_AGGREGATE_AUDIT_KEYS.has(key)));
+            return Object.freeze(allowedEntry);
+        });
+        localAggregateAuditQueue.push({
+            directory,
+            entries: allowedEntries,
+            nextIndex: 0,
+            succeeded: true,
+            complete,
+        });
+        localAggregateAuditQueuedRecords += entries.length;
+        scheduleLocalAggregateAuditDrain();
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+/** Flushes queued local aggregate audit records synchronously for tests only. */
+export function flushGatewayLocalAggregateAuditForTest() {
+    localAggregateAuditGeneration += 1;
+    localAggregateAuditScheduled = false;
+    while (localAggregateAuditQueue.length > 0) {
+        drainOneLocalAggregateAuditRecord();
+    }
+}
+export function gatewayLocalAggregateAuditQueueSizeForTest() {
+    return localAggregateAuditQueuedRecords;
+}
 // Appends one bounded, sanitized gateway event audit entry without surfacing sink failures.
 export function writeGatewayEventAudit(directory, entry) {
     try {
@@ -1077,13 +1225,7 @@ export function writeGatewayEventAudit(directory, entry) {
                 return;
             }
         }
-        const sanitized = sanitizeAuditEntry(entry);
-        delete sanitized.audit_dedupe_key;
-        delete sanitized.audit_dedupe_window_ms;
-        const payload = {
-            ...sanitized,
-            ts: new Date().toISOString(),
-        };
+        const payload = sanitizedAuditPayload(entry);
         let accepted = false;
         if (fileAuditEnabled) {
             try {

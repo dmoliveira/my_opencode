@@ -33,10 +33,49 @@ DEFAULT_LONG_TURN_WATCHDOG = {
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
+HOOK_DISPATCH_LATENCY_HOOK_IDS_PATH = (
+    REPO_ROOT / "plugin" / "gateway-core" / "config" / "hook-ids.json"
+)
+HOOK_DISPATCH_LATENCY_BUCKETS_MS = (
+    1,
+    2,
+    5,
+    10,
+    25,
+    50,
+    100,
+    250,
+    500,
+    1000,
+    2500,
+    5000,
+    10000,
+)
+HOOK_DISPATCH_LATENCY_EVENT_CLASSES = frozenset(
+    {
+        "tool_before",
+        "tool_before_error",
+        "tool_after",
+        "command_before",
+        "command_after",
+        "chat_message",
+        "chat_messages_transform",
+        "chat_system_transform",
+        "text_complete",
+        "session",
+        "message",
+        "tool_lifecycle",
+        "other",
+    }
+)
+HOOK_DISPATCH_LATENCY_WINDOW_MS = 15 * 60 * 1000
+HOOK_DISPATCH_LATENCY_MINIMUM_SAMPLES = 100
+HOOK_DISPATCH_LATENCY_STATUS_LIMIT = 50
+HOOK_DISPATCH_LATENCY_MAX_SAFE_INTEGER = 2**53 - 1
+HOOK_DISPATCH_LATENCY_HOOK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,127}$")
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from config_layering import ConfigFileParticipant, edit_layered_config, load_layered_config, resolve_write_path  # type: ignore
 from concise_mode_runtime import (  # type: ignore
     VALID_CONCISE_MODES,
     current_session_id,
@@ -46,6 +85,21 @@ from concise_mode_runtime import (  # type: ignore
     set_active_mode,
     set_default_mode,
 )
+from config_layering import (  # type: ignore
+    ConfigFileParticipant,
+    edit_layered_config,
+    load_layered_config,
+    resolve_write_path,
+)
+from gateway_plugin_bridge import (  # type: ignore
+    cleanup_orphan_loop,
+    gateway_loop_state_path,
+    gateway_plugin_entries,
+    gateway_plugin_spec,
+    load_gateway_loop_state,
+    plugin_enabled,
+    set_plugin_enabled,
+)
 from gateway_reason_codes import (  # type: ignore
     BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE,
     GATEWAY_PLUGIN_DISABLED,
@@ -53,15 +107,6 @@ from gateway_reason_codes import (  # type: ignore
     GATEWAY_PLUGIN_READY,
     GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE,
     LOOP_STATE_AVAILABLE,
-)
-from gateway_plugin_bridge import (  # type: ignore
-    cleanup_orphan_loop,
-    gateway_plugin_entries,
-    gateway_loop_state_path,
-    gateway_plugin_spec,
-    load_gateway_loop_state,
-    plugin_enabled,
-    set_plugin_enabled,
 )
 from gateway_state_protocol import (  # type: ignore
     GatewayStateProtocolError,
@@ -773,6 +818,314 @@ def load_gateway_event_audit(path: Path) -> list[dict[str, Any]]:
     return events
 
 
+def load_gateway_hook_ids(
+    path: Path = HOOK_DISPATCH_LATENCY_HOOK_IDS_PATH,
+) -> frozenset[str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return frozenset()
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        return frozenset()
+    raw_hook_ids = payload.get("hook_ids")
+    if not isinstance(raw_hook_ids, list) or not 1 <= len(raw_hook_ids) <= 512:
+        return frozenset()
+    hook_ids: list[str] = []
+    for item in raw_hook_ids:
+        if not isinstance(item, str) or not HOOK_DISPATCH_LATENCY_HOOK_ID_PATTERN.fullmatch(
+            item
+        ):
+            return frozenset()
+        hook_ids.append(item)
+    if len(set(hook_ids)) != len(hook_ids):
+        return frozenset()
+    return frozenset(hook_ids)
+
+
+def _latency_non_negative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    if not 0 <= value <= HOOK_DISPATCH_LATENCY_MAX_SAFE_INTEGER:
+        return None
+    return value
+
+
+def _latency_percentile(
+    event: dict[str, Any], prefix: str
+) -> tuple[int | None, bool] | None:
+    upper_bound = event.get(f"{prefix}_upper_bound_ms")
+    overflow = event.get(f"{prefix}_overflow")
+    if not isinstance(overflow, bool):
+        return None
+    if overflow:
+        return (None, True) if upper_bound is None else None
+    if (
+        isinstance(upper_bound, bool)
+        or not isinstance(upper_bound, int)
+        or upper_bound not in HOOK_DISPATCH_LATENCY_BUCKETS_MS
+    ):
+        return None
+    return upper_bound, False
+
+
+def _latency_percentile_from_buckets(
+    bucket_counts: list[int], sample_count: int, numerator: int
+) -> tuple[int | None, bool]:
+    rank = (numerator * sample_count + 99) // 100
+    cumulative = 0
+    for upper_bound, count in zip(
+        HOOK_DISPATCH_LATENCY_BUCKETS_MS, bucket_counts, strict=True
+    ):
+        cumulative += count
+        if cumulative >= rank:
+            return upper_bound, False
+    return None, True
+
+
+def _latency_share_pct(elapsed_total_ms: int, denominator_ms: int) -> float:
+    if denominator_ms <= 0:
+        return 0.0
+    basis_points = int((elapsed_total_ms / denominator_ms) * 10_000 + 0.5)
+    return basis_points / 100
+
+
+def _parse_hook_dispatch_latency_aggregate(
+    event: dict[str, Any], hook_ids: frozenset[str]
+) -> dict[str, Any] | None:
+    if (
+        event.get("reason_code") != "hook_dispatch_latency_window"
+        or event.get("stage") != "aggregate"
+    ):
+        return None
+    hook = event.get("hook")
+    event_class = event.get("event_class")
+    if not isinstance(hook, str) or hook not in hook_ids:
+        return None
+    if (
+        not isinstance(event_class, str)
+        or event_class not in HOOK_DISPATCH_LATENCY_EVENT_CLASSES
+    ):
+        return None
+
+    window_ms = _latency_non_negative_int(event.get("window_ms"))
+    minimum_samples = _latency_non_negative_int(event.get("minimum_samples"))
+    sample_count = _latency_non_negative_int(event.get("sample_count"))
+    success_count = _latency_non_negative_int(event.get("success_count"))
+    failure_count = _latency_non_negative_int(event.get("failure_count"))
+    blocked_count = _latency_non_negative_int(event.get("blocked_count"))
+    overflow_count = _latency_non_negative_int(event.get("overflow_count"))
+    elapsed_total_ms = _latency_non_negative_int(event.get("elapsed_total_ms"))
+    event_class_elapsed_total_ms = _latency_non_negative_int(
+        event.get("event_class_elapsed_total_ms")
+    )
+    if (
+        window_ms is None
+        or not 60_000 <= window_ms <= 3_600_000
+        or minimum_samples is None
+        or not 20 <= minimum_samples <= 10_000
+        or sample_count is None
+        or sample_count < minimum_samples
+        or success_count is None
+        or failure_count is None
+        or blocked_count is None
+        or overflow_count is None
+        or elapsed_total_ms is None
+        or event_class_elapsed_total_ms is None
+        or event_class_elapsed_total_ms < elapsed_total_ms
+        or success_count + failure_count + blocked_count != sample_count
+    ):
+        return None
+
+    bucket_bounds = event.get("bucket_upper_bounds_ms")
+    raw_bucket_counts = event.get("bucket_counts")
+    if bucket_bounds != list(HOOK_DISPATCH_LATENCY_BUCKETS_MS) or not isinstance(
+        raw_bucket_counts, list
+    ):
+        return None
+    parsed_bucket_counts = [
+        _latency_non_negative_int(item) for item in raw_bucket_counts
+    ]
+    if (
+        len(parsed_bucket_counts) != len(HOOK_DISPATCH_LATENCY_BUCKETS_MS)
+        or any(item is None for item in parsed_bucket_counts)
+        or sum(item for item in parsed_bucket_counts if item is not None)
+        + overflow_count
+        != sample_count
+    ):
+        return None
+    bucket_counts = [
+        int(item) for item in parsed_bucket_counts if item is not None
+    ]
+
+    p50 = _latency_percentile(event, "p50")
+    p95 = _latency_percentile(event, "p95")
+    p99 = _latency_percentile(event, "p99")
+    share = event.get("latency_share_pct")
+    if (
+        p50 is None
+        or p95 is None
+        or p99 is None
+        or isinstance(share, bool)
+        or not isinstance(share, (int, float))
+        or not 0 <= share <= 100
+    ):
+        return None
+    expected_p50 = _latency_percentile_from_buckets(bucket_counts, sample_count, 50)
+    expected_p95 = _latency_percentile_from_buckets(bucket_counts, sample_count, 95)
+    expected_p99 = _latency_percentile_from_buckets(bucket_counts, sample_count, 99)
+    expected_share = _latency_share_pct(
+        elapsed_total_ms, event_class_elapsed_total_ms
+    )
+    if (
+        p50 != expected_p50
+        or p95 != expected_p95
+        or p99 != expected_p99
+        or share != expected_share
+    ):
+        return None
+
+    expected_gates: list[str] = []
+    for name, percentile, threshold in (
+        ("p50", p50, 10),
+        ("p95", p95, 50),
+        ("p99", p99, 250),
+    ):
+        upper_bound, percentile_overflow = percentile
+        if percentile_overflow or (
+            upper_bound is not None and upper_bound > threshold
+        ):
+            expected_gates.append(name)
+    candidate = event.get("optimization_candidate")
+    candidate_gate_names = event.get("candidate_gate_names")
+    expected_candidate = share > 10 and bool(expected_gates)
+    if (
+        not isinstance(candidate, bool)
+        or candidate != expected_candidate
+        or candidate_gate_names != expected_gates
+    ):
+        return None
+
+    window_series_total = _latency_non_negative_int(event.get("window_series_total"))
+    window_series_enqueued = _latency_non_negative_int(
+        event.get("window_series_enqueued")
+    )
+    window_series_dropped = _latency_non_negative_int(
+        event.get("window_series_dropped")
+    )
+    detached_windows_dropped = _latency_non_negative_int(
+        event.get("detached_windows_dropped")
+    )
+    audit_batches_rejected = _latency_non_negative_int(
+        event.get("audit_batches_rejected")
+    )
+    audit_batches_failed = _latency_non_negative_int(
+        event.get("audit_batches_failed")
+    )
+    series_samples_dropped = _latency_non_negative_int(
+        event.get("series_samples_dropped")
+    )
+    if (
+        window_series_total is None
+        or window_series_enqueued is None
+        or not 1 <= window_series_enqueued <= 128
+        or window_series_dropped is None
+        or window_series_total != window_series_enqueued + window_series_dropped
+        or detached_windows_dropped is None
+        or audit_batches_rejected is None
+        or audit_batches_failed is None
+        or series_samples_dropped is None
+    ):
+        return None
+
+    return {
+        "hook": hook,
+        "event_class": event_class,
+        "window_ms": window_ms,
+        "minimum_samples": minimum_samples,
+        "sample_count": sample_count,
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "blocked_count": blocked_count,
+        "bucket_upper_bounds_ms": list(HOOK_DISPATCH_LATENCY_BUCKETS_MS),
+        "bucket_counts": bucket_counts,
+        "overflow_count": overflow_count,
+        "elapsed_total_ms": elapsed_total_ms,
+        "event_class_elapsed_total_ms": event_class_elapsed_total_ms,
+        "p50_upper_bound_ms": p50[0],
+        "p50_overflow": p50[1],
+        "p95_upper_bound_ms": p95[0],
+        "p95_overflow": p95[1],
+        "p99_upper_bound_ms": p99[0],
+        "p99_overflow": p99[1],
+        "latency_share_pct": share,
+        "optimization_candidate": candidate,
+        "candidate_gate_names": expected_gates,
+        "window_series_total": window_series_total,
+        "window_series_enqueued": window_series_enqueued,
+        "window_series_dropped": window_series_dropped,
+        "detached_windows_dropped": detached_windows_dropped,
+        "audit_batches_rejected": audit_batches_rejected,
+        "audit_batches_failed": audit_batches_failed,
+        "series_samples_dropped": series_samples_dropped,
+    }
+
+
+def gateway_hook_dispatch_latency_summary(cwd: Path) -> dict[str, Any]:
+    path = gateway_event_audit_path(cwd)
+    hook_ids = load_gateway_hook_ids()
+    latest_by_series: dict[tuple[str, str], dict[str, Any]] = {}
+    valid_record_count = 0
+    invalid_record_count = 0
+    for event in load_gateway_event_audit(path):
+        if event.get("reason_code") != "hook_dispatch_latency_window":
+            continue
+        parsed = _parse_hook_dispatch_latency_aggregate(event, hook_ids)
+        if parsed is None:
+            invalid_record_count += 1
+            continue
+        valid_record_count += 1
+        latest_by_series[(parsed["hook"], parsed["event_class"])] = parsed
+
+    latest = list(latest_by_series.values())
+    latest.sort(
+        key=lambda item: (
+            not bool(item["optimization_candidate"]),
+            -float(item["latency_share_pct"]),
+            str(item["hook"]),
+            str(item["event_class"]),
+        )
+    )
+    returned = latest[:HOOK_DISPATCH_LATENCY_STATUS_LIMIT]
+    measurement_incomplete = any(
+        int(item["window_series_dropped"]) > 0
+        or int(item["detached_windows_dropped"]) > 0
+        or int(item["audit_batches_rejected"]) > 0
+        or int(item["audit_batches_failed"]) > 0
+        or int(item["series_samples_dropped"]) > 0
+        for item in latest
+    )
+    return {
+        "source_scope": "active_audit_file",
+        "audit_path": str(path),
+        "current_file_audit_enabled": gateway_event_audit_enabled(),
+        "runtime_collector_active": None,
+        "runtime_collector_reason": "not_exposed_by_runtime",
+        "hook_manifest_available": bool(hook_ids),
+        "configured_defaults": {
+            "enabled": True,
+            "window_ms": HOOK_DISPATCH_LATENCY_WINDOW_MS,
+            "minimum_samples": HOOK_DISPATCH_LATENCY_MINIMUM_SAMPLES,
+        },
+        "valid_record_count": valid_record_count,
+        "invalid_record_count": invalid_record_count,
+        "series_total": len(latest),
+        "series_returned": len(returned),
+        "truncated": len(latest) > len(returned),
+        "measurement_incomplete": measurement_incomplete,
+        "latest_aggregates": returned,
+    }
+
+
 def parse_gateway_event_ts(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -1202,6 +1555,9 @@ def command_watchdog_update(
 
     root_config, _ = load_config()
     merged = long_turn_watchdog_section(root_config)
+    sidecar_config, _ = load_gateway_sidecar_only(Path.cwd())
+    current_any = sidecar_config.get("longTurnWatchdog")
+    current = dict(current_any) if isinstance(current_any, dict) else {}
     payload = {
         "result": "PASS",
         "config": str(sidecar_path),
@@ -2341,6 +2697,7 @@ def status_payload(
         "event_audit_enabled": gateway_event_audit_enabled(),
         "event_audit_path": str(gateway_event_audit_path(cwd)),
         "event_audit_exists": gateway_event_audit_path(cwd).exists(),
+        "hook_dispatch_latency": gateway_hook_dispatch_latency_summary(cwd),
         "mistake_ledger": gateway_mistake_ledger_summary(cwd),
         "guard_event_counters": gateway_event_counters(cwd),
         "runtime_staleness": runtime_staleness(home),
@@ -2561,8 +2918,6 @@ def command_doctor(
     )
     continue_count = int(process_pressure_status.get("continue_process_count") or 0)
     opencode_count = int(process_pressure_status.get("opencode_process_count") or 0)
-    max_rss_mb = float(process_pressure_status.get("max_rss_mb") or 0)
-    max_footprint_mb = float(process_pressure_status.get("max_footprint_mb") or 0)
     max_pressure_mb = float(process_pressure_status.get("max_pressure_mb") or 0)
     high_rss_any = process_pressure_status.get("high_rss")
     high_rss = high_rss_any if isinstance(high_rss_any, list) else []
@@ -2601,6 +2956,12 @@ def command_doctor(
     if status.get("event_audit_enabled") is not True:
         warnings.append(
             "gateway event audit is disabled; enable MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 for richer delegation and pressure diagnostics"
+        )
+    hook_latency_any = status.get("hook_dispatch_latency")
+    hook_latency = hook_latency_any if isinstance(hook_latency_any, dict) else {}
+    if hook_latency.get("measurement_incomplete") is True:
+        warnings.append(
+            "hook dispatch latency aggregates report dropped series/windows/batches; do not optimize from the incomplete measurement"
         )
     critical_events_recent = int(
         counters.get("recent_global_process_pressure_critical_events") or 0

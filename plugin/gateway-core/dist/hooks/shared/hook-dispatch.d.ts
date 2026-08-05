@@ -1,4 +1,5 @@
 import type { GatewayHook } from "../registry.js";
+import type { HookDispatchLatencyRecorder } from "./hook-dispatch-latency.js";
 export interface HookDispatchResult {
     ok: boolean;
     critical: boolean;
@@ -10,4 +11,5 @@ export declare function dispatchGatewayHookEvent(input: {
     eventType: string;
     payload: unknown;
     directory: string;
+    latency?: HookDispatchLatencyRecorder;
 }): Promise<HookDispatchResult>;
