@@ -5,13 +5,14 @@ import json
 import os
 import sqlite3
 import stat
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 try:
     import fcntl
@@ -52,24 +53,26 @@ def _parse_iso(value: str | None) -> datetime | None:
     return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
 
 
-def _repo_root(cwd: Path) -> str:
+def _repo_root(cwd: Path, diagnostics: list[str] | None = None) -> str:
     try:
-        result = subprocess.run(
+        result = run_bounded(
             ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+            operation="shared_memory_git_repo_root",
             capture_output=True,
             text=True,
-            check=False,
         )
-    except Exception:
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
         return str(cwd)
     if result.returncode != 0:
         return str(cwd)
     return result.stdout.strip() or str(cwd)
 
 
-def _repo_identity(cwd: Path) -> str:
+def _repo_identity(cwd: Path, diagnostics: list[str] | None = None) -> str:
     try:
-        result = subprocess.run(
+        result = run_bounded(
             [
                 "git",
                 "-C",
@@ -78,15 +81,17 @@ def _repo_identity(cwd: Path) -> str:
                 "--path-format=absolute",
                 "--git-common-dir",
             ],
+            operation="shared_memory_git_repo_identity",
             capture_output=True,
             text=True,
-            check=False,
         )
-    except Exception:
-        return _repo_root(cwd)
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return _repo_root(cwd, diagnostics)
     if result.returncode != 0:
-        return _repo_root(cwd)
-    return result.stdout.strip() or _repo_root(cwd)
+        return _repo_root(cwd, diagnostics)
+    return result.stdout.strip() or _repo_root(cwd, diagnostics)
 
 
 def normalize_scope(raw: str | None) -> str:
@@ -148,7 +153,12 @@ def normalize_confidence(raw: Any) -> int:
     return max(0, min(100, value))
 
 
-def infer_namespace(cwd: Path, scope: str, explicit: str | None = None) -> str:
+def infer_namespace(
+    cwd: Path,
+    scope: str,
+    explicit: str | None = None,
+    diagnostics: list[str] | None = None,
+) -> str:
     if explicit and explicit.strip():
         return explicit.strip()
     if scope == "shared":
@@ -158,7 +168,7 @@ def infer_namespace(cwd: Path, scope: str, explicit: str | None = None) -> str:
             os.environ.get("OPENCODE_SESSION_ID", "current-session").strip()
             or "current-session"
         )
-    return _repo_root(cwd)
+    return _repo_root(cwd, diagnostics)
 
 
 @dataclass

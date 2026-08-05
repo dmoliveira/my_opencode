@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,6 +29,12 @@ REASON_CODE_MAP: dict[str, dict[str, str]] = {
         "hint": "restore GitHub Pages deployment steps in .github/workflows/docs-automation.yml",
     },
 }
+for _operation in ("pages_github_repo_lookup", "pages_github_metadata"):
+    for _suffix in ("timeout", "command_missing", "command_error", "timeout_invalid"):
+        REASON_CODE_MAP[f"{_operation}_{_suffix}"] = {
+            "severity": "medium",
+            "hint": "verify bounded gh configuration, authentication, and GitHub API availability",
+        }
 
 
 def workflow_has_pages_support(repo_root: Path) -> bool:
@@ -42,11 +48,11 @@ def workflow_has_pages_support(repo_root: Path) -> bool:
 
 
 def resolve_repo_name(repo_root: Path) -> str:
-    proc = subprocess.run(
+    proc = run_bounded(
         ["gh", "repo", "view", "--json", "nameWithOwner"],
+        operation="pages_github_repo_lookup",
         capture_output=True,
         text=True,
-        check=False,
         cwd=repo_root,
     )
     if proc.returncode != 0:
@@ -62,21 +68,24 @@ def resolve_repo_name(repo_root: Path) -> str:
 
 def fetch_pages_payload(
     repo_root: Path, repo: str
-) -> tuple[dict[str, Any] | None, str | None, int | None]:
-    proc = subprocess.run(
-        ["gh", "api", f"repos/{repo}/pages"],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=repo_root,
-    )
+) -> tuple[dict[str, Any] | None, str | None, int | None, str | None]:
+    try:
+        proc = run_bounded(
+            ["gh", "api", f"repos/{repo}/pages"],
+            operation="pages_github_metadata",
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+    except BoundedCommandError as exc:
+        return None, str(exc), None, exc.reason_code
     if proc.returncode == 0:
-        return json.loads(proc.stdout), None, None
+        return json.loads(proc.stdout), None, None, None
     detail = (
         proc.stderr.strip() or proc.stdout.strip() or "gh api repos/<repo>/pages failed"
     )
     status = 404 if "HTTP 404" in detail or "Not Found" in detail else None
-    return None, detail, status
+    return None, detail, status, None
 
 
 def evaluate_pages_readiness(
@@ -86,6 +95,7 @@ def evaluate_pages_readiness(
     pages_payload: dict[str, Any] | None,
     fetch_error: str | None,
     fetch_status: int | None,
+    fetch_reason_code: str | None = None,
 ) -> dict[str, Any]:
     workflow_ready = workflow_has_pages_support(repo_root)
     reason_codes: list[str] = []
@@ -95,6 +105,8 @@ def evaluate_pages_readiness(
         reason_codes.append("docs_automation_workflow_pages_missing")
     if fetch_status == 404:
         reason_codes.append("github_pages_site_uninitialized")
+    elif fetch_reason_code:
+        reason_codes.append(fetch_reason_code)
     elif pages_payload is None:
         reason_codes.append("github_pages_api_unavailable")
     elif str(pages_payload.get("build_type") or "") != "workflow":
@@ -142,14 +154,32 @@ def main() -> int:
     repo_root = args.repo_root.resolve()
     try:
         repo = args.repo or resolve_repo_name(repo_root)
-        pages_payload, fetch_error, fetch_status = fetch_pages_payload(repo_root, repo)
+        pages_payload, fetch_error, fetch_status, fetch_reason_code = fetch_pages_payload(
+            repo_root, repo
+        )
         payload = evaluate_pages_readiness(
             repo_root=repo_root,
             repo=repo,
             pages_payload=pages_payload,
             fetch_error=fetch_error,
             fetch_status=fetch_status,
+            fetch_reason_code=fetch_reason_code,
         )
+    except BoundedCommandError as exc:
+        payload = {
+            "result": "FAIL",
+            "repo": args.repo,
+            "workflow_ready": workflow_has_pages_support(repo_root),
+            "workflow_path": str(
+                repo_root / ".github" / "workflows" / "docs-automation.yml"
+            ),
+            "reason_codes": [exc.reason_code],
+            "reason_code_map": REASON_CODE_MAP,
+            "remediation": [REASON_CODE_MAP[exc.reason_code]["hint"]],
+            "pages_url": None,
+            "build_type": None,
+            "api_error": str(exc),
+        }
     except Exception as exc:
         payload = {
             "result": "FAIL",

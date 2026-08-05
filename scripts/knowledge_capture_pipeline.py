@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 ENTRY_TYPES = {"pattern", "pitfall", "checklist", "rule_candidate"}
 LIFECYCLE = {"draft", "review", "published", "archived"}
@@ -24,21 +24,39 @@ def utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _run_git(repo_root: Path, args: list[str]) -> tuple[int, str, str]:
-    proc = subprocess.run(
-        ["git", *args],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def _run_git(
+    repo_root: Path,
+    args: list[str],
+    *,
+    operation: str,
+    diagnostics: list[str] | None = None,
+) -> tuple[int, str, str]:
+    try:
+        proc = run_bounded(
+            ["git", *args],
+            operation=operation,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        if diagnostics is not None and exc.reason_code not in diagnostics:
+            diagnostics.append(exc.reason_code)
+        return -1, "", str(exc)
     return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
 
 
-def collect_pr_signals(repo_root: Path, *, limit: int = 40) -> list[dict[str, Any]]:
+def collect_pr_signals(
+    repo_root: Path,
+    *,
+    limit: int = 40,
+    diagnostics: list[str] | None = None,
+) -> list[dict[str, Any]]:
     rc, out, _ = _run_git(
         repo_root,
         ["log", "--merges", f"--max-count={max(1, limit)}", "--pretty=%H%x1f%s%x1f%cI"],
+        operation="knowledge_git_merge_log",
+        diagnostics=diagnostics,
     )
     if rc != 0 or not out:
         return []

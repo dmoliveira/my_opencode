@@ -11,6 +11,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -24,7 +26,6 @@ from release_train_engine import (  # type: ignore
     is_clean_tree,
     latest_tag,
 )
-
 
 PR_PATTERN = re.compile(r"/pull/(\d+)")
 WAVE_PLAN_RE = re.compile(r"^(v(\d+)\.(\d+))-flow-wave-plan\.md$")
@@ -192,15 +193,19 @@ def run_wave_closure_readiness(repo_root: Path) -> dict[str, Any]:
     }
 
 
-def _local_tag_exists(repo_root: Path, tag_name: str) -> bool:
-    proc = subprocess.run(
+def _local_tag_exists(repo_root: Path, tag_name: str) -> tuple[bool, str | None]:
+    proc = run_bounded(
         ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag_name}"],
+        operation="release_git_local_tag",
         capture_output=True,
         text=True,
-        check=False,
         cwd=repo_root,
     )
-    return proc.returncode == 0
+    if proc.returncode == 0:
+        return True, None
+    if proc.returncode == 1:
+        return False, None
+    return False, "release_git_local_tag_failed"
 
 
 def _auto_release_notes_candidates(repo_root: Path, version: str) -> list[Path]:
@@ -262,11 +267,13 @@ def _resolve_publish_profile(
 def command_status(args: list[str]) -> int:
     as_json = pop_flag(args, "--json")
     repo_root = Path(pop_value(args, "--repo-root", str(REPO_ROOT)) or str(REPO_ROOT))
+    diagnostics: list[str] = []
     payload = {
         "result": "PASS",
-        "branch": current_branch(repo_root),
-        "latest_tag": latest_tag(repo_root),
-        "clean_worktree": is_clean_tree(repo_root),
+        "branch": current_branch(repo_root, diagnostics),
+        "latest_tag": latest_tag(repo_root, diagnostics),
+        "clean_worktree": is_clean_tree(repo_root, diagnostics),
+        "diagnostics": diagnostics,
     }
     emit(payload, as_json=as_json)
     return 0
@@ -435,12 +442,26 @@ def command_publish(args: list[str]) -> int:
     tag_name = f"v{version}"
     preflight_reason_codes: list[str] = []
     preflight_remediation: list[str] = []
-    if create_tag and _local_tag_exists(repo_root, tag_name):
+    tag_exists: bool | None = None
+    if create_tag or create_release:
+        try:
+            tag_exists, tag_probe_reason = _local_tag_exists(repo_root, tag_name)
+            if tag_probe_reason:
+                preflight_reason_codes.append(tag_probe_reason)
+                preflight_remediation.append(
+                    "retry after resolving the local Git tag probe failure"
+                )
+        except BoundedCommandError as exc:
+            preflight_reason_codes.append(exc.reason_code)
+            preflight_remediation.append(
+                f"retry after resolving bounded Git tag probe failure: {exc.reason_code}"
+            )
+    if create_tag and tag_exists is True:
         preflight_reason_codes.append("publish_tag_already_exists")
         preflight_remediation.append(
             f"delete or bump version before publishing: git tag -d {tag_name}"
         )
-    if create_release and not create_tag and not _local_tag_exists(repo_root, tag_name):
+    if create_release and not create_tag and tag_exists is False:
         preflight_reason_codes.append("publish_release_tag_missing")
         preflight_remediation.append(
             "create and push the release tag first, or add --create-tag for one-step publish"

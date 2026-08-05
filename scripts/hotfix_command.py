@@ -12,8 +12,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from hotfix_runtime import load_runtime, resolve_write_path, runtime_path  # type: ignore
-
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
+from hotfix_runtime import (  # type: ignore
+    load_runtime,
+    resolve_write_path,
+    runtime_path,
+)
 
 HOTFIX_RUNTIME_SCRIPT = SCRIPT_DIR / "hotfix_runtime.py"
 
@@ -48,12 +52,15 @@ def run_runtime(args: list[str]) -> subprocess.CompletedProcess[str]:
 def resolve_followup_url(followup_issue: str) -> tuple[str | None, str]:
     if not followup_issue:
         return None, "followup_missing"
-    completed = subprocess.run(
-        ["gh", "issue", "view", followup_issue, "--json", "url"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = run_bounded(
+            ["gh", "issue", "view", followup_issue, "--json", "url"],
+            operation="hotfix_github_followup_lookup",
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        return None, exc.reason_code
     if completed.returncode != 0:
         return None, "followup_lookup_failed"
     try:

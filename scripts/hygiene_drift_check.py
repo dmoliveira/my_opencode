@@ -5,11 +5,11 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from bounded_subprocess import BoundedCommandError, run_bounded  # type: ignore
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OPENCODE_CONFIG = REPO_ROOT / "opencode.json"
@@ -224,23 +224,26 @@ def _parse_activity_logged_epics(plan_text: str) -> set[str]:
 def _fetch_recent_pr_metadata(
     repo_root: Path, *, limit: int = 30
 ) -> tuple[set[str], list[str], str | None]:
-    proc = subprocess.run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--state",
-            "merged",
-            "--limit",
-            str(limit),
-            "--json",
-            "number,title,labels",
-        ],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = run_bounded(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "merged",
+                "--limit",
+                str(limit),
+                "--json",
+                "number,title,labels",
+            ],
+            operation="hygiene_github_merged_pr_metadata",
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+        )
+    except BoundedCommandError as exc:
+        return set(), [], f"{exc.reason_code}: {exc}"
     if proc.returncode != 0:
         return (
             set(),

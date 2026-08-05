@@ -261,6 +261,20 @@ The terminal timestamp work uses `experimental.text.complete` in `plugin/gateway
 
 For human-written assistant progress lines in this repo's operating model, prefer host-clock timestamps over inferred timestamps. If you prefix a status line with a time, fetch it from the machine first (for example `date "+%Y-%m-%d %H:%M:%S %Z"`). If that lookup is unavailable, omit the timestamp rather than guessing.
 
+## Bounded Git and GitHub probes
+
+Read-only Git/GitHub guards, status checks, and capped metadata lookups use explicit operation policies. Timeouts, missing executables, launch errors, and invalid timeout configuration have distinct operation-specific reason codes. Security gates fail closed; best-effort collectors keep their previous fallback fields and add diagnostics where their payload supports them. Full diffs, arbitrary release-range logs, mutations, installers, and user-driven subprocesses are not routed through this policy.
+
+| Class | Environment override | Default | Hard cap |
+| --- | --- | ---: | ---: |
+| Git probe | `MY_OPENCODE_GIT_PROBE_TIMEOUT_SECONDS` | 5s | 30s |
+| Git status/fingerprint | `MY_OPENCODE_GIT_STATUS_TIMEOUT_SECONDS` | 15s | 60s |
+| Capped Git metadata | `MY_OPENCODE_GIT_METADATA_TIMEOUT_SECONDS` | 20s | 60s |
+| GitHub probe | `MY_OPENCODE_GITHUB_PROBE_TIMEOUT_SECONDS` | 10s | 30s |
+| GitHub metadata | `MY_OPENCODE_GITHUB_METADATA_TIMEOUT_SECONDS` | 30s | 120s |
+
+When set, an override must be a finite positive number no greater than its hard cap. Empty, nonnumeric, zero, negative, non-finite, or over-cap values fail the operation rather than restoring an unbounded call. On timeout, Python terminates and waits for the invoked direct `git` or `gh` child before the reason is returned. Descendant processes such as credential or SSH helpers are not covered by that direct-child guarantee.
+
 ## Session digest inside OpenCode 🧾
 
 Use these directly in OpenCode:
