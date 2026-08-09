@@ -5,12 +5,12 @@ PYTHON_MIN_VERSION := 3.11
 OPENCODE_BIN ?= opencode
 OPENCODE_RESUME_E2E_VERSION := 1.18.5
 
-.PHONY: python-check help validate selftest doctor doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test release-check release
+.PHONY: python-check help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-PYTHON_TARGETS := validate build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status selftest doctor doctor-json devtools-status hooks-install install-test release-check release
+PYTHON_TARGETS := validate build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test release-check release
 
 $(PYTHON_TARGETS): python-check
 
@@ -133,6 +133,12 @@ doctor: ## Run plugin diagnostics (human-readable)
 
 doctor-json: ## Run plugin diagnostics (JSON)
 	$(PYTHON) scripts/doctor_command.py run --json
+
+sqlite-doctor: ## Inspect all local SQLite stores (human-readable)
+	$(PYTHON) scripts/sqlite_doctor_command.py run
+
+sqlite-doctor-json: ## Inspect all local SQLite stores (JSON)
+	$(PYTHON) scripts/sqlite_doctor_command.py run --json
 
 devtools-status: ## Show external productivity tooling status
 	$(PYTHON) scripts/devtools_command.py status
