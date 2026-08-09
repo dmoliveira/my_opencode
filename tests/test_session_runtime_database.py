@@ -864,11 +864,26 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             db_path = Path(tmp) / "runtime.db"
             self._create_runtime_fixture(db_path, now_ms=now_ms)
             indexed = module._scan_runtime_stuck_sessions(
-                db_path, 300, now_ms=now_ms
+                db_path,
+                300,
+                generic_stale_problem_threshold=2,
+                now_ms=now_ms,
             )
             self.assertEqual("indexed_snapshot", indexed["runtime_db_scan_mode"])
             self.assertEqual(4, len(indexed["stuck_findings"]))
             self.assertEqual(1, indexed["generic_stale_count"])
+            self.assertTrue(
+                any(
+                    "detected 1 stale incomplete assistant session(s)" in warning
+                    for warning in indexed["warnings"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    "detected 4 stuck session health finding(s)" in problem
+                    for problem in indexed["problems"]
+                )
+            )
             self.assertNotIn(
                 "stale-parent-fresh-child",
                 {
