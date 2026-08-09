@@ -1914,7 +1914,7 @@ def _scan_runtime_stuck_sessions(
         problems.append(
             f"detected {len(findings)} stuck session health finding(s) older than {stale_seconds}s"
         )
-    elif runtime_db_scan_complete and generic_stale_count > 0:
+    if runtime_db_scan_complete and generic_stale_count > 0:
         generic_stale_message = f"detected {generic_stale_count} stale incomplete assistant session(s) older than {stale_seconds}s"
         if generic_stale_count >= generic_stale_problem_threshold:
             problems.append(
