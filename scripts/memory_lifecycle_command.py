@@ -17,6 +17,7 @@ from shared_memory_runtime import (  # type: ignore
     _upsert_fts,
     DEFAULT_DB_PATH,
     SCHEMA_VERSION,
+    VALID_KINDS,
     VALID_SCOPES,
     connect,
     connect_readonly,
@@ -132,10 +133,14 @@ def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
                 "UPDATE memories SET archived = 1, updated_at = ? WHERE id = ?",
                 (str(entry.get("updated_at") or now_iso()), record.memory_id),
             )
-        if bool(entry.get("pinned")):
+        if entry.get("pinned") is not None:
             conn.execute(
-                "UPDATE memories SET pinned = 1, updated_at = ? WHERE id = ?",
-                (str(entry.get("updated_at") or now_iso()), record.memory_id),
+                "UPDATE memories SET pinned = ?, updated_at = ? WHERE id = ?",
+                (
+                    1 if bool(entry["pinned"]) else 0,
+                    str(entry.get("updated_at") or now_iso()),
+                    record.memory_id,
+                ),
             )
         return
     memory_id = str(entry.get("id") or f"legacy-{os.urandom(4).hex()}")
@@ -184,6 +189,97 @@ def _import_row(conn: sqlite3.Connection, entry: dict[str, Any]) -> None:
     ).fetchone()
     if row is not None:
         _upsert_fts(conn, int(row["rowid"]), _row_to_record(row))
+
+
+_IMPORT_STRING_FIELDS = (
+    "id",
+    "kind",
+    "scope",
+    "namespace",
+    "title",
+    "content",
+    "summary",
+    "source_type",
+    "source_ref",
+    "session_id",
+    "cwd",
+    "created_at",
+    "updated_at",
+)
+
+
+def _validate_import_entry(entry: dict[str, Any], location: str) -> None:
+    for field in _IMPORT_STRING_FIELDS:
+        value = entry.get(field)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{location}.{field} must be a string or null")
+
+    for field in ("tags", "links"):
+        value = entry.get(field)
+        if value is not None and (
+            not isinstance(value, list)
+            or any(not isinstance(item, str) for item in value)
+        ):
+            raise ValueError(f"{location}.{field} must be a list of strings or null")
+
+    for field in ("pinned", "archived"):
+        value = entry.get(field)
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(f"{location}.{field} must be a boolean or null")
+
+    confidence = entry.get("confidence")
+    if confidence is not None and (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, int)
+        or not 0 <= confidence <= 100
+    ):
+        raise ValueError(f"{location}.confidence must be an integer from 0 to 100 or null")
+
+    kind = entry.get("kind")
+    if kind is not None and kind not in VALID_KINDS:
+        raise ValueError(f"{location}.kind is not a supported memory kind")
+
+    scope = entry.get("scope")
+    if scope is not None and scope not in VALID_SCOPES:
+        raise ValueError(f"{location}.scope is not a supported memory scope")
+
+    source_type = entry.get("source_type")
+    source_ref = entry.get("source_ref")
+    has_source_type = isinstance(source_type, str) and bool(source_type.strip())
+    has_source_ref = isinstance(source_ref, str) and bool(source_ref.strip())
+    if has_source_type != has_source_ref:
+        raise ValueError(
+            f"{location}.source_type and {location}.source_ref must be provided together"
+        )
+
+
+def _validate_import_payload(
+    incoming: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    version = incoming.get("version")
+    if version is not None and (
+        isinstance(version, bool) or not isinstance(version, int) or version not in {1, 2}
+    ):
+        raise ValueError("unsupported shared-memory export version")
+
+    path = incoming.get("path")
+    if path is not None and not isinstance(path, str):
+        raise ValueError("shared-memory export path must be a string or null")
+
+    raw_entries = incoming.get("entries", [])
+    raw_archive = incoming.get("archive", [])
+    if not isinstance(raw_entries, list) or not isinstance(raw_archive, list):
+        raise ValueError("entries and archive must be lists")
+    validated: list[list[dict[str, Any]]] = []
+    for container, values in (("entries", raw_entries), ("archive", raw_archive)):
+        if any(not isinstance(entry, dict) for entry in values):
+            raise ValueError("every imported entry must be an object")
+        typed_values: list[dict[str, Any]] = []
+        for index, entry in enumerate(values):
+            _validate_import_entry(entry, f"{container}[{index}]")
+            typed_values.append(entry)
+        validated.append(typed_values)
+    return validated[0], validated[1]
 
 
 def usage() -> int:
@@ -1002,16 +1098,20 @@ def cmd_import(argv: list[str]) -> int:
         canonical = json.dumps(incoming, sort_keys=True, separators=(",", ":")).encode("utf-8")
         if not isinstance(expected_digest, str) or hashlib.sha256(canonical).hexdigest() != expected_digest:
             return emit({"result": "FAIL", "command": "import", "error": "shared-memory export checksum mismatch"}, as_json)
-    if incoming.get("schema_version") not in {None, SCHEMA_VERSION}:
+    schema_version = incoming.get("schema_version")
+    if schema_version is not None and (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or schema_version != SCHEMA_VERSION
+    ):
         return emit({"result": "FAIL", "command": "import", "error": "incompatible shared-memory export schema"}, as_json)
-    raw_entries = incoming.get("entries", [])
-    raw_archive = incoming.get("archive", [])
-    if not isinstance(raw_entries, list) or not isinstance(raw_archive, list):
-        return emit({"result": "FAIL", "command": "import", "error": "entries and archive must be lists"}, as_json)
-    if any(not isinstance(entry, dict) for entry in [*raw_entries, *raw_archive]):
-        return emit({"result": "FAIL", "command": "import", "error": "every imported entry must be an object"}, as_json)
-    new_entries = raw_entries
-    archived_entries = raw_archive
+    try:
+        new_entries, archived_entries = _validate_import_payload(incoming)
+    except ValueError as exc:
+        return emit(
+            {"result": "FAIL", "command": "import", "error": str(exc)},
+            as_json,
+        )
     if dry_run:
         return emit(
             {
@@ -1023,12 +1123,20 @@ def cmd_import(argv: list[str]) -> int:
             },
             as_json,
         )
-    conn = connect()
+    conn: sqlite3.Connection | None = None
     backup_path = source.with_name(f"{source.stem}.pre-import-{uuid.uuid4().hex}.json")
-    backup_path.write_text(json.dumps(_export_payload(conn), indent=2) + "\n", encoding="utf-8")
+    phase = "open"
+    commit_attempted = False
     try:
-        conn.execute("BEGIN")
+        conn = connect()
+        phase = "begin"
+        conn.execute("BEGIN IMMEDIATE")
+        phase = "backup"
+        backup_path.write_text(
+            json.dumps(_export_payload(conn), indent=2) + "\n", encoding="utf-8"
+        )
         skipped = 0
+        phase = "import"
         for entry in new_entries + archived_entries:
             source_type = entry.get("source_type")
             source_ref = entry.get("source_ref")
@@ -1041,11 +1149,46 @@ def cmd_import(argv: list[str]) -> int:
                     skipped += 1
                     continue
             _import_row(conn, entry)
+        entry_count, archive_count = _query_counts(conn)
+        phase = "commit"
+        commit_attempted = True
         conn.commit()
     except Exception as exc:
-        conn.rollback()
-        return emit({"result": "FAIL", "command": "import", "error": f"import rolled back: {exc}"}, as_json)
-    entry_count, archive_count = _query_counts(conn)
+        transaction_outcome, settlement_error = _settle_failed_transaction(
+            conn,
+            dry_run=False,
+            phase=phase,
+            commit_attempted=commit_attempted,
+        )
+        error = str(exc)
+        if settlement_error:
+            error = f"{error}; {settlement_error}"
+        prefix = (
+            "import rolled back"
+            if transaction_outcome == "rolled_back"
+            else (
+                "import transaction outcome unknown"
+                if transaction_outcome == "unknown"
+                else "import failed"
+            )
+        )
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "import",
+                "error": f"{prefix}: {error}",
+                "transaction_outcome": transaction_outcome,
+                "failure_phase": phase,
+                "commit_attempted": commit_attempted,
+            },
+            as_json,
+        )
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
     return emit(
         {
             "result": "PASS",
