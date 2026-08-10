@@ -24,7 +24,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "sessions" / "index.json"
             result = module.update_session_index(
-                {"timestamp": "2026-07-11T00:00:00+00:00", "cwd": "/repo", "reason": "test"},
+                {"timestamp": datetime.now(UTC).isoformat(), "cwd": "/repo", "reason": "test"},
                 path,
             )
             self.assertEqual("PASS", result["result"])
@@ -42,7 +42,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             path = Path(tmp) / "index.json"
             def update(reason: str) -> None:
                 module.update_session_index(
-                    {"timestamp": "2026-07-11T00:00:00+00:00", "cwd": "/repo", "reason": reason},
+                    {"timestamp": datetime.now(UTC).isoformat(), "cwd": "/repo", "reason": reason},
                     path,
                 )
             with ThreadPoolExecutor(max_workers=2) as pool:
