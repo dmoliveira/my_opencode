@@ -347,6 +347,17 @@ If `/digest run` detects a corrupt session index, it leaves the active bytes unc
 
 If you inspect the runtime SQLite store directly, see `docs/runtime-db-schema.md` for the current table layout, JSON paths, and safe query patterns.
 
+## SQLite store doctor
+
+Use the focused store dashboard when one diagnosis must cover every local persistence boundary:
+
+```text
+/doctor sqlite
+/doctor sqlite --json
+```
+
+The JSON contract contains four stable store keys: `runtime_history`, `session_sidecars`, `shared_memory`, and `codememory`. Runtime history and sidecars are collected from one `/session doctor` scan; shared memory is opened through its read-only preview path; Codememory is checked through `oc plan doctor` in the current worktree. The command never creates a missing database. `FAIL` takes precedence over `WARN`, and warnings remain a successful process exit so operators can inspect a new or not-yet-initialized store without treating it as corruption. Use each store's `quick_fixes` only through its owner command; never hand-edit a SQLite file.
+
 ## Shared memory inside OpenCode 🧠
 
 Use these directly in OpenCode:
@@ -672,7 +683,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /delegation-health - Summarize delegation health and detect routing drift (status|doctor)
 /devtools - Manage external productivity tools (status|doctor|install|hooks-install)
 /digest - Generate, show, or diagnose session digests (run|show|doctor)
-/doctor - Run diagnostics and reason-code registry export
+/doctor - Run diagnostics, SQLite store health, and reason-code registry export
 /gateway - Manage gateway runtime controls (status|enable|disable|doctor|watchdog|continuation report|tune memory|recover memory|protection)
 /governance - Manage governance policy profiles and authorizations (status|profile|authorize|revoke|doctor)
 /health - Show repo health score and drift insights

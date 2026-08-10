@@ -546,6 +546,7 @@ CHECKS = [
 def usage() -> int:
     print(
         "usage: /doctor status | /doctor help | /doctor run [--json] [--profile <core|full>] | "
+        "/doctor sqlite [--json] | "
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 2
@@ -554,6 +555,7 @@ def usage() -> int:
 def print_help() -> int:
     print(
         "usage: /doctor status | /doctor help | /doctor run [--json] [--profile <core|full>] | "
+        "/doctor sqlite [--json] | "
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 0
@@ -944,6 +946,12 @@ def command_run(argv: list[str]) -> int:
     return print_human(summary)
 
 
+def command_sqlite(argv: list[str]) -> int:
+    from sqlite_doctor_command import main as sqlite_doctor_main
+
+    return sqlite_doctor_main(argv)
+
+
 def main(argv: list[str]) -> int:
     if not argv or argv[0] == "status":
         return command_run([])
@@ -951,6 +959,8 @@ def main(argv: list[str]) -> int:
         return print_help()
     if argv[0] == "run":
         return command_run(argv[1:])
+    if argv[0] == "sqlite":
+        return command_sqlite(argv[1:])
     if argv[0] == "reason-codes":
         return command_reason_codes(argv[1:])
     return usage()

@@ -185,7 +185,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before mcp --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "doctor": {
-      "description": "Run diagnostics and reason-code registry export",
+      "description": "Run diagnostics, SQLite store health, and reason-code registry export",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before doctor --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "agent-doctor": {
