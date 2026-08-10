@@ -273,7 +273,7 @@ Read-only Git/GitHub guards, status checks, and capped metadata lookups use expl
 | GitHub probe | `MY_OPENCODE_GITHUB_PROBE_TIMEOUT_SECONDS` | 10s | 30s |
 | GitHub metadata | `MY_OPENCODE_GITHUB_METADATA_TIMEOUT_SECONDS` | 30s | 120s |
 
-When set, an override must be a finite positive number no greater than its hard cap. Empty, nonnumeric, zero, negative, non-finite, or over-cap values fail the operation rather than restoring an unbounded call. On timeout, Python terminates and waits for the invoked direct `git` or `gh` child before the reason is returned. Descendant processes such as credential or SSH helpers are not covered by that direct-child guarantee.
+When set, an override must be a finite positive number no greater than its hard cap. Empty, nonnumeric, zero, negative, non-finite, or over-cap values fail the operation rather than restoring an unbounded call. On timeout, the bounded runner starts the invoked `git` or `gh` command in an isolated process group, terminates that group, and waits for the direct child before returning the reason. This contains descendant processes such as credential or SSH helpers on POSIX hosts; Windows uses a new process group with direct-child fallback when group termination is unavailable.
 
 ## Session digest inside OpenCode 🧾
 
