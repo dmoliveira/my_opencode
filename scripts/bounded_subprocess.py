@@ -381,8 +381,11 @@ def run_bounded(
             **popen_options,
         )
     except FileNotFoundError as exc:
-        missing_target = _text(exc.filename)
-        suffix = "command_missing" if missing_target == normalized[0] else "command_error"
+        suffix = (
+            "command_missing"
+            if not os.path.exists(normalized[0])
+            else "command_error"
+        )
         raise _failure(
             operation=operation,
             command_class=command_class,

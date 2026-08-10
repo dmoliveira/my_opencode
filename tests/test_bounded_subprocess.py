@@ -28,14 +28,17 @@ from bounded_subprocess import (
 
 class BoundedSubprocessTest(unittest.TestCase):
     def _assert_pid_terminated(self, pid: int) -> None:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return
-        except OSError as exc:
-            if os.name == "nt" and getattr(exc, "winerror", None) == 87:
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
                 return
-            raise
+            except OSError as exc:
+                if os.name == "nt" and getattr(exc, "winerror", None) == 87:
+                    return
+                raise
+            time.sleep(0.05)
         self.fail(f"process {pid} is still running")
 
     class _FakeProcess:
