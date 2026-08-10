@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import signal
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -72,7 +73,158 @@ OPERATION_CLASSES: dict[str, str] = {
 
 
 _OPERATION_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
-_FORBIDDEN_RUN_OPTIONS = frozenset({"check", "shell", "timeout"})
+_FORBIDDEN_RUN_OPTIONS = frozenset(
+    {"check", "creationflags", "shell", "start_new_session", "timeout"}
+)
+
+
+class _WindowsJob:
+    def __init__(self, handle: Any, kernel32: Any) -> None:
+        self.handle = handle
+        self.kernel32 = kernel32
+
+    def terminate(self) -> None:
+        if not self.kernel32.TerminateJobObject(self.handle, 1):
+            raise OSError("TerminateJobObject failed")
+
+    def close(self) -> None:
+        if self.handle is not None:
+            self.kernel32.CloseHandle(self.handle)
+            self.handle = None
+
+
+class _WindowsJobError(RuntimeError):
+    pass
+
+
+def _attach_windows_job(process: subprocess.Popen[Any]) -> _WindowsJob | None:
+    if os.name != "nt":
+        return None
+    handle = None
+    kernel32 = None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenThread.restype = wintypes.HANDLE
+        kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+        kernel32.ResumeThread.restype = wintypes.DWORD
+        kernel32.Thread32First.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+        kernel32.Thread32Next.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+        kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel32.CreateJobObjectW(None, None)
+        if not handle:
+            raise _WindowsJobError("CreateJobObjectW failed")
+        if not kernel32.AssignProcessToJobObject(handle, wintypes.HANDLE(process._handle)):
+            raise _WindowsJobError("AssignProcessToJobObject failed")
+
+        class _ThreadEntry32(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ThreadID", wintypes.DWORD),
+                ("th32OwnerProcessID", wintypes.DWORD),
+                ("tpBasePri", wintypes.LONG),
+                ("tpDeltaPri", wintypes.LONG),
+                ("dwFlags", wintypes.DWORD),
+            ]
+
+        snapshot = kernel32.CreateToolhelp32Snapshot(0x00000004, 0)
+        invalid_handle = ctypes.c_void_p(-1).value
+        if not snapshot or snapshot == invalid_handle:
+            raise _WindowsJobError("CreateToolhelp32Snapshot failed")
+        thread = None
+        try:
+            entry = _ThreadEntry32()
+            entry.dwSize = ctypes.sizeof(entry)
+            found = kernel32.Thread32First(snapshot, ctypes.byref(entry))
+            while found:
+                if entry.th32OwnerProcessID == process.pid:
+                    thread = kernel32.OpenThread(0x0002, False, entry.th32ThreadID)
+                    break
+                found = kernel32.Thread32Next(snapshot, ctypes.byref(entry))
+            if not thread or kernel32.ResumeThread(thread) == 0xFFFFFFFF:
+                raise _WindowsJobError("ResumeThread failed")
+        finally:
+            if thread:
+                kernel32.CloseHandle(thread)
+            kernel32.CloseHandle(snapshot)
+        return _WindowsJob(handle, kernel32)
+    except _WindowsJobError:
+        if handle:
+            try:
+                kernel32.TerminateJobObject(handle, 1)
+            finally:
+                kernel32.CloseHandle(handle)
+        raise
+    except Exception as exc:
+        if handle and kernel32 is not None:
+            try:
+                kernel32.TerminateJobObject(handle, 1)
+            finally:
+                kernel32.CloseHandle(handle)
+        raise _WindowsJobError("Windows Job Object setup failed") from exc
+
+
+def _terminate_process_tree(
+    process: subprocess.Popen[Any], job: _WindowsJob | None
+) -> None:
+    try:
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        elif job is not None:
+            try:
+                job.terminate()
+            except OSError:
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    check=False,
+                    capture_output=True,
+                    timeout=5,
+                )
+        else:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                capture_output=True,
+                timeout=5,
+            )
+    except (OSError, ProcessLookupError, subprocess.SubprocessError):
+        pass
+    finally:
+        if process.poll() is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+
+
+def _reap_process(process: subprocess.Popen[Any]) -> tuple[Any, Any]:
+    try:
+        return process.communicate(timeout=5)
+    except subprocess.TimeoutExpired as exc:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        return (
+            exc.stdout,
+            exc.stderr,
+        )
 
 
 @dataclass(frozen=True)
@@ -203,28 +355,37 @@ def run_bounded(
         )
     command_class, timeout_seconds = resolve_timeout_seconds(operation)
     normalized = [str(item) for item in command]
-    try:
-        return subprocess.run(
-            normalized,
-            check=False,
-            shell=False,
-            timeout=timeout_seconds,
-            **run_options,
+    popen_options = dict(run_options)
+    input_data = popen_options.pop("input", None)
+    if input_data is not None:
+        if "stdin" in popen_options:
+            raise ValueError("stdin and input arguments may not both be used")
+        popen_options["stdin"] = subprocess.PIPE
+    if popen_options.pop("capture_output", False):
+        if "stdout" in popen_options or "stderr" in popen_options:
+            raise ValueError(
+                "capture_output cannot be used with stdout or stderr"
+            )
+        popen_options.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if os.name == "posix":
+        popen_options["start_new_session"] = True
+    else:
+        popen_options["creationflags"] = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "CREATE_SUSPENDED", 0x00000004)
         )
-    except subprocess.TimeoutExpired as exc:
-        raise _failure(
-            operation=operation,
-            command_class=command_class,
-            suffix="timeout",
-            timeout_seconds=timeout_seconds,
-            command=normalized,
-            detail=f"bounded subprocess timed out after {timeout_seconds:g}s",
-            stdout=exc.stdout,
-            stderr=exc.stderr,
-        ) from exc
+    try:
+        process = subprocess.Popen(
+            normalized,
+            shell=False,
+            **popen_options,
+        )
     except FileNotFoundError as exc:
-        missing_target = _text(exc.filename)
-        suffix = "command_missing" if missing_target == normalized[0] else "command_error"
+        suffix = (
+            "command_missing"
+            if not os.path.exists(normalized[0])
+            else "command_error"
+        )
         raise _failure(
             operation=operation,
             command_class=command_class,
@@ -242,3 +403,52 @@ def run_bounded(
             command=normalized,
             detail=str(exc),
         ) from exc
+
+    try:
+        job = _attach_windows_job(process)
+    except _WindowsJobError as exc:
+        _terminate_process_tree(process, None)
+        _reap_process(process)
+        raise _failure(
+            operation=operation,
+            command_class=command_class,
+            suffix="command_error",
+            timeout_seconds=timeout_seconds,
+            command=normalized,
+            detail=str(exc),
+        ) from exc
+    try:
+        try:
+            stdout, stderr = process.communicate(input=input_data, timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            _terminate_process_tree(process, job)
+            stdout, stderr = _reap_process(process)
+            raise _failure(
+                operation=operation,
+                command_class=command_class,
+                suffix="timeout",
+                timeout_seconds=timeout_seconds,
+                command=normalized,
+                detail=f"bounded subprocess timed out after {timeout_seconds:g}s",
+                stdout=stdout if stdout is not None else exc.stdout,
+                stderr=stderr if stderr is not None else exc.stderr,
+            ) from exc
+        except (OSError, ValueError) as exc:
+            _terminate_process_tree(process, job)
+            _reap_process(process)
+            raise _failure(
+                operation=operation,
+                command_class=command_class,
+                suffix="command_error",
+                timeout_seconds=timeout_seconds,
+                command=normalized,
+                detail=str(exc),
+            ) from exc
+        except Exception:
+            _terminate_process_tree(process, job)
+            _reap_process(process)
+            raise
+        return subprocess.CompletedProcess(normalized, process.returncode, stdout, stderr)
+    finally:
+        if job is not None:
+            job.close()
