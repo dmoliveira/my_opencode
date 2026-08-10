@@ -190,11 +190,14 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
         source: Path,
         *,
         conflict: str | None = None,
+        dry_run: bool = False,
     ) -> tuple[int, dict]:
         output = io.StringIO()
         args = ["--path", str(source), "--json"]
         if conflict is not None:
             args[2:2] = ["--conflict", conflict]
+        if dry_run:
+            args.append("--dry-run")
         with redirect_stdout(output):
             status = lifecycle.cmd_import(args)
         return status, json.loads(output.getvalue())
@@ -718,6 +721,17 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                         "archive[0].archived must be a boolean or null",
                     ),
                     (
+                        "archive-active",
+                        json.dumps(
+                            {
+                                "schema_version": runtime.SCHEMA_VERSION,
+                                "entries": [],
+                                "archive": [{"archived": False}],
+                            }
+                        ),
+                        "archive[0].archived must be true for archive entries",
+                    ),
+                    (
                         "source-pair",
                         json.dumps(
                             {
@@ -754,6 +768,38 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
 
                 connect_spy.assert_not_called()
                 self.assertEqual(before, self._canonical_store(db_path))
+                self.assertEqual([], list(root.glob("*.pre-import-*.json")))
+
+    def test_import_dry_run_reports_not_started_without_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self._bound_lifecycle_modules(
+                root, "target.db"
+            ) as (runtime, lifecycle, db_path):
+                source = root / "incoming.json"
+                self._write_import(
+                    source,
+                    {
+                        "version": 2,
+                        "schema_version": runtime.SCHEMA_VERSION,
+                        "entries": [{"id": "preview-only", "title": "preview"}],
+                        "archive": [],
+                    },
+                )
+                with patch.object(
+                    lifecycle,
+                    "connect",
+                    side_effect=AssertionError("dry-run must not connect"),
+                ):
+                    status, payload = self._capture_import(
+                        lifecycle, source, dry_run=True
+                    )
+
+                self.assertEqual(0, status)
+                self.assertEqual("PASS", payload["result"])
+                self.assertEqual("not_started", payload["transaction_outcome"])
+                self.assertFalse(payload["commit_attempted"])
+                self.assertIsNone(payload["backup_path"])
                 self.assertEqual([], list(root.glob("*.pre-import-*.json")))
 
     def test_valid_import_validates_before_backup_and_closes_connection(self) -> None:
@@ -843,6 +889,9 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
 
                 self.assertEqual(0, status)
                 self.assertEqual("PASS", payload["result"])
+                self.assertEqual("committed", payload["transaction_outcome"])
+                self.assertTrue(payload["commit_attempted"])
+                self.assertTrue(Path(payload["backup_path"]).is_file())
                 self.assertEqual([True], backup_saw_transaction)
                 self.assertEqual(1, len(opened))
                 self.assertEqual(1, opened[0].close_calls)
@@ -883,7 +932,7 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                         "SELECT archived FROM memories WHERE id = ?",
                         ("archive-container-only",),
                     ).fetchone()
-                    self.assertEqual((0,), tuple(archive_container_only))
+                    self.assertEqual((1,), tuple(archive_container_only))
                 finally:
                     connection.close()
 
@@ -1007,6 +1056,7 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                 self.assertEqual("backup", payload["failure_phase"])
                 self.assertFalse(payload["commit_attempted"])
                 self.assertIn("injected backup publish failure", payload["error"])
+                self.assertIsNone(payload["backup_path"])
                 self.assertEqual(before, self._canonical_store(db_path))
                 self.assertEqual([], list(root.glob("*.pre-import-*.json")))
                 self.assertEqual([], list(root.glob(".*.tmp")))
@@ -1115,6 +1165,7 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                     self.assertEqual(before, self._canonical_store(db_path))
                     backup_paths = list(root.glob("incoming.pre-import-*.json"))
                     self.assertEqual(1, len(backup_paths))
+                    self.assertEqual(str(backup_paths[0]), payload["backup_path"])
                     backup_payload = json.loads(
                         backup_paths[0].read_text(encoding="utf-8")
                     )
@@ -1200,6 +1251,8 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                     self.assertEqual(expected_outcome, payload["transaction_outcome"])
                     self.assertEqual("commit", payload["failure_phase"])
                     self.assertTrue(payload["commit_attempted"])
+                    self.assertIsNotNone(payload["backup_path"])
+                    self.assertTrue(Path(payload["backup_path"]).is_file())
                     self.assertEqual(1, opened[0].close_calls)
                     self.assertIn(
                         "import transaction outcome unknown"

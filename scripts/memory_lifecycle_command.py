@@ -303,8 +303,14 @@ def _validate_import_payload(
             raise ValueError("every imported entry must be an object")
         typed_values: list[dict[str, Any]] = []
         for index, entry in enumerate(values):
-            _validate_import_entry(entry, f"{container}[{index}]")
-            typed_values.append(entry)
+            location = f"{container}[{index}]"
+            _validate_import_entry(entry, location)
+            if container == "archive":
+                if entry.get("archived") is False:
+                    raise ValueError(f"{location}.archived must be true for archive entries")
+                typed_values.append({**entry, "archived": True})
+            else:
+                typed_values.append(entry)
         validated.append(typed_values)
     return validated[0], validated[1]
 
@@ -1174,11 +1180,14 @@ def cmd_import(argv: list[str]) -> int:
                 "dry_run": True,
                 "imported": len(new_entries) + len(archived_entries),
                 "backup_path": None,
+                "transaction_outcome": "not_started",
+                "commit_attempted": False,
             },
             as_json,
         )
     conn: sqlite3.Connection | None = None
     backup_path = source.with_name(f"{source.stem}.pre-import-{uuid.uuid4().hex}.json")
+    backup_published = False
     phase = "open"
     commit_attempted = False
     try:
@@ -1187,6 +1196,7 @@ def cmd_import(argv: list[str]) -> int:
         conn.execute("BEGIN IMMEDIATE")
         phase = "backup"
         _write_atomic_json(backup_path, _export_payload(conn))
+        backup_published = True
         skipped = 0
         phase = "import"
         for entry in new_entries + archived_entries:
@@ -1248,6 +1258,7 @@ def cmd_import(argv: list[str]) -> int:
                 "transaction_outcome": transaction_outcome,
                 "failure_phase": phase,
                 "commit_attempted": commit_attempted,
+                "backup_path": str(backup_path) if backup_published else None,
             },
             as_json,
         )
@@ -1266,6 +1277,8 @@ def cmd_import(argv: list[str]) -> int:
             "conflict_policy": conflict_policy,
             "skipped": skipped,
             "backup_path": str(backup_path),
+            "transaction_outcome": "committed",
+            "commit_attempted": True,
             "entry_count": entry_count,
             "archive_count": archive_count,
         },
