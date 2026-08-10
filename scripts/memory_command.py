@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -17,14 +18,15 @@ from session_sidecar_security import (  # type: ignore
     read_private_json,
 )
 from shared_memory_runtime import (  # type: ignore
-    active_memory_records,
     DEFAULT_DB_PATH,
+    active_memory_records,
     add_memory,
     connect,
     derive_relationship_links,
     doctor_report,
     find_memories,
     infer_namespace,
+    inspect_schema,
     normalize_confidence,
     normalize_kind,
     normalize_scope,
@@ -34,7 +36,6 @@ from shared_memory_runtime import (  # type: ignore
     summarize_memories,
     upsert_memory_by_source,
 )
-
 
 DEFAULT_DIGEST_PATH = Path(
     os.environ.get(
@@ -767,7 +768,22 @@ def cmd_doctor(argv: list[str]) -> int:
     args = [arg for arg in argv if arg != "--json"]
     if args:
         return usage()
-    conn = connect()
+    schema = inspect_schema(DEFAULT_DB_PATH)
+    if schema.get("result") == "FAIL":
+        return emit({"command": "doctor", **schema}, as_json)
+    try:
+        conn = connect()
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "doctor",
+                "path": str(DEFAULT_DB_PATH),
+                "reason_code": "shared_memory_doctor_open_failed",
+                "error": type(exc).__name__,
+            },
+            as_json,
+        )
     try:
         report = doctor_report(conn)
         return emit({"command": "doctor", **report}, as_json)

@@ -13,7 +13,6 @@ from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
@@ -259,6 +258,174 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
             finally:
                 connection.close()
 
+    def test_schema_migration_supports_only_versionless_legacy_store(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            self._insert_memory(connection, "legacy")
+            connection.execute("DELETE FROM meta WHERE key = 'schema_version'")
+            connection.commit()
+            connection.close()
+
+            before_rows = self._canonical_memories(db_path)
+            preview = runtime.migrate_schema(db_path, dry_run=True)
+            self.assertEqual("PASS", preview["result"])
+            self.assertTrue(preview["would_change"])
+            self.assertFalse(preview["changed"])
+            probe = sqlite3.connect(db_path)
+            try:
+                self.assertIsNone(
+                    probe.execute(
+                        "SELECT value FROM meta WHERE key = 'schema_version'"
+                    ).fetchone()
+                )
+            finally:
+                probe.close()
+            applied = runtime.migrate_schema(db_path, dry_run=False)
+            self.assertEqual("PASS", applied["result"])
+            self.assertTrue(applied["changed"])
+            self.assertEqual("committed", applied["transaction_outcome"])
+            self.assertEqual(before_rows, self._canonical_memories(db_path))
+            probe = sqlite3.connect(db_path)
+            try:
+                self.assertEqual(
+                    str(runtime.SCHEMA_VERSION),
+                    str(
+                        probe.execute(
+                            "SELECT value FROM meta WHERE key = 'schema_version'"
+                        ).fetchone()[0]
+                    ),
+                )
+            finally:
+                probe.close()
+
+    def test_schema_migration_never_creates_absent_store(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "missing" / "shared-memory.db"
+            report = runtime.migrate_schema(db_path, dry_run=False)
+            self.assertEqual("FAIL", report["result"])
+            self.assertEqual("shared_memory_database_missing", report["reason_code"])
+            self.assertFalse(db_path.exists())
+            self.assertFalse(db_path.parent.exists())
+
+    def test_schema_migration_rejects_noncanonical_indexes(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            connection.execute("DROP INDEX idx_memories_session_id")
+            connection.execute(
+                "UPDATE meta SET value = '0' WHERE key = 'schema_version'"
+            )
+            connection.commit()
+            connection.close()
+
+            report = runtime.migrate_schema(db_path, dry_run=False)
+            self.assertEqual("FAIL", report["result"])
+            self.assertEqual(
+                "shared_memory_schema_migration_unsupported", report["reason_code"]
+            )
+            probe = sqlite3.connect(db_path)
+            try:
+                self.assertEqual(
+                    "0",
+                    probe.execute(
+                        "SELECT value FROM meta WHERE key = 'schema_version'"
+                    ).fetchone()[0],
+                )
+            finally:
+                probe.close()
+
+    def test_schema_migration_rejects_duplicate_source_keys(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            self._insert_memory(connection, "first")
+            self._insert_memory(connection, "second")
+            connection.execute("DROP INDEX idx_memories_source_ref_unique")
+            connection.execute(
+                "UPDATE memories SET source_type = 'task', source_ref = 'dup'"
+            )
+            connection.execute(
+                "UPDATE meta SET value = '0' WHERE key = 'schema_version'"
+            )
+            connection.commit()
+            connection.close()
+
+            report = runtime.migrate_schema(db_path, dry_run=True)
+            self.assertEqual("FAIL", report["result"])
+            self.assertEqual(
+                "shared_memory_schema_migration_unsupported", report["reason_code"]
+            )
+
+    def test_schema_migration_rejects_expression_index_fingerprint(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            connection.execute("DROP INDEX idx_memories_source_ref_unique")
+            connection.execute(
+                """
+                CREATE UNIQUE INDEX idx_memories_source_ref_unique
+                ON memories(source_type, source_ref, lower(title))
+                """
+            )
+            connection.execute(
+                "UPDATE meta SET value = '0' WHERE key = 'schema_version'"
+            )
+            connection.commit()
+            connection.close()
+
+            report = runtime.migrate_schema(db_path, dry_run=True)
+            self.assertEqual("FAIL", report["result"])
+            self.assertIn(
+                "idx_memories_source_ref_unique", report["incompatible_indexes"]
+            )
+
+    def test_schema_migration_rejects_incompatible_fts_object(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            connection.execute("DROP TABLE memory_fts")
+            connection.execute(
+                "CREATE TABLE memory_fts(id TEXT, title TEXT, summary TEXT)"
+            )
+            connection.execute(
+                "UPDATE meta SET value = '0' WHERE key = 'schema_version'"
+            )
+            connection.commit()
+            connection.close()
+
+            report = runtime.migrate_schema(db_path, dry_run=True)
+            self.assertEqual("FAIL", report["result"])
+            self.assertFalse(report["fts_structure_ok"])
+
+    def test_current_schema_rejects_owned_table_triggers(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            connection.execute(
+                """
+                CREATE TRIGGER test_memory_guard AFTER INSERT ON memories
+                BEGIN
+                    SELECT 1;
+                END
+                """
+            )
+            connection.commit()
+            connection.close()
+
+            report = runtime.inspect_schema(db_path)
+            self.assertEqual("FAIL", report["result"])
+            self.assertIn("test_memory_guard", report["owned_triggers"])
+            with self.assertRaisesRegex(RuntimeError, "owned-table triggers"):
+                runtime.connect_readonly(db_path)
+
     def test_reopen_recreates_owned_index_without_changing_rows_or_version(
         self,
     ) -> None:
@@ -337,11 +504,10 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
             try:
                 with patch.object(
                     runtime.sqlite3, "connect", side_effect=tracking_connect
+                ), self.assertRaisesRegex(
+                    RuntimeError, "schema version 999 is incompatible"
                 ):
-                    with self.assertRaisesRegex(
-                        RuntimeError, "schema version 999 is incompatible"
-                    ):
-                        runtime.connect(db_path)
+                    runtime.connect(db_path)
             finally:
                 for tracked in opened:
                     tracked.close()
@@ -366,9 +532,8 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                 runtime.sqlite3,
                 "connect",
                 side_effect=PermissionError("injected open denial"),
-            ):
-                with self.assertRaisesRegex(PermissionError, "open denial"):
-                    runtime.connect(db_path)
+            ), self.assertRaisesRegex(PermissionError, "open denial"):
+                runtime.connect(db_path)
 
             self.assertEqual(before, self._canonical_store(db_path))
             self.assertEqual([], list(Path(tmp).glob("*.pre-import-*.json")))
@@ -603,40 +768,39 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
 
             with self._bound_lifecycle_modules(
                 root, "restored.db"
-            ) as (restored_runtime, restored_lifecycle, restored_path):
-                with patch.object(
-                    restored_runtime, "_ensure_fts", return_value=False
-                ):
-                    real_restore_connect = restored_lifecycle.connect
-                    restored_connections: list[sqlite3.Connection] = []
+            ) as (restored_runtime, restored_lifecycle, restored_path), patch.object(
+                restored_runtime, "_ensure_fts", return_value=False
+            ):
+                real_restore_connect = restored_lifecycle.connect
+                restored_connections: list[sqlite3.Connection] = []
 
-                    def capture_restore_connection():
-                        captured = real_restore_connect()
-                        restored_connections.append(captured)
-                        return captured
+                def capture_restore_connection():
+                    captured = real_restore_connect()
+                    restored_connections.append(captured)
+                    return captured
 
-                    try:
-                        with patch.object(
-                            restored_lifecycle,
-                            "connect",
-                            side_effect=capture_restore_connection,
-                        ):
-                            status, payload = self._capture_import(
-                                restored_lifecycle, backup_paths[0]
-                            )
-                    finally:
-                        for captured in restored_connections:
-                            captured.close()
+                try:
+                    with patch.object(
+                        restored_lifecycle,
+                        "connect",
+                        side_effect=capture_restore_connection,
+                    ):
+                        status, payload = self._capture_import(
+                            restored_lifecycle, backup_paths[0]
+                        )
+                finally:
+                    for captured in restored_connections:
+                        captured.close()
 
-                    self.assertEqual(0, status)
-                    self.assertEqual("PASS", payload["result"])
-                    self.assertEqual(
-                        expected_memories,
-                        self._canonical_memories(restored_path),
-                    )
-                    self.assertIsNone(
-                        self._canonical_store(restored_path)["memory_fts"]
-                    )
+                self.assertEqual(0, status)
+                self.assertEqual("PASS", payload["result"])
+                self.assertEqual(
+                    expected_memories,
+                    self._canonical_memories(restored_path),
+                )
+                self.assertIsNone(
+                    self._canonical_store(restored_path)["memory_fts"]
+                )
 
 
 if __name__ == "__main__":

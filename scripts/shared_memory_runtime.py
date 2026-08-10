@@ -28,6 +28,54 @@ DEFAULT_DB_PATH = Path(
 ).expanduser()
 
 SCHEMA_VERSION = 1
+LEGACY_SCHEMA_VERSION = 0
+SCHEMA_COLUMNS = {
+    "meta": {
+        "key": ("TEXT", 0, 1),
+        "value": ("TEXT", 1, 0),
+    },
+    "memories": {
+        "id": ("TEXT", 0, 1),
+        "kind": ("TEXT", 1, 0),
+        "scope": ("TEXT", 1, 0),
+        "namespace": ("TEXT", 1, 0),
+        "title": ("TEXT", 1, 0),
+        "content": ("TEXT", 1, 0),
+        "summary": ("TEXT", 1, 0),
+        "tags_json": ("TEXT", 1, 0),
+        "tags_text": ("TEXT", 1, 0),
+        "links_json": ("TEXT", 1, 0),
+        "source_type": ("TEXT", 0, 0),
+        "source_ref": ("TEXT", 0, 0),
+        "session_id": ("TEXT", 0, 0),
+        "cwd": ("TEXT", 1, 0),
+        "pinned": ("INTEGER", 1, 0),
+        "archived": ("INTEGER", 1, 0),
+        "confidence": ("INTEGER", 1, 0),
+        "created_at": ("TEXT", 1, 0),
+        "updated_at": ("TEXT", 1, 0),
+    },
+}
+FTS_COLUMNS = {"id", "title", "summary", "content", "tags"}
+OWNED_INDEXES = {
+    "idx_memories_scope_namespace_updated": (
+        False,
+        (
+            ("scope", False, "BINARY"),
+            ("namespace", False, "BINARY"),
+            ("archived", False, "BINARY"),
+            ("pinned", False, "BINARY"),
+            ("updated_at", True, "BINARY"),
+        ),
+        False,
+    ),
+    "idx_memories_session_id": (False, (("session_id", False, "BINARY"),), False),
+    "idx_memories_source_ref_unique": (
+        True,
+        (("source_type", False, "BINARY"), ("source_ref", False, "BINARY")),
+        False,
+    ),
+}
 VALID_SCOPES = {"session", "repo", "shared"}
 VALID_KINDS = {
     "note",
@@ -225,12 +273,164 @@ class MemoryRecord:
         return payload
 
 
+def _schema_inspection(conn: sqlite3.Connection) -> dict[str, Any]:
+    tables = {
+        str(row[0])
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    columns: dict[str, dict[str, tuple[str, int, int]]] = {}
+    missing_columns: dict[str, list[str]] = {}
+    unexpected_columns: dict[str, list[str]] = {}
+    for table, expected in SCHEMA_COLUMNS.items():
+        actual = {
+            str(row[1]): (str(row[2]).upper(), int(row[3]), int(row[5]))
+            for row in conn.execute(f"PRAGMA table_info({table})")
+        }
+        columns[table] = actual
+        missing_columns[table] = sorted(set(expected) - set(actual))
+        unexpected_columns[table] = sorted(set(actual) - set(expected))
+    version_row = None
+    if "meta" in tables:
+        version_row = conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()
+    version_raw = None if version_row is None else str(version_row[0])
+    version_state = (
+        "legacy"
+        if version_raw is None or version_raw == str(LEGACY_SCHEMA_VERSION)
+        else "current"
+        if version_raw == str(SCHEMA_VERSION)
+        else "unsupported"
+    )
+    structure_ok = (
+        set(SCHEMA_COLUMNS).issubset(tables)
+        and not any(missing_columns.values())
+        and not any(unexpected_columns.values())
+        and all(
+            all(columns[table][name] == specification for name, specification in expected.items())
+            for table, expected in SCHEMA_COLUMNS.items()
+        )
+    )
+    indexes: dict[str, tuple[bool, tuple[tuple[str | None, bool, str], ...], bool]] = {}
+    if "memories" in tables:
+        for row in conn.execute("PRAGMA index_list(memories)"):
+            name = str(row[1])
+            quoted_name = '"' + name.replace('"', '""') + '"'
+            index_columns = [
+                column
+                for column in conn.execute(f"PRAGMA index_xinfo({quoted_name})")
+                if int(column[5]) == 1
+            ]
+            indexes[name] = (
+                bool(row[2]),
+                tuple(
+                    (
+                        str(column[2]) if column[2] is not None else None,
+                        bool(column[3]),
+                        str(column[4] or ""),
+                    )
+                    for column in index_columns
+                ),
+                bool(row[4]),
+            )
+    missing_indexes = sorted(set(OWNED_INDEXES) - set(indexes))
+    incompatible_indexes = sorted(
+        name for name, expected in OWNED_INDEXES.items() if name in indexes and indexes[name] != expected
+    )
+    duplicate_source_keys = 0
+    if not missing_columns.get("memories") and "memories" in tables:
+        duplicate_source_keys = int(
+            conn.execute(
+                """
+                SELECT COUNT(*) FROM (
+                    SELECT source_type, source_ref
+                    FROM memories
+                    WHERE source_type IS NOT NULL AND source_ref IS NOT NULL
+                    GROUP BY source_type, source_ref
+                    HAVING COUNT(*) > 1
+                )
+                """
+            ).fetchone()[0]
+        )
+    owned_triggers = sorted(
+        str(row[0])
+        for row in conn.execute(
+            """
+            SELECT name FROM sqlite_master
+            WHERE type = 'trigger' AND tbl_name IN ('meta', 'memories')
+            """
+        )
+    )
+    fts_exists = "memory_fts" in tables
+    fts_sql = next(
+        (
+            str(row[0])
+            for row in conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name = 'memory_fts'"
+            )
+        ),
+        "",
+    )
+    fts_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(memory_fts)")
+    } if fts_exists else set()
+    fts_structure_ok = not fts_exists or (
+        "virtual table" in fts_sql.lower()
+        and "using fts5" in fts_sql.lower()
+        and fts_columns == FTS_COLUMNS
+    )
+    return {
+        "tables": sorted(tables),
+        "columns": columns,
+        "missing_columns": missing_columns,
+        "unexpected_columns": unexpected_columns,
+        "version_raw": version_raw,
+        "version": int(version_raw) if version_raw in {"0", "1"} else None,
+        "version_state": version_state,
+        "structure_ok": structure_ok,
+        "missing_indexes": missing_indexes,
+        "incompatible_indexes": incompatible_indexes,
+        "duplicate_source_keys": duplicate_source_keys,
+        "owned_triggers": owned_triggers,
+        "fts_exists": fts_exists,
+        "fts_structure_ok": fts_structure_ok,
+        "legacy_migration_ready": structure_ok
+        and not missing_indexes
+        and not incompatible_indexes
+        and duplicate_source_keys == 0
+        and not owned_triggers
+        and fts_structure_ok,
+        "fresh": not tables,
+    }
+
+
+def _require_current_schema(inspection: dict[str, Any]) -> None:
+    if inspection.get("fresh"):
+        raise RuntimeError("shared-memory database has no schema; initialize it explicitly")
+    if inspection.get("version_state") == "unsupported":
+        raise RuntimeError(
+            f"shared-memory schema version {inspection.get('version_raw')} is incompatible "
+            f"with supported version {SCHEMA_VERSION}; run an explicit migration before opening the store"
+        )
+    if not inspection.get("structure_ok"):
+        raise RuntimeError("shared-memory database schema structure is incompatible")
+    if inspection.get("incompatible_indexes"):
+        raise RuntimeError("shared-memory database has incompatible owned indexes")
+    if inspection.get("owned_triggers"):
+        raise RuntimeError("shared-memory database has unexpected owned-table triggers")
+    if not inspection.get("fts_structure_ok"):
+        raise RuntimeError("shared-memory database FTS schema is incompatible")
+    if inspection.get("version_state") != "current":
+        raise RuntimeError(
+            "shared-memory schema version is incompatible; run /memory-lifecycle migrate --apply"
+        )
+
+
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
     path = (db_path or DEFAULT_DB_PATH).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
     initialize(conn)
@@ -543,7 +743,9 @@ def _checkpointed_database_image(
         os.close(descriptor)
 
 
-def connect_readonly(db_path: Path | None = None) -> sqlite3.Connection:
+def connect_readonly(
+    db_path: Path | None = None, *, allow_legacy: bool = False
+) -> sqlite3.Connection:
     """Open one coherent shared-memory snapshot without initializing the store."""
     path = (db_path or DEFAULT_DB_PATH).expanduser()
     if not (sys.platform.startswith("darwin") or sys.platform.startswith("linux")):
@@ -610,26 +812,16 @@ def connect_readonly(db_path: Path | None = None) -> sqlite3.Connection:
                 current_wal,
                 current_shm,
             )
-        tables = {
-            str(row[0])
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
-        }
-        missing_tables = sorted({"meta", "memories"} - tables)
-        if missing_tables:
-            raise RuntimeError(
-                "shared-memory preview is missing required table(s): "
-                + ", ".join(missing_tables)
-            )
-        version_row = conn.execute(
-            "SELECT value FROM meta WHERE key = 'schema_version'"
-        ).fetchone()
-        if version_row is None or str(version_row["value"]) != str(SCHEMA_VERSION):
-            found = str(version_row["value"]) if version_row is not None else "missing"
-            raise RuntimeError(
-                f"shared-memory schema version {found} is incompatible with supported version {SCHEMA_VERSION}"
-            )
+        inspection = _schema_inspection(conn)
+        if allow_legacy:
+            if not inspection["structure_ok"]:
+                raise RuntimeError("shared-memory schema structure is incompatible")
+            if inspection["version_state"] == "unsupported":
+                raise RuntimeError(
+                    f"shared-memory schema version {inspection['version_raw']} is incompatible"
+                )
+        else:
+            _require_current_schema(inspection)
         quick_check = conn.execute("PRAGMA quick_check").fetchone()
         if quick_check is None or str(quick_check[0]).lower() != "ok":
             raise RuntimeError("shared-memory snapshot failed SQLite quick_check")
@@ -642,6 +834,19 @@ def connect_readonly(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 def initialize(conn: sqlite3.Connection) -> None:
+    inspection = _schema_inspection(conn)
+    if not inspection["fresh"]:
+        _require_current_schema(inspection)
+        conn.execute("PRAGMA journal_mode=WAL")
+        _ensure_owned_indexes(conn)
+        conn.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES ('fts_enabled', ?)",
+            ("1" if _ensure_fts(conn) else "0",),
+        )
+        _rebuild_fts(conn)
+        conn.commit()
+        return
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS meta (
@@ -693,8 +898,22 @@ def initialize(conn: sqlite3.Connection) -> None:
         "INSERT OR REPLACE INTO meta(key, value) VALUES ('fts_enabled', ?)",
         ("1" if _ensure_fts(conn) else "0",),
     )
+    conn.execute("PRAGMA journal_mode=WAL")
     _rebuild_fts(conn)
     conn.commit()
+
+
+def _ensure_owned_indexes(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_memories_scope_namespace_updated
+            ON memories(scope, namespace, archived, pinned, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_memories_session_id
+            ON memories(session_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_source_ref_unique
+            ON memories(source_type, source_ref);
+        """
+    )
 
 
 def _ensure_fts(conn: sqlite3.Connection) -> bool:
@@ -735,6 +954,142 @@ def _rebuild_fts(conn: sqlite3.Connection) -> None:
         FROM memories
         """
     )
+
+
+def inspect_schema(db_path: Path | None = None) -> dict[str, Any]:
+    path = (db_path or DEFAULT_DB_PATH).expanduser()
+    if not path.exists():
+        return {
+            "result": "FAIL",
+            "path": str(path),
+            "reason_code": "shared_memory_database_missing",
+            "error": "shared-memory database does not exist",
+        }
+    connection = None
+    try:
+        connection = connect_readonly(path, allow_legacy=True)
+        inspection = _schema_inspection(connection)
+        result = "PASS" if inspection["version_state"] == "current" and inspection["structure_ok"] else "WARN"
+        if (
+            inspection["version_state"] == "unsupported"
+            or not inspection["structure_ok"]
+            or inspection["incompatible_indexes"]
+            or inspection["owned_triggers"]
+            or not inspection["fts_structure_ok"]
+        ):
+            result = "FAIL"
+        payload = {"result": result, "path": str(path), **inspection}
+        if result == "FAIL":
+            payload["reason_code"] = "shared_memory_schema_incompatible"
+            payload["error"] = "shared-memory schema is incompatible"
+        return payload
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError, sqlite3.Error) as exc:
+        return {
+            "result": "FAIL",
+            "path": str(path),
+            "reason_code": "shared_memory_schema_inspection_failed",
+            "error": type(exc).__name__,
+        }
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def migrate_schema(
+    db_path: Path | None = None, *, dry_run: bool = True
+) -> dict[str, Any]:
+    path = (db_path or DEFAULT_DB_PATH).expanduser()
+    report = inspect_schema(path)
+    base = {
+        "command": "migrate",
+        "path": str(path),
+        "target_version": SCHEMA_VERSION,
+        "dry_run": dry_run,
+        "apply": not dry_run,
+        "changed": False,
+        "would_change": False,
+        "transaction_outcome": "not_started",
+    }
+    if report.get("result") == "FAIL":
+        return {**base, **report}
+    if report.get("version_state") == "current":
+        return {**base, "result": "PASS", "current_version": SCHEMA_VERSION}
+    if not report.get("legacy_migration_ready") or report.get("version_state") != "legacy":
+        return {
+            **base,
+            "result": "FAIL",
+            "reason_code": "shared_memory_schema_migration_unsupported",
+            "error": "only versionless or canonical version 0 stores can migrate",
+        }
+    base["current_version"] = report.get("version")
+    base["would_change"] = True
+    if dry_run:
+        return {**base, "result": "PASS"}
+
+    connection = None
+    phase = "open"
+    try:
+        canonical, _ = _canonical_preview_path(path)
+        connection = sqlite3.connect(str(canonical))
+        connection.row_factory = sqlite3.Row
+        phase = "begin"
+        connection.execute("BEGIN IMMEDIATE")
+        inspection = _schema_inspection(connection)
+        if (
+            not inspection["legacy_migration_ready"]
+            or inspection["version_state"] != "legacy"
+        ):
+            connection.rollback()
+            return {
+                **base,
+                "result": "FAIL",
+                "reason_code": "shared_memory_schema_changed",
+                "transaction_outcome": "rolled_back",
+            }
+        phase = "validate"
+        quick_check = connection.execute("PRAGMA quick_check").fetchone()
+        if quick_check is None or str(quick_check[0]).lower() != "ok":
+            connection.rollback()
+            return {
+                **base,
+                "result": "FAIL",
+                "reason_code": "shared_memory_quick_check_failed",
+                "transaction_outcome": "rolled_back",
+            }
+        phase = "version"
+        connection.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
+            (str(SCHEMA_VERSION),),
+        )
+        phase = "commit"
+        connection.commit()
+        return {
+            **base,
+            "result": "PASS",
+            "changed": True,
+            "transaction_outcome": "committed",
+        }
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError, sqlite3.Error) as exc:
+        if connection is not None and connection.in_transaction:
+            try:
+                connection.rollback()
+                outcome = "rolled_back"
+            except (OSError, sqlite3.Error, RuntimeError):
+                outcome = "unknown"
+        else:
+            outcome = "unknown" if phase == "commit" else "not_started"
+        return {
+            **base,
+            "result": "FAIL",
+            "reason_code": "shared_memory_schema_migration_failed",
+            "error": type(exc).__name__,
+            "failure_phase": phase,
+            "transaction_outcome": outcome,
+            "changed": None if outcome == "unknown" else False,
+        }
+    finally:
+        if connection is not None:
+            connection.close()
 
 
 def _next_memory_id(conn: sqlite3.Connection) -> str:
