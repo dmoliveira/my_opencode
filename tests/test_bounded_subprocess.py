@@ -30,6 +30,20 @@ class BoundedSubprocessTest(unittest.TestCase):
     def _assert_pid_terminated(self, pid: int) -> None:
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
+            if os.name == "nt":
+                kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+                handle = kernel32.OpenProcess(0x1000, False, pid)
+                if not handle:
+                    return
+                exit_code = ctypes.c_ulong()
+                try:
+                    if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                        if exit_code.value != 259:
+                            return
+                finally:
+                    kernel32.CloseHandle(handle)
+                time.sleep(0.05)
+                continue
             try:
                 os.kill(pid, 0)
             except ProcessLookupError:
