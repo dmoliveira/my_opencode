@@ -73,6 +73,12 @@ jobs:
           HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" profile lean
           HOME="$TMP_HOME" python "$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" doctor --json
 
+      - name: Installer full-profile smoke test
+        run: |
+          trap 'rm -f scripts/.install-test-ci-untracked.py' EXIT
+          printf '%s\n' '# disposable snapshot fixture' > scripts/.install-test-ci-untracked.py
+          make install-test-full PYTHON=python
+
   windows-bounded-subprocess:
     runs-on: windows-latest
     steps:
