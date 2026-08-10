@@ -5,22 +5,23 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import uuid
 import sqlite3
 import sys
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from shared_memory_runtime import (  # type: ignore
-    _row_to_record,
-    _upsert_fts,
     DEFAULT_DB_PATH,
     SCHEMA_VERSION,
     VALID_SCOPES,
+    _row_to_record,
+    _upsert_fts,
     connect,
     connect_readonly,
     doctor_report,
+    migrate_schema,
     normalize_confidence,
     normalize_kind,
     normalize_scope,
@@ -28,7 +29,6 @@ from shared_memory_runtime import (  # type: ignore
     now_iso,
     upsert_memory_by_source,
 )
-
 
 DEFAULT_MEMORY_PATH = Path(
     os.environ.get(
@@ -194,6 +194,7 @@ def usage() -> int:
         "/memory-lifecycle restore --id <id> [--json] | "
         "/memory-lifecycle export --path <file> [--json] | "
         "/memory-lifecycle import --path <file> [--json] | "
+        "/memory-lifecycle migrate [--apply|--dry-run] [--json] | "
         "/memory-lifecycle doctor [--json]"
     )
     return 2
@@ -443,9 +444,25 @@ def emit(payload: dict[str, Any], as_json: bool) -> int:
     else:
         if payload.get("result") != "PASS":
             print(f"error: {payload.get('error', 'memory-lifecycle failed')}")
+            for key in (
+                "reason_code",
+                "failure_phase",
+                "transaction_outcome",
+                "incompatible_indexes",
+                "owned_triggers",
+            ):
+                if payload.get(key) is not None:
+                    print(f"{key}: {payload.get(key)}")
             return 1
         print(f"result: {payload.get('result')}")
         for key in (
+            "dry_run",
+            "apply",
+            "current_version",
+            "target_version",
+            "would_change",
+            "changed",
+            "transaction_outcome",
             "candidate_count",
             "changed_count",
             "entry_count",
@@ -472,6 +489,16 @@ def cmd_stats(argv: list[str]) -> int:
         },
         as_json,
     )
+
+
+def cmd_migrate(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    apply = "--apply" in argv
+    dry_run = "--dry-run" in argv or not apply
+    args = [item for item in argv if item not in {"--json", "--apply", "--dry-run"}]
+    if args or (apply and "--dry-run" in argv):
+        return usage()
+    return emit(migrate_schema(runtime_path(), dry_run=dry_run), as_json)
 
 
 def _cleanup_candidates(
@@ -1086,6 +1113,8 @@ def main(argv: list[str]) -> int:
         return usage()
     if command == "stats":
         return cmd_stats(rest)
+    if command == "migrate":
+        return cmd_migrate(rest)
     if command == "cleanup":
         return cmd_cleanup(rest)
     if command == "compress":

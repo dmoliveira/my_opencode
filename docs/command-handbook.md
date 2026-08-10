@@ -362,9 +362,11 @@ Use these directly in OpenCode:
 /memory-lifecycle cleanup --older-days 30 --scope repo --dry-run --json
 /memory-lifecycle compress --scope repo --namespace <exact-namespace> --dry-run --json
 /memory-lifecycle restore --id <memory-id> --json
+/memory-lifecycle migrate --dry-run --json
+/memory-lifecycle migrate --apply --json
 ```
 
-`/memory` stores durable local shared memory in `~/.config/opencode/my_opencode/runtime/shared_memory.db` by default. `/memory-lifecycle` operates on that same SQLite-backed runtime for stats, export, import, cleanup, compression, restore, and doctor flows. Preview cleanup/compression with `--dry-run`; combine a validated `--scope` with an exact `--namespace` when narrowing the operation. Preview samples contain local IDs and remain sensitive even though they exclude memory content. Export to a private path before broad apply, then use `restore --id` for one archived memory or import the verified export for full rollback. Lifecycle operations do not create automatic exports. If a failure reports `transaction_outcome: unknown`, inspect/export current state before retrying because the commit may already be durable.
+`/memory` stores durable local shared memory in `~/.config/opencode/my_opencode/runtime/shared_memory.db` by default. `/memory-lifecycle` operates on that same SQLite-backed runtime for stats, export, import, cleanup, compression, restore, migration, and doctor flows. Schema migration defaults to read-only preview; it accepts only the known versionless/v0 schema and requires explicit `--apply` to write the v1 marker. Unknown/future or structurally incompatible stores fail before WAL, DDL, FTS, or data writes. Preview cleanup/compression with `--dry-run`; combine a validated `--scope` with an exact `--namespace` when narrowing the operation. Preview samples contain local IDs and remain sensitive even though they exclude memory content. Export to a private path before broad apply, then use `restore --id` for one archived memory or import the verified export for full rollback. Lifecycle operations do not create automatic exports. If a failure reports `transaction_outcome: unknown`, inspect/export current state before retrying because the commit may already be durable.
 
 `/memory promote` ingests high-signal local artifacts into shared memory from digests, session index state, workflow history, claims state, and saved doctor reports without calling external services. Selected digest and session-index inputs are securely loaded before the shared-memory database is opened. Unsafe, malformed, oversized, or database-aliased sidecars fail before SQLite creates or changes the database, WAL, SHM, or journal. The command also derives internal `memory-ref:` links between related promoted memories where shared session context is available, so recall and handoff flows can carry deterministic session-linked relationships in the returned payloads.
 
@@ -683,7 +685,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
 /memory - Manage shared memory content (add|find|recall|pin|summarize|promote|doctor)
-/memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|restore|export|import|doctor) with scoped dry-run previews
+/memory-lifecycle - Manage memory lifecycle ops (stats|cleanup|compress|restore|export|import|migrate|doctor) with scoped dry-run previews
 /model-routing - Manage model routing (status|set-category|resolve|trace|recommend)
 /notify - Manage notification controls (status|profile|enable|disable|channel)
 /nvim - Manage Neovim OpenCode integration (status|doctor|snippet|install|uninstall)
