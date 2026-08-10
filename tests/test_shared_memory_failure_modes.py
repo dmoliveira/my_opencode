@@ -385,6 +385,25 @@ class SharedMemoryFailureModeTest(unittest.TestCase):
                 "idx_memories_source_ref_unique", report["incompatible_indexes"]
             )
 
+    def test_schema_migration_rejects_incompatible_fts_object(self) -> None:
+        runtime = self._runtime_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "shared-memory.db"
+            connection = runtime.connect(db_path)
+            connection.execute("DROP TABLE memory_fts")
+            connection.execute(
+                "CREATE TABLE memory_fts(id TEXT, title TEXT, summary TEXT)"
+            )
+            connection.execute(
+                "UPDATE meta SET value = '0' WHERE key = 'schema_version'"
+            )
+            connection.commit()
+            connection.close()
+
+            report = runtime.migrate_schema(db_path, dry_run=True)
+            self.assertEqual("FAIL", report["result"])
+            self.assertFalse(report["fts_structure_ok"])
+
     def test_current_schema_rejects_owned_table_triggers(self) -> None:
         runtime = self._runtime_module()
         with tempfile.TemporaryDirectory() as tmp:

@@ -21,6 +21,7 @@ from shared_memory_runtime import (  # type: ignore
     connect,
     connect_readonly,
     doctor_report,
+    inspect_schema,
     migrate_schema,
     normalize_confidence,
     normalize_kind,
@@ -1091,7 +1092,26 @@ def cmd_import(argv: list[str]) -> int:
 
 def cmd_doctor(argv: list[str]) -> int:
     as_json = "--json" in argv
-    conn = connect()
+    schema = inspect_schema(runtime_path())
+    if schema.get("result") == "FAIL":
+        schema["quick_fixes"] = [
+            "/memory-lifecycle migrate --dry-run --json",
+            "/memory-lifecycle migrate --apply --json",
+        ]
+        return emit({"command": "doctor", **schema}, as_json)
+    try:
+        conn = connect()
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        return emit(
+            {
+                "result": "FAIL",
+                "command": "doctor",
+                "path": str(runtime_path()),
+                "reason_code": "shared_memory_doctor_open_failed",
+                "error": type(exc).__name__,
+            },
+            as_json,
+        )
     report = doctor_report(conn, runtime_path())
     report["command"] = "doctor"
     report.setdefault(
