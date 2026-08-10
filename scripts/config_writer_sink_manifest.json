@@ -2306,9 +2306,27 @@
   {
     "language": "python",
     "file": "memory_lifecycle_command.py",
-    "function": "cmd_import",
-    "kind": "path.write_text",
-    "destination": "backup_path",
+    "function": "_write_atomic_json",
+    "kind": "os.replace",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "_write_atomic_json",
+    "kind": "path.unlink",
+    "destination": "temporary_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "memory_lifecycle_command.py",
+    "function": "_write_atomic_json",
+    "kind": "tempfile.NamedTemporaryFile",
+    "destination": "path.parent",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
