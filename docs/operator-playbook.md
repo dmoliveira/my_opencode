@@ -102,12 +102,13 @@ Use this to keep stale claims and runtime state from drifting.
 
 ```text
 /memory-lifecycle export --path <private-export.json> --json
+/memory-lifecycle import --path <verified-export.json> --conflict skip --json
 /memory-lifecycle cleanup --older-days 30 --scope repo --dry-run --json
 /memory-lifecycle cleanup --older-days 30 --scope repo --json
 /memory-lifecycle restore --id <memory-id> --json
 ```
 
-Use the same validated scope and exact namespace for preview and apply. Candidate samples contain local IDs and are not share-safe. Cleanup/compression soft-archive in one transaction and never create an automatic export; restore one ID explicitly, or import the verified pre-operation export for full rollback. If `transaction_outcome` is `unknown`, do not retry blindly: inspect and export current state first because the commit may already be durable.
+Import validates the full export before opening or changing the store, publishes the pre-import export atomically, then holds one writer transaction for all row writes. Responses include `transaction_outcome`, `commit_attempted`, and `backup_path`; use the backup path when the outcome is unknown. Use `--conflict skip` to retain existing source-backed or ID-only records; omit it for overwrite behavior. Use the same validated scope and exact namespace for preview and apply. Candidate samples contain local IDs and are not share-safe. Cleanup/compression soft-archive in one transaction and never create an automatic export; restore one ID explicitly, or import the verified pre-operation export for full rollback. If `transaction_outcome` is `unknown`, do not retry blindly: inspect and export current state first because the commit may already be durable.
 
 ## Incident Checklist
 

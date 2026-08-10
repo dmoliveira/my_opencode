@@ -235,7 +235,7 @@ Exercise interruption before backup creation, during SQLite online backup, after
 
 ## Import rollback fixtures
 
-Create malformed and conflicting export fixtures that fail before, during, and after validation. Verify checksum/schema failures cause zero mutation; transactional failures leave counts/content unchanged; pre-import exports remain usable; and `--dry-run`, `--conflict skip`, and overwrite behavior produce deterministic JSON summaries.
+Create malformed and conflicting export fixtures that fail before, during, and after validation. Verify full-payload validation happens before SQLite connection or backup creation; checksum/schema and nested-field failures cause zero mutation; backup publication is atomic; transactional failures leave counts/content unchanged; pre-import exports remain usable; and `--dry-run`, `--conflict skip`, and overwrite behavior produce deterministic JSON summaries.
 
 ## Compatibility matrix
 
