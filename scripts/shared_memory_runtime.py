@@ -56,6 +56,7 @@ SCHEMA_COLUMNS = {
         "updated_at": ("TEXT", 1, 0),
     },
 }
+FTS_COLUMNS = {"id", "title", "summary", "content", "tags"}
 OWNED_INDEXES = {
     "idx_memories_scope_namespace_updated": (
         False,
@@ -360,6 +361,24 @@ def _schema_inspection(conn: sqlite3.Connection) -> dict[str, Any]:
             """
         )
     )
+    fts_exists = "memory_fts" in tables
+    fts_sql = next(
+        (
+            str(row[0])
+            for row in conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name = 'memory_fts'"
+            )
+        ),
+        "",
+    )
+    fts_columns = {
+        str(row[1]) for row in conn.execute("PRAGMA table_info(memory_fts)")
+    } if fts_exists else set()
+    fts_structure_ok = not fts_exists or (
+        "virtual table" in fts_sql.lower()
+        and "using fts5" in fts_sql.lower()
+        and fts_columns == FTS_COLUMNS
+    )
     return {
         "tables": sorted(tables),
         "columns": columns,
@@ -373,11 +392,14 @@ def _schema_inspection(conn: sqlite3.Connection) -> dict[str, Any]:
         "incompatible_indexes": incompatible_indexes,
         "duplicate_source_keys": duplicate_source_keys,
         "owned_triggers": owned_triggers,
+        "fts_exists": fts_exists,
+        "fts_structure_ok": fts_structure_ok,
         "legacy_migration_ready": structure_ok
         and not missing_indexes
         and not incompatible_indexes
         and duplicate_source_keys == 0
-        and not owned_triggers,
+        and not owned_triggers
+        and fts_structure_ok,
         "fresh": not tables,
     }
 
@@ -396,6 +418,8 @@ def _require_current_schema(inspection: dict[str, Any]) -> None:
         raise RuntimeError("shared-memory database has incompatible owned indexes")
     if inspection.get("owned_triggers"):
         raise RuntimeError("shared-memory database has unexpected owned-table triggers")
+    if not inspection.get("fts_structure_ok"):
+        raise RuntimeError("shared-memory database FTS schema is incompatible")
     if inspection.get("version_state") != "current":
         raise RuntimeError(
             "shared-memory schema version is incompatible; run /memory-lifecycle migrate --apply"
@@ -951,6 +975,7 @@ def inspect_schema(db_path: Path | None = None) -> dict[str, Any]:
             or not inspection["structure_ok"]
             or inspection["incompatible_indexes"]
             or inspection["owned_triggers"]
+            or not inspection["fts_structure_ok"]
         ):
             result = "FAIL"
         payload = {"result": result, "path": str(path), **inspection}
