@@ -458,6 +458,10 @@ export function loadGatewayConfig(raw) {
     const taskResumeInfoSource = source.taskResumeInfo && typeof source.taskResumeInfo === "object"
         ? source.taskResumeInfo
         : {};
+    const codememoryMilestoneBridgeSource = source.codememoryMilestoneBridge &&
+        typeof source.codememoryMilestoneBridge === "object"
+        ? source.codememoryMilestoneBridge
+        : {};
     const todoContinuationEnforcerSource = source.todoContinuationEnforcer &&
         typeof source.todoContinuationEnforcer === "object"
         ? source.todoContinuationEnforcer
@@ -1052,6 +1056,17 @@ export function loadGatewayConfig(raw) {
             enabled: typeof taskResumeInfoSource.enabled === "boolean"
                 ? taskResumeInfoSource.enabled
                 : DEFAULT_GATEWAY_CONFIG.taskResumeInfo.enabled,
+        },
+        codememoryMilestoneBridge: {
+            enabled: typeof codememoryMilestoneBridgeSource.enabled === "boolean"
+                ? codememoryMilestoneBridgeSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.codememoryMilestoneBridge.enabled,
+            command: typeof codememoryMilestoneBridgeSource.command === "string" &&
+                codememoryMilestoneBridgeSource.command.trim()
+                ? codememoryMilestoneBridgeSource.command.trim()
+                : DEFAULT_GATEWAY_CONFIG.codememoryMilestoneBridge.command,
+            timeoutMs: positiveInt(codememoryMilestoneBridgeSource.timeoutMs, DEFAULT_GATEWAY_CONFIG.codememoryMilestoneBridge.timeoutMs),
+            maxQueueEntries: positiveInt(codememoryMilestoneBridgeSource.maxQueueEntries, DEFAULT_GATEWAY_CONFIG.codememoryMilestoneBridge.maxQueueEntries),
         },
         todoContinuationEnforcer: {
             enabled: typeof todoContinuationEnforcerSource.enabled === "boolean"

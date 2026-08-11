@@ -1,6 +1,7 @@
 {
   "version": 1,
   "hook_ids": [
+    "codememory-milestone-bridge",
     "autopilot-loop",
     "continuation",
     "semantic-output-summarizer",
