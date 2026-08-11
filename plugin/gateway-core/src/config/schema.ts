@@ -303,6 +303,14 @@ export interface TaskResumeInfoConfig {
   enabled: boolean;
 }
 
+// Declares the opt-in Codememory milestone event bridge.
+export interface CodememoryMilestoneBridgeConfig {
+  enabled: boolean;
+  command: string;
+  timeoutMs: number;
+  maxQueueEntries: number;
+}
+
 // Declares todo-driven continuation enforcer settings.
 export interface TodoContinuationEnforcerConfig {
   enabled: boolean;
@@ -667,6 +675,7 @@ export interface GatewayConfig {
   tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
   assistantMessageTimestamp: AssistantMessageTimestampConfig;
   taskResumeInfo: TaskResumeInfoConfig;
+  codememoryMilestoneBridge: CodememoryMilestoneBridgeConfig;
   todoContinuationEnforcer: TodoContinuationEnforcerConfig;
   compactionTodoPreserver: CompactionTodoPreserverConfig;
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
@@ -715,6 +724,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     disabled: [],
     order: [
+      "codememory-milestone-bridge",
       "autopilot-loop",
       "continuation",
       "semantic-output-summarizer",
@@ -1114,6 +1124,12 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   taskResumeInfo: {
     // Opt-in: task-result prose duplicates durable task/session state in prompt history.
     enabled: false,
+  },
+  codememoryMilestoneBridge: {
+    enabled: false,
+    command: "oc",
+    timeoutMs: 2000,
+    maxQueueEntries: 32,
   },
   todoContinuationEnforcer: {
     enabled: true,

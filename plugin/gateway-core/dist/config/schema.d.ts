@@ -228,6 +228,12 @@ export interface AssistantMessageTimestampConfig {
 export interface TaskResumeInfoConfig {
     enabled: boolean;
 }
+export interface CodememoryMilestoneBridgeConfig {
+    enabled: boolean;
+    command: string;
+    timeoutMs: number;
+    maxQueueEntries: number;
+}
 export interface TodoContinuationEnforcerConfig {
     enabled: boolean;
     cooldownMs: number;
@@ -508,6 +514,7 @@ export interface GatewayConfig {
     tasksTodowriteDisabler: TasksTodowriteDisablerConfig;
     assistantMessageTimestamp: AssistantMessageTimestampConfig;
     taskResumeInfo: TaskResumeInfoConfig;
+    codememoryMilestoneBridge: CodememoryMilestoneBridgeConfig;
     todoContinuationEnforcer: TodoContinuationEnforcerConfig;
     compactionTodoPreserver: CompactionTodoPreserverConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;

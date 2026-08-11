@@ -35,7 +35,7 @@ Canonical command mental model:
 
 For a reusable external delivery-policy reference, search your local `agents.md` clone first when available, then use the public `agents.md` playbook docs (`AGENTS.md`, `docs/index.md`, `docs/validation-policy.md`) when you need canonical shareable links.
 
-Gateway runtime tuning is layered: `~/.config/opencode/my_opencode/gateway-core.config.json` provides global defaults, the active project `.opencode/gateway-core.config.json` overrides them, and explicit plugin options apply last. `MY_OPENCODE_GATEWAY_CONFIG_PATH` deliberately replaces the automatic sidecar layers. Arrays replace lower-layer values, nested objects merge, and a malformed layer clears itself and lower-precedence sidecar state before any later valid override is applied.
+Gateway runtime tuning is layered: `~/.config/opencode/my_opencode/gateway-core.config.json` provides global defaults, the active project `.opencode/gateway-core.config.json` overrides them, and explicit plugin options apply last. `MY_OPENCODE_GATEWAY_CONFIG_PATH` deliberately replaces the automatic sidecar layers. Arrays replace lower-layer values, nested objects merge, and a malformed layer clears itself and lower-precedence sidecar state before any later valid override is applied. The opt-in `codememoryMilestoneBridge` records compact delegation, validation, PR, and merge milestones through `oc event noted`; it never creates tasks/sessions or changes task status, and it fails open when Codememory is unavailable.
 
 ## Flow 1: Claim -> Deliver -> Close
 

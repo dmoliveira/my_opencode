@@ -93,7 +93,7 @@ test("canonical hook manifest stays synchronized with the runtime manifest", () 
 test("every index hook dispatch path uses the latency-bound wrapper", () => {
   const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
   assert.equal(source.match(/dispatchGatewayHookEvent\(\{/g)?.length, 1);
-  assert.equal(source.match(/dispatchHook\(\{/g)?.length, 13);
+  assert.equal(source.match(/dispatchHook\(\{/g)?.length, 14);
   assert.match(source, /gatewayEventAuditEnabled\(\)/);
   assert.match(source, /enqueueGatewayLocalAggregateAudit/);
 });

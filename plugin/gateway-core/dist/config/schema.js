@@ -9,6 +9,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         enabled: true,
         disabled: [],
         order: [
+            "codememory-milestone-bridge",
             "autopilot-loop",
             "continuation",
             "semantic-output-summarizer",
@@ -408,6 +409,12 @@ export const DEFAULT_GATEWAY_CONFIG = {
     taskResumeInfo: {
         // Opt-in: task-result prose duplicates durable task/session state in prompt history.
         enabled: false,
+    },
+    codememoryMilestoneBridge: {
+        enabled: false,
+        command: "oc",
+        timeoutMs: 2000,
+        maxQueueEntries: 32,
     },
     todoContinuationEnforcer: {
         enabled: true,

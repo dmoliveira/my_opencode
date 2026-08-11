@@ -75,6 +75,7 @@ import { createSubagentQuestionBlockerHook } from "./hooks/subagent-question-blo
 import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-timeline/index.js";
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
+import { createCodememoryMilestoneBridgeHook } from "./hooks/codememory-milestone-bridge/index.js";
 import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
 import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js";
 import { createSubagentLifecycleSupervisorHook } from "./hooks/subagent-lifecycle-supervisor/index.js";
@@ -846,6 +847,13 @@ function configuredHooks(ctx, runtime) {
             enforceMainSyncInline: cfg.postMergeSyncGuard.enforceMainSyncInline,
             reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
         })),
+        safeHook("codememory-milestone-bridge", () => createCodememoryMilestoneBridgeHook({
+            directory,
+            enabled: cfg.codememoryMilestoneBridge.enabled,
+            command: cfg.codememoryMilestoneBridge.command,
+            timeoutMs: cfg.codememoryMilestoneBridge.timeoutMs,
+            maxQueueEntries: cfg.codememoryMilestoneBridge.maxQueueEntries,
+        })),
     ];
     return resolveHookOrder(hooks.filter((hook) => hook !== null), hookPlan.order, cfg.hooks.disabled);
 }
@@ -1009,6 +1017,25 @@ export default function GatewayCorePlugin(ctx, options) {
                 tool: input.tool,
                 hook_count: executedHooks.length,
             });
+            const milestoneBridge = selectedHooks.find((hook) => hook.id === "codememory-milestone-bridge");
+            if (milestoneBridge && !executedHooks.includes(milestoneBridge)) {
+                try {
+                    await dispatchHook({
+                        hook: milestoneBridge,
+                        eventType: "tool.execute.before.error",
+                        payload: {
+                            input,
+                            output,
+                            directory,
+                            error,
+                        },
+                        directory,
+                    });
+                }
+                catch {
+                    // Keep the original before-hook failure as the surfaced error.
+                }
+            }
             for (const hook of executedHooks.reverse()) {
                 try {
                     const result = await dispatchHook({
