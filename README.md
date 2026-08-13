@@ -51,7 +51,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 ## Why this setup rocks 🎯
 
 - **One source of truth** for global OpenCode config.
-- **Token-aware workflow** by keeping managed MCPs disabled by default.
+- **Token-aware workflow** by keeping non-Google-Drive managed MCPs disabled by default.
 - **Instant MCP toggling** with `/mcp` commands in the OpenCode prompt.
 - **Portable install** with a one-liner script and symlinked default config path.
 - **Worktree-first repo**: start each task in a dedicated git worktree branch and keep the main project folder off task branches.
@@ -89,7 +89,7 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 - 🧱 Built-in `/init-deep` command to scaffold hierarchical `AGENTS.md` guidance.
 - 🛑 Built-in `/continuation-stop` for one-shot continuation shutdown (autopilot stop + resume disable).
 - 🧰 `/agent-pool` tracks manual visible capacity while `/bg` remains the job execution backend.
-- 💸 Better token control with managed MCPs off by default plus MCP profiles (`minimal`, `research`, `web`, `all`) and on-demand toggling.
+- 💸 Better token control with non-Google-Drive MCPs off by default, Google Drive enabled for project access, plus MCP profiles (`minimal`, `research`, `web`, `google-drive`, `all`) and on-demand toggling.
 - 🔒 Autonomous-friendly permissions for trusted project paths.
 - 🔁 Easy updates by rerunning the installer.
 - 🧩 Clear, versioned config for experiments and rollbacks.
@@ -174,7 +174,7 @@ Quickstart commands:
 /gateway status
 ```
 
-Enable MCPs only when the task benefits from extra context, for example with `/mcp profile research`.
+Google Drive MCP is enabled by default for project access. Turn it off or back on with `/mcp disable google-drive` and `/mcp enable google-drive`; use `/mcp profile minimal` to disable every managed MCP.
 
 Recommended command split:
 - `/delivery` for day-to-day issue delivery and closeout
@@ -189,7 +189,7 @@ Protected branches (`main`, `master`) in the primary project folder are edit-blo
 
 Use `/complete <prefix>` for command discovery, `docs/command-handbook.md` for full command examples, `docs/operator-playbook.md` for canonical operator flows, and `docs/parallel-wt-playbook.md` for the worktree-first execution checklist.
 
-Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`.
+Managed `/mcp` names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`, `google-drive`.
 
 `firecrawl` is a retired, disable-only compatibility target. `/mcp disable firecrawl` safely disables an existing custom entry without creating or replacing one.
 
@@ -199,6 +199,7 @@ Profiles:
 - `minimal` -> disable all managed MCPs
 - `research` -> `context7`, `gh_grep`
 - `web` -> `playwright`, `exa_search`
+- `google-drive` -> `google-drive`
 - `all` -> enable all managed MCPs
 
 ## Repo layout 📦
