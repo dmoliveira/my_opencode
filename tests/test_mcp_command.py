@@ -197,5 +197,79 @@ class McpFirecrawlRetirementTest(unittest.TestCase):
         self.assertIn("/mcp disable firecrawl", result.stdout)
 
 
+class McpGoogleDriveTest(unittest.TestCase):
+    def test_google_drive_enable_and_disable_use_the_canonical_remote(self) -> None:
+        with config_sandbox('{"mcp": {}}\n') as (config, env):
+            enabled = run_command(env, "enable", "google-drive")
+            self.assertEqual(0, enabled.returncode, enabled.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {
+                    "type": "remote",
+                    "url": "https://drivemcp.googleapis.com/mcp/v1",
+                    "enabled": True,
+                },
+                saved["mcp"]["google-drive"],
+            )
+
+            disabled = run_command(env, "disable", "google-drive")
+            self.assertEqual(0, disabled.returncode, disabled.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertIs(saved["mcp"]["google-drive"]["enabled"], False)
+            self.assertEqual(
+                "https://drivemcp.googleapis.com/mcp/v1",
+                saved["mcp"]["google-drive"]["url"],
+            )
+
+    def test_google_drive_profile_is_standalone_and_minimal_turns_it_off(self) -> None:
+        with config_sandbox('{"mcp": {}}\n') as (config, env):
+            profile = run_command(env, "profile", "google-drive")
+            self.assertEqual(0, profile.returncode, profile.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertTrue(saved["mcp"]["google-drive"]["enabled"])
+            for name in mcp_command.ACTIVE_SERVERS:
+                self.assertEqual(
+                    name == "google-drive", saved["mcp"][name]["enabled"]
+                )
+
+            minimal = run_command(env, "profile", "minimal")
+            self.assertEqual(0, minimal.returncode, minimal.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertFalse(saved["mcp"]["google-drive"]["enabled"])
+
+    def test_google_drive_mutations_preserve_custom_fields(self) -> None:
+        custom = {
+            "type": "remote",
+            "url": "https://custom.example/mcp",
+            "headers": {"Authorization": "Bearer {env:GOOGLE_TOKEN}"},
+            "options": {"timeout": 30},
+            "enabled": False,
+        }
+        for action, expected_enabled in (
+            (("enable", "google-drive"), True),
+            (("disable", "google-drive"), False),
+            (("profile", "google-drive"), True),
+            (("profile", "minimal"), False),
+        ):
+            with self.subTest(action=action), config_sandbox(
+                json.dumps({"mcp": {"google-drive": custom}}, indent=2) + "\n"
+            ) as (config, env):
+                result = run_command(env, *action)
+                self.assertEqual(0, result.returncode, result.stderr)
+                saved = json.loads(config.read_text(encoding="utf-8"))
+                entry = saved["mcp"]["google-drive"]
+                for key in ("type", "url", "headers", "options"):
+                    self.assertEqual(custom[key], entry[key])
+                self.assertIs(entry["enabled"], expected_enabled)
+
+    def test_help_exposes_google_drive_profile_and_toggles(self) -> None:
+        with config_sandbox('{"mcp": {}}\n') as (_config, env):
+            result = run_command(env, "help")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("profile google-drive", result.stdout)
+        self.assertIn("/mcp enable google-drive", result.stdout)
+        self.assertIn("/mcp disable google-drive", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

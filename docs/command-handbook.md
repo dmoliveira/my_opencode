@@ -18,6 +18,7 @@ Use these directly in OpenCode:
 /mcp profile playwright
 /mcp profile exa
 /mcp profile github
+/mcp profile google-drive
 /mcp profile web
 /mcp profile all
 /mcp enable context7
@@ -31,6 +32,8 @@ Use these directly in OpenCode:
 /mcp disable firecrawl
 /mcp enable github
 /mcp disable github
+/mcp enable google-drive
+/mcp disable google-drive
 /mcp enable all
 /mcp disable all
 ```
@@ -82,11 +85,11 @@ Advanced posture:
 - Use Playwright MCP for flows that need integrated network, storage, assertion, vision, or host-managed browser tools.
 - Treat `/browser ensure --json` as the main readiness/remediation step; use `/browser doctor --json` and `/mcp doctor --json` to inspect config, capability coverage, and warnings.
 
-Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`.
+Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`, `google-drive`.
 
 `firecrawl` is retired and disable-only. `/mcp disable firecrawl` changes only `enabled` on an existing custom entry; it does not create a default or print the custom command or URL. Enable requests fail without rewriting the config.
 
-Default posture: all managed MCPs start disabled until you enable a targeted profile or individual server.
+Default posture: Google Drive is enabled in this project; all other managed MCPs start disabled until you enable a targeted profile or individual server.
 
 Alias shortcuts: `ghgrep` -> `gh_grep`, `exa` -> `exa_search`.
 
@@ -98,8 +101,11 @@ Profiles:
 - `playwright` -> `playwright`
 - `exa` -> `exa_search`
 - `github` -> `github`
+- `google-drive` -> `google-drive`
 - `web` -> `playwright`, `exa_search`
 - `all` -> enables all managed MCPs
+
+Google Drive is enabled in the project config by default. Use `/mcp disable google-drive` to turn it off, `/mcp enable google-drive` to turn it back on, or `/mcp profile minimal` to disable every managed MCP.
 
 ## Plugin control inside OpenCode 🎛️
 

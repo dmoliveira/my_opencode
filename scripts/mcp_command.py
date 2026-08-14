@@ -28,6 +28,7 @@ ACTIVE_SERVERS = (
     "playwright",
     "exa_search",
     "github",
+    "google-drive",
 )
 RETIRED_SERVERS = {
     "firecrawl": "retired_disable_only",
@@ -46,6 +47,10 @@ SERVER_DEFAULTS = {
     },
     "exa_search": {"type": "remote", "url": "https://mcp.exa.ai/mcp"},
     "github": {"type": "remote", "url": "https://api.githubcopilot.com/mcp/"},
+    "google-drive": {
+        "type": "remote",
+        "url": "https://drivemcp.googleapis.com/mcp/v1",
+    },
 }
 PROFILE_MAP = {
     "minimal": [],
@@ -55,6 +60,7 @@ PROFILE_MAP = {
     "playwright": ["playwright"],
     "exa": ["exa_search"],
     "github": ["github"],
+    "google-drive": ["google-drive"],
     "web": ["playwright", "exa_search"],
     "all": list(ACTIVE_SERVERS),
 }
@@ -151,6 +157,9 @@ def print_next_steps() -> None:
     print("- /mcp enable gh_grep")
     print("- /mcp enable exa_search")
     print("- /mcp enable github")
+    print("- /mcp enable google-drive")
+    print("- /mcp disable google-drive")
+    print("- /mcp profile google-drive")
     print("- /mcp profile all")
     print("- /mcp disable all")
     print("- /mcp disable firecrawl  # retired compatibility target")

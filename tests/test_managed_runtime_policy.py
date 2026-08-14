@@ -20,14 +20,19 @@ class ManagedRuntimePolicyTest(unittest.TestCase):
     def test_autoupdate_requires_operator_notification(self) -> None:
         self.assertEqual("notify", self._config()["autoupdate"])
 
-    def test_hosted_mcps_remain_disabled_and_playwright_is_exact_pinned(self) -> None:
+    def test_managed_mcps_have_expected_defaults_and_playwright_is_exact_pinned(self) -> None:
         mcp = self._config()["mcp"]
         hosted = {"context7", "gh_grep", "exa_search", "github"}
-        self.assertEqual(hosted | {"playwright"}, set(mcp))
+        self.assertEqual(hosted | {"playwright", "google-drive"}, set(mcp))
         for name in hosted:
             with self.subTest(name=name):
                 self.assertEqual("remote", mcp[name]["type"])
                 self.assertIs(mcp[name]["enabled"], False)
+
+        google_drive = mcp["google-drive"]
+        self.assertEqual("remote", google_drive["type"])
+        self.assertEqual("https://drivemcp.googleapis.com/mcp/v1", google_drive["url"])
+        self.assertIs(google_drive["enabled"], True)
 
         playwright = mcp["playwright"]
         self.assertEqual("local", playwright["type"])

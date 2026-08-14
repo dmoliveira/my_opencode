@@ -10,7 +10,7 @@ Startup instructions are loaded from `~/.config/opencode/my_opencode/AGENTS.md` 
 
 ## Canonical first-run commands [h:79a9eb20]
  [h:b29cb517]
-Managed MCPs start disabled by default; opt into a focused profile only when you need extra context. [h:5ec50bf5]
+Google Drive MCP starts enabled for project access; other managed MCPs start disabled. Use `/mcp profile minimal` to disable all managed MCPs, or enable a focused profile when you need extra context. [h:5ec50bf5]
  [h:90502280]
 Required first-run checks: [h:bf437ec9]
  [h:92b53b41]
