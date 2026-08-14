@@ -34,7 +34,7 @@ class AgentDoctorPromptBudgetTest(unittest.TestCase):
         check = self.budget_check(agent_doctor.ORCHESTRATOR_BODY_WORD_LIMIT + 1)
 
         self.assertFalse(check["ok"])
-        self.assertIn("limit is 450", check["reason"])
+        self.assertIn("limit is 480", check["reason"])
 
     def test_orchestrator_compaction_and_contract(self) -> None:
         path = REPO_ROOT / "agent" / "specs" / "orchestrator.json"
@@ -47,11 +47,18 @@ class AgentDoctorPromptBudgetTest(unittest.TestCase):
             [check for check in checks if not check["ok"]],
         )
         word_count = agent_doctor.count_prompt_words(body)
-        self.assertEqual(446, word_count)
         self.assertLessEqual(
-            word_count,
-            int(agent_doctor.ORCHESTRATOR_BODY_WORD_BASELINE * 0.70),
+            word_count, agent_doctor.ORCHESTRATOR_BODY_WORD_LIMIT
         )
+        self.assertLessEqual(
+            word_count, int(agent_doctor.ORCHESTRATOR_BODY_WORD_BASELINE * 0.70)
+        )
+        todo_check = next(
+            check
+            for check in checks
+            if check["name"] == "spec_orchestrator_todo_tools_denied"
+        )
+        self.assertTrue(todo_check["ok"], todo_check)
 
 
 class AgentDoctorTaskerPromptTest(unittest.TestCase):
@@ -73,6 +80,12 @@ class AgentDoctorTaskerPromptTest(unittest.TestCase):
             word_count,
             int(agent_doctor.TASKER_BODY_WORD_BASELINE * 0.75),
         )
+        delegation_check = next(
+            check
+            for check in checks
+            if check["name"] == "spec_tasker_research_delegation_surface"
+        )
+        self.assertTrue(delegation_check["ok"], delegation_check)
 
     def test_tasker_budget_boundary(self) -> None:
         at_limit = agent_doctor.prompt_body_budget_check(
