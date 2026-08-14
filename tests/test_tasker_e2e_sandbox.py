@@ -472,7 +472,12 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
 
     def test_runtime_environment_strips_host_config_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
+            # This test only exercises the isolated subprocess environment.  The
+            # live sandbox still requires real launchers before it can run.
+            with patch.object(
+                tasker_e2e_sandbox.shutil, "which", return_value=sys.executable
+            ):
+                runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
             observed = tasker_e2e_sandbox.run_process(
                 [
                     sys.executable,
