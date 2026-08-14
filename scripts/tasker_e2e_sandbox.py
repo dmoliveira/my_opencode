@@ -6,8 +6,8 @@ import argparse
 import json
 import os
 import re
-import shutil
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -755,12 +755,12 @@ def _is_tasker_write(tokens: list[str]) -> bool:
 
 
 def _is_tasker_read_only(tokens: list[str]) -> bool:
-    command, nested = _oc_command_path(tokens)
+    command, _nested = _oc_command_path(tokens)
     if command in TASKER_READ_ONLY_SUBCOMMANDS:
         return True
-    if command in TASKER_RECOVERY_SUBCOMMANDS and not _has_option(tokens, "--apply"):
-        return True
-    return False
+    return command in TASKER_RECOVERY_SUBCOMMANDS and not _has_option(
+        tokens, "--apply"
+    )
 
 
 def _validate_add_command(tokens: list[str]) -> None:
