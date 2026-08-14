@@ -3231,7 +3231,124 @@
     "file": "tasker_e2e_sandbox.py",
     "function": "prepare_tasker_runtime",
     "kind": "path.write_text",
+    "destination": "agent_dir / 'explore.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
+    "destination": "agent_dir / 'librarian.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
     "destination": "config_root / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.mkdir",
+    "destination": "codememory_home",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.mkdir",
+    "destination": "wrapper_dir",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
+    "destination": "codememory_config",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
+    "destination": "wrapper",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.chmod",
+    "destination": "wrapper",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.mkdir",
+    "destination": "workspace",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.mkdir",
+    "destination": "workspace_codememory",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.symlink_to",
+    "destination": "workspace / 'AGENTS.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.symlink_to",
+    "destination": "workspace / 'docs'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
+    "destination": "workspace_codememory / 'config.sqlite.yaml'",
     "count": 1,
     "classification": "isolated_fixture_exemption"
   }

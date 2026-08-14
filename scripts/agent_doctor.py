@@ -31,7 +31,7 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
     "docs/agent-architecture.md": [
         "## Inventory",
         "## Execution Workflow",
-        "| `tasker` | primary | contract-only | cheap | `writing` | Codememory-backed planning capture without implementation |",
+        "| `tasker` | primary | contract-only | cheap | `writing` | Codememory-backed planning/graph management with bounded read-only research |",
         "Select lead agent (`tasker` for planning capture, `orchestrator` for complex execution).",
     ],
     "docs/agent-tool-restrictions.md": [
@@ -59,7 +59,7 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
 ALLOWED_COST_TIERS = {"free", "cheap", "expensive"}
 
 ORCHESTRATOR_BODY_WORD_BASELINE = 687
-ORCHESTRATOR_BODY_WORD_LIMIT = 450
+ORCHESTRATOR_BODY_WORD_LIMIT = 480
 ORCHESTRATOR_RENDERED_CONTRACT_MARKERS = [
     "Low risk (",
     "Medium risk (",
@@ -75,6 +75,7 @@ ORCHESTRATOR_RENDERED_CONTRACT_MARKERS = [
     "Use `/model-routing set-category balanced`",
     "Use `/model-routing set-category deep` for planner-heavy work (`strategic-planner`, `ambiguity-analyst`)",
     "Use `/model-routing set-category critical`",
+    "retain the category in delegation metadata",
     "Keep at most 2 concurrent subagents",
     "Do not run duplicate `reviewer` or `verifier` passes on unchanged diffs",
     "Default to a single writer",
@@ -97,43 +98,44 @@ TASKER_BODY_WORD_LIMIT = 850
 TASKER_SHARED_CONTRACT_MARKERS = [
     "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
     "Never delegate implementation or validation work.",
-    "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
+    "at most two total read-only `explore` or `librarian` research requests per user request",
+    "Use bash only for `oc`, `command -v oc`, and closely related backend health checks.",
     "initiative, work item, durable note, reference brief, relation, and planning session",
     "`--format json`",
-    "`oc add task \"<title>\" --kind chore --priority P2`",
-    "`--goal` and `--summary`",
-    "`oc add epic \"<title>\" --summary \"...\"`",
-    "`oc add memory \"<title>\" --kind note --body \"...\"`",
-    "`--label planning`",
-    "`oc add doc \"<title>\" --type spec|runbook|brief ...`",
-    "`oc link <epic_id> parent-of <task_id>`",
-    "`oc link <blocked_task_id> depends-on <prereq_task_id>`",
-    "`blocked-by`",
-    "`oc link <memory_id> about <task_id>`",
-    "`captured`",
-    "`--scope`, `--worktree`, and `--branch`",
-    "one backend write per bash call",
-    "`oc set`",
-    "`oc get --view links`",
-    "do not fall back to OpenCode todo/memory state",
-    "return a blocker with exact evidence and the install/repair command needed",
-    "3+ related tasks",
-    "`depends on`, `blocked by`, `after`, `before`, `later`, `do next`, and `only after`",
-    "exact created artifact ids",
+    "`oc config --doctor --format json`",
+    "`oc db migrate --format json`",
+    "missing, empty, legacy_adoptable, or pending",
+    "`oc find \"<title>\" --type <entity> --scope \"<scope>\" --format json`",
+    "inspect each candidate with `oc get <id> --view full --format json`",
+    "`oc add task \"<title>\" --scope \"<scope>\" --kind chore --priority P2`",
+    "`oc add epic \"<title>\" --scope \"<scope>\" --summary \"...\"`",
+    "`oc add memory \"<title>\" --scope \"<scope>\" --kind note --body \"...\" --label planning`",
+    "--label planning",
+    "`oc add doc \"<title>\" --scope \"<scope>\" --type <type> --ref \"<path-or-url>\"`",
+    "`oc link <epic_id> parent-of <task_id> --format json`",
+    "`oc link <blocked_task_id> depends-on <prereq_task_id> --format json`",
+    "`oc link <memory_id> about <record_id> --format json`",
+    "`--scope` is required for every artifact write",
+    "must be the only command in its bash call",
+    "`oc set` only for an explicitly requested non-status task/epic metadata update",
+    "Codememory has no hard delete",
+    "cancel only an unclaimed, non-doing task",
+    "Do not fall back to OpenCode todo/memory state",
+    "3+ related work items",
     "blocker reason + evidence + next best action",
-    "ask follow-up questions only when ambiguity would materially change the artifact graph or persistence target",
+    "Ask only when ambiguity materially changes the persistence target or graph",
 ]
 TASKER_TEMPLATE_CONTRACT_MARKERS = [
     *TASKER_SHARED_CONTRACT_MARKERS,
     "Current backend adapter: {{BACKEND_NAME}} via `{{BACKEND_CLI}}`.",
-    "Read existing state with {{READ_DISCOVERY}}.",
-    "verify backend availability in this order: (1) `command -v oc`, (2) `oc config --doctor`, (3) repo-local scope defaults from {{REPO_SCOPE_CONFIG}}, (4) repo-local backend checkout discovery at {{BACKEND_LOCAL_REPO}} if the alias is missing, and then (5) install or symlink repair guidance if the repo exists but the launcher is missing.",
+    "Read existing state with {{READ_DISCOVERY}}",
+    "inspect {{REPO_SCOPE_CONFIG}}",
 ]
 TASKER_RENDERED_CONTRACT_MARKERS = [
     *TASKER_SHARED_CONTRACT_MARKERS,
     "Current backend adapter: Codememory via `oc`.",
-    "Read existing state with `oc current`, `oc next`, `oc queue`, `oc find`, `oc list`, and `oc get`.",
-    "verify backend availability in this order: (1) `command -v oc`, (2) `oc config --doctor`, (3) repo-local scope defaults from `.codememory/config.yaml`, (4) repo-local backend checkout discovery at `~/Codes/Projects/codememory` if the alias is missing, and then (5) install or symlink repair guidance if the repo exists but the launcher is missing.",
+    "Read existing state with `oc current`, `oc next`, `oc queue`, `oc find`, `oc get`, `oc list`, and `oc history`",
+    "inspect `.codememory/config.sqlite.yaml`",
 ]
 
 REQUIRED_AGENTS: dict[str, dict[str, str]] = {
@@ -159,6 +161,7 @@ REQUIRED_MARKERS: dict[str, list[str]] = {
     "tasker.md": [
         "mode: primary",
         "bash: true",
+        "task: true",
         "write: false",
         "edit: false",
         *TASKER_RENDERED_CONTRACT_MARKERS,
@@ -341,6 +344,21 @@ def _check_orchestrator_prompt_contract(
                 "path": str(path),
             }
         )
+    tools = spec.get("tools")
+    metadata = spec.get("metadata")
+    denied = metadata.get("denied_tools") if isinstance(metadata, dict) else []
+    checks.append(
+        {
+            "name": "spec_orchestrator_todo_tools_denied",
+            "ok": isinstance(tools, dict)
+            and tools.get("todowrite") is False
+            and tools.get("todoread") is False
+            and isinstance(denied, list)
+            and {"todowrite", "todoread"}.issubset(set(denied)),
+            "reason": "orchestrator must deny ad-hoc todo tools in favor of Codememory",
+            "path": str(path),
+        }
+    )
     return checks
 
 
@@ -389,6 +407,24 @@ def _check_tasker_prompt_contract(
                 "path": str(path),
             }
         )
+    tools = spec.get("tools")
+    metadata = spec.get("metadata")
+    denied = metadata.get("denied_tools") if isinstance(metadata, dict) else []
+    checks.append(
+        {
+            "name": "spec_tasker_research_delegation_surface",
+            "ok": isinstance(tools, dict)
+            and tools.get("task") is True
+            and all(
+                tools.get(tool) is False
+                for tool in ("write", "edit", "webfetch", "todowrite", "todoread")
+            )
+            and isinstance(denied, list)
+            and "task" not in denied,
+            "reason": "tasker must allow bounded research delegation while keeping mutation and direct network tools denied",
+            "path": str(path),
+        }
+    )
     return checks
 
 

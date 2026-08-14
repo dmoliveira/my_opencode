@@ -8,7 +8,7 @@ This document is the single reference for agent structure, role boundaries, and 
 | --- | --- | --- | --- | --- | --- |
 | `build` | primary | yes | cheap | `balanced` | direct implementation for clear, scoped work |
 | `orchestrator` | primary | yes | expensive | `balanced` | end-to-end multi-step execution |
-| `tasker` | primary | contract-only | cheap | `writing` | Codememory-backed planning capture without implementation |
+| `tasker` | primary | contract-only | cheap | `writing` | Codememory-backed planning/graph management with bounded read-only research |
 | `explore` | subagent | no | free | `quick` | internal codebase discovery |
 | `librarian` | subagent | no | cheap | `balanced` | external docs/upstream lookup |
 | `oracle` | subagent | no | expensive | `critical` | architecture/risk advisory |
@@ -31,7 +31,7 @@ Metadata source of truth: `agent/specs/*.json`.
 
 1. Select lead agent (`tasker` for planning capture, `orchestrator` for complex execution).
 2. Set routing category by effort (`quick|balanced|deep|critical|visual|writing`).
-3. Either capture/update planning artifacts only (`tasker`) or delegate focused subagents for execution work (`orchestrator`).
+3. Either capture/update planning artifacts and synthesize up to two read-only research findings (`tasker`) or delegate focused subagents for execution work (`orchestrator`).
 4. Implement and validate in small increments when the selected primary is an execution agent.
 5. Run verifier + reviewer gates before completion for implementation work.
 6. Produce release communication artifacts when needed.
@@ -54,6 +54,7 @@ Task-graph-aware default:
 - Planning and sequence design: `strategic-planner`
 - Assumption and ambiguity surfacing: `ambiguity-analyst`
 - Plan risk and missing gates: `plan-critic`
+- Tasker research: at most two total read-only `explore`/`librarian` calls per user request, synthesized before Tasker persists graph changes.
 
 ## Delegation Context Contract
 

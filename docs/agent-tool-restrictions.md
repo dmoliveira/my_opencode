@@ -13,8 +13,8 @@ This document defines explicit deny-list expectations for agent safety boundarie
 
 | Agent | Denied Tools |
 | --- | --- |
-| `orchestrator` | none |
-| `tasker` | `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
+| `orchestrator` | `todowrite`, `todoread` |
+| `tasker` | `write`, `edit`, `webfetch`, `todowrite`, `todoread` |
 | `explore` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `librarian` | `bash`, `write`, `edit`, `task`, `todowrite`, `todoread` |
 | `oracle` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
@@ -30,3 +30,4 @@ This document defines explicit deny-list expectations for agent safety boundarie
 
 - `python3 scripts/agent_doctor.py run --json` verifies deny-list metadata consistency.
 - `python3 scripts/build_agents.py --profile balanced --check` verifies generated markdown stays aligned with specs.
+- `tasker` may use its delegation facility only for at most two total read-only `explore` or `librarian` requests per user request; prompt and sandbox checks enforce no child implementation, validation, or Codememory mutation.

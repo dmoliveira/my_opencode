@@ -6,7 +6,6 @@ import os
 import shutil
 import sqlite3
 import socket
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -125,6 +124,7 @@ from playwright_defaults import (  # type: ignore
     PLAYWRIGHT_MCP_COMMAND,
     PLAYWRIGHT_MCP_PACKAGE_SPEC,
 )
+from tasker_e2e_sandbox import prepare_tasker_runtime, snapshot_tree  # type: ignore
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -258,8 +258,12 @@ def run_script_layered(
     )
 
 
-def run_oc_json(cwd: Path, *args: str) -> dict:
+def run_oc_json(
+    cwd: Path, *args: str, env_overrides: dict[str, str] | None = None
+) -> dict:
     env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
     env.setdefault("OPENCODE_SESSION_ID", "selftest-tasker-sandbox")
     env.setdefault("MY_OPENCODE_SESSION_ID", env["OPENCODE_SESSION_ID"])
     result = subprocess.run(
@@ -552,7 +556,8 @@ exit 0
                     "edit: false",
                     "Current backend adapter: Codememory via `oc`.",
                     "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
-                    "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
+                    "Use bash only for `oc`, `command -v oc`, and closely related backend health checks.",
+                    "Every `oc` command, including read-only checks, must be the only command in its bash call",
                 ]
             },
             "explore.md": {
@@ -779,14 +784,17 @@ exit 0
         tasker_allowed_tools = set(tasker_tool_surface.get("allowed", []))
         tasker_denied_tools = set(tasker_tool_surface.get("denied", []))
         expect(
-            {"bash", "read", "list", "glob", "grep"}.issubset(tasker_allowed_tools),
-            "tasker agent-catalog metadata should keep the planning-friendly read/bash tool surface",
+            {"bash", "read", "list", "glob", "grep", "task"}.issubset(
+                tasker_allowed_tools
+            ),
+            "tasker agent-catalog metadata should allow bounded research delegation with its planning-friendly read/bash tool surface",
         )
         expect(
-            {"write", "edit", "task", "todowrite", "todoread"}.issubset(
+            {"write", "edit", "webfetch", "todowrite", "todoread"}.issubset(
                 tasker_denied_tools
-            ),
-            "tasker agent-catalog metadata should keep implementation and todo mutation tools denied",
+            )
+            and "task" not in tasker_denied_tools,
+            "tasker agent-catalog metadata should deny implementation/direct-network/todo tools while allowing bounded research delegation",
         )
         agent_catalog_doctor = subprocess.run(
             [
@@ -812,35 +820,35 @@ exit 0
             )
         else:
             sandbox_scope = f"selftest-tasker-sandbox-{sha256(str(tmp).encode('utf-8')).hexdigest()[:12]}"
-            sandbox_worktree = tmp / "tasker-sandbox-worktree"
-            sandbox_worktree.mkdir(parents=True, exist_ok=True)
-            tasker_epic = run_oc_json(
-                REPO_ROOT,
+            repository_codememory_before = snapshot_tree(REPO_ROOT / ".codememory")
+            tasker_runtime_env = prepare_tasker_runtime(tmp / "tasker-codememory")
+            tasker_database = Path(
+                tasker_runtime_env["TASKER_E2E_CODEMEMORY_DATABASE"]
+            )
+
+            def run_tasker_oc_json(*args: str) -> dict:
+                return run_oc_json(
+                    REPO_ROOT, *args, env_overrides=tasker_runtime_env
+                )
+
+            run_tasker_oc_json("db", "migrate", "--format", "json")
+            tasker_epic = run_tasker_oc_json(
                 "add",
                 "epic",
                 "selftest tasker sandbox epic",
                 "--scope",
                 sandbox_scope,
-                "--worktree",
-                str(sandbox_worktree),
-                "--branch",
-                "sandbox/tasker",
                 "--summary",
                 "selftest sandbox for planning-only tasker artifact capture",
                 "--format",
                 "json",
             )
-            tasker_plan_task = run_oc_json(
-                REPO_ROOT,
+            tasker_plan_task = run_tasker_oc_json(
                 "add",
                 "task",
                 "selftest tasker planning task",
                 "--scope",
                 sandbox_scope,
-                "--worktree",
-                str(sandbox_worktree),
-                "--branch",
-                "sandbox/tasker",
                 "--kind",
                 "chore",
                 "--priority",
@@ -852,17 +860,12 @@ exit 0
                 "--format",
                 "json",
             )
-            tasker_docs_task = run_oc_json(
-                REPO_ROOT,
+            tasker_docs_task = run_tasker_oc_json(
                 "add",
                 "task",
                 "selftest tasker docs task",
                 "--scope",
                 sandbox_scope,
-                "--worktree",
-                str(sandbox_worktree),
-                "--branch",
-                "sandbox/tasker",
                 "--kind",
                 "chore",
                 "--priority",
@@ -874,15 +877,12 @@ exit 0
                 "--format",
                 "json",
             )
-            tasker_memory = run_oc_json(
-                REPO_ROOT,
+            tasker_memory = run_tasker_oc_json(
                 "add",
                 "memory",
                 "selftest tasker note",
                 "--scope",
                 sandbox_scope,
-                "--worktree",
-                str(sandbox_worktree),
                 "--kind",
                 "note",
                 "--label",
@@ -892,8 +892,7 @@ exit 0
                 "--format",
                 "json",
             )
-            parent_link_one = run_oc_json(
-                REPO_ROOT,
+            parent_link_one = run_tasker_oc_json(
                 "link",
                 str(tasker_epic["id"]),
                 "parent-of",
@@ -901,8 +900,7 @@ exit 0
                 "--format",
                 "json",
             )
-            parent_link_two = run_oc_json(
-                REPO_ROOT,
+            parent_link_two = run_tasker_oc_json(
                 "link",
                 str(tasker_epic["id"]),
                 "parent-of",
@@ -910,8 +908,7 @@ exit 0
                 "--format",
                 "json",
             )
-            dependency_link = run_oc_json(
-                REPO_ROOT,
+            dependency_link = run_tasker_oc_json(
                 "link",
                 str(tasker_docs_task["id"]),
                 "depends-on",
@@ -919,8 +916,7 @@ exit 0
                 "--format",
                 "json",
             )
-            memory_link = run_oc_json(
-                REPO_ROOT,
+            memory_link = run_tasker_oc_json(
                 "link",
                 str(tasker_memory["id"]),
                 "about",
@@ -929,8 +925,7 @@ exit 0
                 "json",
             )
             tasker_link_records = [
-                run_oc_json(
-                    REPO_ROOT,
+                run_tasker_oc_json(
                     "get",
                     str(link["id"]),
                     "--view",
@@ -978,8 +973,7 @@ exit 0
             tasker_plan_links = {
                 "links": tasker_edges_for(str(tasker_plan_task["id"]))
             }
-            tasker_memory_full = run_oc_json(
-                REPO_ROOT,
+            tasker_memory_full = run_tasker_oc_json(
                 "get",
                 str(tasker_memory["id"]),
                 "--view",
@@ -1044,6 +1038,15 @@ exit 0
                 == "selftest planning note captured through the tasker sandbox"
                 and "planning" in (tasker_memory_full.get("labels") or []),
                 "tasker sandbox memory should preserve note body and planning label",
+            )
+            expect(
+                tasker_database.is_file(),
+                "tasker selftest should use the configured disposable Codememory database",
+            )
+            expect(
+                snapshot_tree(REPO_ROOT / ".codememory")
+                == repository_codememory_before,
+                "tasker selftest must not change repository Codememory storage",
             )
         literal_result = subprocess.run(
             [
