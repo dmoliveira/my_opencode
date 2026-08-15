@@ -19,8 +19,8 @@ requiring the primary agent to remember every tracking command.
 
 | Task | Status | Dependency | Outcome |
 | --- | --- | --- | --- |
-| `task_123` Intent graph authority contract | doing | none | Versioned proposal, authority, privacy, and replay contract |
-| `task_124` Manual intent coordinator MVP | blocked | `task_123` | Fresh add-only dry-run and idempotent transactional apply |
+| `task_123` Intent graph authority contract | done | none | Versioned proposal, authority, privacy, and replay contract |
+| `task_124` Manual intent coordinator MVP | doing | `task_123` | Fresh add-only dry-run and idempotent transactional apply |
 | `task_125` Task graph projection | blocked | `task_124` | One-way Codememory projection and drift detection |
 | `task_126` Durable intent ingress | blocked | `task_124` | Bounded asynchronous hook outbox |
 | `task_127` Proposal-only planner | blocked | `task_126`, `task_122` | Bounded read-only research and typed proposals |

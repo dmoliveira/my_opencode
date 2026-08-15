@@ -2224,6 +2224,60 @@
   },
   {
     "language": "python",
+    "file": "intent_coordinator_command.py",
+    "function": "_apply_manifest",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_coordinator_command.py",
+    "function": "_ensure_private_directory",
+    "kind": "path.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_coordinator_command.py",
+    "function": "_ensure_private_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_coordinator_command.py",
+    "function": "_write_manifest_file",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_coordinator_command.py",
+    "function": "_write_manifest_file",
+    "kind": "tempfile.mkstemp",
+    "destination": "state_dir / 'tmp'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_coordinator_command.py",
+    "function": "load_proposal",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
     "file": "knowledge_capture_pipeline.py",
     "function": "save_entries",
     "kind": "path.mkdir",

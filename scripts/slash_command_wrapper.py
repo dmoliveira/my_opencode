@@ -13,6 +13,7 @@ TRUSTED_SCRIPT_DIR = Path(__file__).resolve().parent
 
 WRAPPER_SCRIPT_OVERRIDES = {
     "bg": "background_task_manager.py",
+    "intent-coordinator": "intent_coordinator_command.py",
     "stack": "stack_profile_command.py",
     "nvim": "nvim_integration_command.py",
     "digest": "session_digest.py",

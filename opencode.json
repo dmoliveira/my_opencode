@@ -285,6 +285,10 @@
       "description": "Detect and preview natural-language slash intents",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before auto-slash --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
+    "intent": {
+      "description": "Preview and apply bounded typed intent proposals (schema|preview|apply|doctor)",
+      "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before intent-coordinator --raw-args \"$ARGUMENTS\"`\nShow only the command output."
+    },
     "rules": {
       "description": "Inspect conditional rules (status|explain|disable-id|enable-id|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before rules --raw-args \"$ARGUMENTS\"`\nShow only the command output."

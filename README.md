@@ -171,6 +171,7 @@ Quickstart commands:
 /delivery status --json
 /autopilot go --goal "finish current objective" --json
 /autoflow status --json
+/intent doctor --json
 /gateway status
 ```
 
@@ -181,6 +182,7 @@ Recommended command split:
 - `/workflow` for lower-level workflow validation and resume control
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for explicit plan-file execution
+- `/intent` for explicit typed proposal preview and Codememory graph application
 - `/ox-*` for stable reusable prompt expansions that you want to keep refining over time
 
 Before implementation work, create a dedicated git worktree branch for the task. Do not edit task files from the main project folder, and do not `git checkout` or `git switch` that folder onto a task branch.

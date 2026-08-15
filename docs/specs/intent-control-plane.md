@@ -42,6 +42,13 @@ The MVP accepts UTF-8 JSON with this top-level shape:
   },
   "records": [
     {
+      "key": "epic:control-plane",
+      "entity_type": "epic",
+      "title": "Build intent control plane",
+      "kind": "feature",
+      "priority": "P1"
+    },
+    {
       "key": "task:coordinator",
       "entity_type": "task",
       "title": "Build manual intent coordinator",
@@ -81,13 +88,17 @@ Lifecycle-affecting or scheduler-affecting links such as `active-task` and
 1. Validate the complete proposal before reading or writing Codememory.
 2. Reject more than ten combined records and links in the MVP.
 3. Require every link endpoint to reference a record created by the proposal.
-4. Reject any exact entity-type and title collision in the target scope.
-5. Reject the complete proposal when any validation or collision exists.
-6. Translate the proposal deterministically into one `oc batch plan` manifest.
-7. Persist a prepared receipt before invoking Codememory.
-8. Apply records and links with one `oc batch plan` operation.
-9. Mark the receipt applied only after valid machine-readable command output.
-10. Return created IDs and the receipt without echoing raw source content.
+4. Validate each link's source and target entity types before any Codememory
+   operation.
+5. Reject any exact entity-type and title collision in the target scope.
+6. Reject the complete proposal when any validation or collision exists.
+7. Translate the proposal deterministically into one `oc batch plan` manifest.
+8. Persist a prepared receipt before invoking Codememory.
+9. Apply records and links with one `oc batch plan` operation.
+10. Validate the returned scope, total count, record keys/types/titles/IDs, and
+    resolved link IDs against the proposal.
+11. Mark the receipt applied only after exact machine-readable output passes.
+12. Return created IDs and the receipt without echoing raw source content.
 
 The MVP is fresh and add-only. It does not reuse or update existing records,
 link existing records, or change task lifecycle. Existing-record reconciliation
@@ -109,8 +120,14 @@ directory and contain:
   "version": 1,
   "proposal_id": "user-request-20260815-01",
   "scope": "dmoliveira/my_opencode",
+  "source": {
+    "kind": "user",
+    "id": "message-id",
+    "summary": "Track and coordinate the requested work"
+  },
   "fingerprint": "sha256",
   "request_id": "intent_coord_<digest>",
+  "actor": "intent-coordinator",
   "status": "prepared",
   "manifest": "deterministic batch YAML",
   "result": null
@@ -119,7 +136,13 @@ directory and contain:
 
 Allowed statuses are `prepared` and `applied`. A crash or uncertain command
 failure leaves `prepared`; retry resubmits the exact stored manifest and request
-ID. An applied receipt returns the stored result without another write.
+ID with the receipt's original actor. An applied receipt returns the stored
+result without another write.
+
+Operator-only overrides use `MY_OPENCODE_CODEMEMORY_BIN`,
+`MY_OPENCODE_CODEMEMORY_CONFIG`, `MY_OPENCODE_INTENT_COORDINATOR_STATE_DIR`,
+and `MY_OPENCODE_INTENT_COORDINATOR_ACTOR`. They are intentionally not exposed
+as `/intent` arguments.
 
 ## Privacy
 
@@ -127,6 +150,7 @@ ID. An applied receipt returns the stored result without another write.
 - Persist source identity, a concise caller-provided summary, and an optional
   content digest.
 - Unknown source and record fields fail validation rather than being retained.
+- Proposal files must be regular files and are read once with a hard byte cap.
 - Record bodies, summaries, and references are intentional Codememory content;
   callers must not place secrets in them.
 - Keep command output free of database paths unless doctor mode is requested.
@@ -141,6 +165,8 @@ ID. An applied receipt returns the stored result without another write.
 - Reusing a proposal ID with changed content fails before Codememory mutation.
 - A rejected collision or failed batch leaves no partial graph mutation.
 - Codememory command failures return the exact operation and bounded stderr.
+- Malformed or incomplete batch results leave the receipt `prepared` for safe
+  idempotent recovery.
 
 ## Acceptance Gates
 
@@ -148,6 +174,7 @@ ID. An applied receipt returns the stored result without another write.
   unsupported-edge, and unknown-reference cases.
 - Dry-run proves deterministic manifest generation and collision rejection.
 - Apply emits one deterministic request ID and a machine-readable receipt.
+- Apply verifies exact returned records and links before committing the receipt.
 - Same-proposal replay is a no-op with stable created IDs.
 - Conflicting replay fails without graph changes.
 - Concurrent coordinator attempts serialize on the scope lock.
