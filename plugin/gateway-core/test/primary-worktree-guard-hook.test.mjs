@@ -360,6 +360,37 @@ test("primary-worktree-guard preserves representative allow, reroute, and branch
   }
 })
 
+test("primary-worktree-guard allows quoted punctuation in Codememory closeout metadata", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-primary-worktree-"))
+  try {
+    execSync("git init -b main", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: true, order: ["primary-worktree-guard"], disabled: [] },
+        primaryWorktreeGuard: {
+          enabled: true,
+          allowedBranches: ["main", "master"],
+          blockEdits: true,
+          blockBranchSwitches: true,
+        },
+      },
+    })
+    const command =
+      "oc end-session --outcome done session_62 --achievements 'validated; closeout & handoff | complete'"
+    const payload = { args: { command } }
+
+    await plugin["tool.execute.before"](
+      { tool: "bash", sessionID: "session-primary-closeout-punctuation" },
+      payload,
+    )
+
+    assert.equal(payload.args.command, command)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("primary-worktree-guard explains reroute failures when helper path is missing", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-primary-worktree-"))
   const originalHelper = process.env.OPENCODE_MAINTENANCE_HELPER_PATH

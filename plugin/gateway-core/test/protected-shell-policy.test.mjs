@@ -54,6 +54,11 @@ const allowedCommands = [
   "oc resume --task task_171",
   'oc done task_171 --note "completed"',
   'oc end-session --outcome done session_62 --achievements "cleanup complete"',
+  "oc add task 'plan; validate & close | archive'",
+  "oc add session 'plan; validate & close | archive'",
+  "oc resume --task 'task_171;validate&close|archive'",
+  "oc done task_171 --note 'validated; closeout & handoff | complete'",
+  "oc end-session --outcome done session_62 --achievements 'validated; closeout & handoff | complete'",
   "git branch -r --contains origin/main",
   "gh auth status",
   "gh repo view --json nameWithOwner",
@@ -95,10 +100,22 @@ const blockedCommands = [
 .shell touch /tmp/pwn"`,
   "oc current > /tmp/out || true",
   "git fetch --upload-pack=/tmp/evil origin",
+  "oc end-session --outcome done session_62 --achievements validated; touch /tmp/pwn",
+  "oc end-session --outcome done session_62 --achievements validated & touch /tmp/pwn",
+  "oc end-session --outcome done session_62 --achievements validated | touch /tmp/pwn",
+  "oc end-session --outcome done session_62 --achievements validated > /tmp/pwn",
+  'oc end-session --outcome done session_62 --achievements "$(touch /tmp/pwn)"',
+  "oc end-session --outcome done session_62 --achievements '${HOME}'",
+  'oc end-session --outcome done session_62 --achievements "$$"',
+  'oc end-session --outcome done session_62 --achievements "$?"',
+  'oc end-session --outcome done session_62 --achievements "$0"',
+  'oc end-session --outcome done session_62 --achievements "$@"',
+  "oc end-session --outcome done session_62 --achievements 'unterminated",
+  'oc end-session --outcome done session_62 --achievements "unterminated',
 ]
 
 test("protected shell policy allows the complete guard command inventory", () => {
-  assert.equal(allowedCommands.length, 66)
+  assert.equal(allowedCommands.length, 71)
   assert.equal(new Set(allowedCommands).size, allowedCommands.length)
   for (const command of allowedCommands) {
     assert.equal(isAllowedProtectedShellCommand(command), true, `expected allowed: ${command}`)
@@ -106,7 +123,7 @@ test("protected shell policy allows the complete guard command inventory", () =>
 })
 
 test("protected shell policy blocks the complete guard command inventory", () => {
-  assert.equal(blockedCommands.length, 21)
+  assert.equal(blockedCommands.length, 33)
   assert.equal(new Set(blockedCommands).size, blockedCommands.length)
   for (const command of blockedCommands) {
     assert.equal(isAllowedProtectedShellCommand(command), false, `expected blocked: ${command}`)
