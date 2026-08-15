@@ -51,7 +51,7 @@ jobs:
 
       - name: Install pinned OpenCode resume-test runtime
         run: |
-          npm install --global opencode-ai@1.18.5 --no-audit --no-fund
+          npm install --global opencode-ai@1.18.18 --no-audit --no-fund
 
       - name: Gate provider-boundary session resume regressions
         run: |

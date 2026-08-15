@@ -47,13 +47,13 @@ item ID does not qualify. Wrong paths, malformed shapes, aliases visited through
 an untrusted path, and neighboring metadata remain scanned and fail closed.
 
 OpenCode tool-state UI metadata is also projected according to the reviewed
-OpenCode `1.18.5` conversion contract (tag commit
-`e5cc278dec9294a627a7b05f47ce6a564408c1a2`). The reviewed converter is
+OpenCode `1.18.18` conversion contract (tag commit
+`31406ccc51b4bd2a4e1e086b2bcaa5f7f804f26d`). The reviewed converter is
 `packages/opencode/src/session/message-v2.ts`, blob
-`1bea9f52c3ec6afec280e176a930c747c72091b7`; its relevant reasoning and tool
-projection is byte-identical to `1.18.0`. The transform-before-conversion
+`9b3f2c46f40578128001957004c67633a18da23a`; it hydrates message and part IDs
+from the SQLite rows before provider processing. The transform-before-conversion
 ordering is pinned by `packages/opencode/src/session/prompt.ts`, blob
-`eb116f6b960f6da4115ffb262695af6162ac2045`. For completed, pending, and running
+`22b1d7d99a2aa22211b5dae59385fa8a8a1d311d`. For completed, pending, and running
 tool parts, `state.metadata` is not dispatched and is not scanned. For error
 parts, only an own string `state.metadata.output` is scanned and redacted, and
 only when an own boolean `interrupted` is `true`. A genuinely absent output falls
@@ -68,11 +68,11 @@ causes it to be scanned through that path.
 
 ### Canonical provider attachment envelope
 
-A completed OpenAI tool-result attachment can contain a Google-key-shaped
-substring in its Base64 transport by chance. The first affected production
-history contained two such matches across PNG attachments, so the finalizer
-blocked before making any provider request. A second audit round confirmed that
-the pinned converter uses the same transport for JPEG images and PDF files.
+A direct user file or completed OpenAI tool-result attachment can contain a
+Google-key-shaped substring in its Base64 transport by chance. The finalizer
+must not block a canonical opaque binary payload before making a provider
+request. The reviewed converter carries PNG and JPEG as image media and PDF as
+file media for both supported attachment shapes.
 
 The gateway omits only the one explicitly designated detector at the built-in
 default-pattern index, and only when it is exactly
@@ -83,8 +83,8 @@ designation, even if it contains that exact expression. A duplicate,
 equivalent-source, or differently flagged detector also remains enforcing.
 Every other configured detector still scans the complete URL.
 
-The exception requires own data properties and identity checks proving this
-shape:
+The exception requires own data properties and identity checks proving one of
+these two independent shapes:
 
 - an assistant message routed through provider `openai` with non-empty message
   and session IDs;
@@ -96,6 +96,13 @@ shape:
   exact `data:<mime>;base64,<payload>` URL whose header MIME equals the declared
   attachment MIME.
 
+Or:
+
+- a user message has non-empty message and session IDs; and
+- `parts[index]` is an own direct `file` part with a non-empty part ID, exact
+  message/session references, and an exact `data:<mime>;base64,<payload>` URL
+  whose header MIME equals the declared attachment MIME.
+
 The only allowed MIME values are `image/png`, `image/jpeg`, and
 `application/pdf`. Parameters, aliases such as `image/jpg`, unknown MIME values,
 header mismatches, empty payloads, URL-safe Base64, malformed padding, and
@@ -105,12 +112,13 @@ the gateway does not claim their bytes form a semantically valid image or
 document.
 
 OpenCode import and fork remap the containing message and tool-part references
-but can retain source IDs inside nested attachment records. The reviewed
-converter does not use those nested IDs for dispatch, so they must be present
-but need not equal the remapped message. All other container identities are
-checked exactly. Proxies, custom prototypes, accessors, non-enumerable or
-inherited qualifiers, malformed shapes, compacted tool states, unsupported media,
-and aliases reached through an unqualified path fail closed.
+but can retain source IDs inside nested tool attachments. The reviewed converter
+does not use those nested IDs for dispatch, so they must be present but need not
+equal the remapped message. Direct user-file references must match their
+containing message exactly. All other container identities are checked exactly.
+Proxies, custom prototypes, accessors, non-enumerable or inherited qualifiers,
+malformed shapes, compacted tool states, unsupported media, and aliases reached
+through an unqualified path fail closed.
 
 The transport validator caps the complete URL at `16,777,216` characters and
 decoded bytes at `12,582,912`. It requires canonical standard Base64 and exact
@@ -122,17 +130,19 @@ container, not decompressed pixels or image meaning. OCR-visible secrets,
 steganography, malware, decoded-content DLP, and authenticated attachment origin
 remain outside this regex DLP guarantee.
 
-This path is pinned to OpenCode `1.18.5` and its reviewed `message-v2.ts`
-converter above. OpenCode pins `ai` `6.0.168`; the reviewed media mapping is
-`packages/ai/src/prompt/convert-to-language-model-prompt.ts` at commit
-`c38119a2e3df201a95a9979580f2c7a3c1b319ab`, blob
-`4fedd90b17f82c24cff7fd41b7f4872412a8a7d0`. It maps tool-result `image/*` data
-to image content and other media to file content. OpenCode also pins
-`@ai-sdk/openai` `3.0.84`; the reviewed Responses converter is
+This path is pinned to OpenCode `1.18.18` and its reviewed `message-v2.ts`
+converter above. Its root catalog retains `ai` `6.0.168`, and
+`packages/opencode/package.json` retains `@ai-sdk/openai` `3.0.84`. The reviewed
+`ai` media mapping is `packages/ai/src/prompt/convert-to-language-model-prompt.ts`
+at commit `c38119a2e3df201a95a9979580f2c7a3c1b319ab`, blob
+`4fedd90b17f82c24cff7fd41b7f4872412a8a7d0`; it maps direct user and tool-result
+`image/*` data to image content and other media to file content. The reviewed
+Responses converter is
 `packages/openai/src/responses/convert-to-openai-responses-input.ts` at commit
 `da385f747e8277411d8b49c65e8a22c3bf158f4c`. It serializes JPEG and PNG as
-`input_image` and PDF as `input_file` inside `function_call_output.output`.
-Converter drift must fail closed until all three layers are reverified.
+`input_image` and PDF as `input_file` for direct user content and inside
+`function_call_output.output`. Converter drift must fail closed until all three
+layers are reverified.
 
 ## Resource limits
 
@@ -181,10 +191,11 @@ becomes the `providerMaxNodes` fallback and caps the default
 - assembled-plugin default-versus-legacy resume regression tests;
 - gateway lint, build, full tests, and provider-boundary live smoke;
 - credential-free `make gateway-resume-redaction-e2e`, which imports a private
-  synthetic large session, forks it through OpenCode `1.18.5`, and requires
+  synthetic large session, forks it through OpenCode `1.18.18`, and requires
   native OpenAI localhost dispatch with absent-item-ID ciphertext, redaction,
-  metadata projection, exact PNG and JPEG `input_image` entries, one PDF
-  `input_file`, source-integrity, audit, and cleanup assertions;
+  metadata projection, exact direct-user and tool-result PNG/JPEG `input_image`
+  entries, direct-user and tool-result PDF `input_file` entries, source-integrity,
+  audit, and cleanup assertions;
 - static release-contract coverage proving `release-check` depends on the
   unsuppressed native resume gate; and
 - an owner-only export/import replay of the affected session using the candidate

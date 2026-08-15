@@ -25,7 +25,7 @@ from typing import Any, TextIO
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-EXPECTED_OPENCODE_VERSION = "1.18.5"
+EXPECTED_OPENCODE_VERSION = "1.18.18"
 LEGACY_MAX_CHARS = 2_097_152
 LARGE_HISTORY_CHARS = 2_120_000
 MAX_REQUEST_BYTES = 8 * 1024 * 1024
@@ -294,15 +294,9 @@ def write_runtime_config(
                     "apiKey": OPENAI_API_KEY,
                     "baseURL": f"http://127.0.0.1:{port}/v1",
                 },
-                "models": {
-                    "mock": {
-                        "name": "Resume E2E Native Model",
-                        "limit": {"context": 4_000_000, "output": 4096},
-                    }
-                },
             }
         }
-        model = "openai/mock"
+        model = "openai/gpt-4o"
     else:
         raise HarnessFailure("unknown_provider_fixture")
 
@@ -595,9 +589,11 @@ def mutate_export(source_path: Path, fixture_path: Path) -> str:
         None,
     )
     require(isinstance(user, dict) and isinstance(assistant, dict), "seed_turn_missing")
+    user_info = user.get("info")
     user_parts = user.get("parts")
     assistant_info = assistant.get("info")
     assistant_parts = assistant.get("parts")
+    require(isinstance(user_info, dict), "seed_user_info_missing")
     require(isinstance(user_parts, list) and user_parts, "seed_user_parts_missing")
     require(isinstance(assistant_info, dict), "seed_assistant_info_missing")
     require(
@@ -615,9 +611,11 @@ def mutate_export(source_path: Path, fixture_path: Path) -> str:
     require(isinstance(text_part, dict), "seed_assistant_text_missing")
 
     session_id = str(info.get("id") or "")
+    user_message_id = str(user_info.get("id") or "")
     message_id = str(assistant_info.get("id") or "")
     base_part_id = str(text_part.get("id") or "")
     require(session_id.startswith("ses_"), "seed_session_id_invalid")
+    require(user_message_id.startswith("msg_"), "seed_user_message_id_invalid")
     require(message_id.startswith("msg_"), "seed_message_id_invalid")
 
     first_user_part = user_parts[0]
@@ -625,12 +623,49 @@ def mutate_export(source_path: Path, fixture_path: Path) -> str:
         isinstance(first_user_part, dict) and first_user_part.get("type") == "text",
         "seed_user_text_missing",
     )
+    user_base_part_id = str(first_user_part.get("id") or "")
+    require(user_base_part_id.startswith("prt_"), "seed_user_part_id_invalid")
     first_user_part["text"] = (
         f"{HISTORY_CONTROL}\n{'Z' * LARGE_HISTORY_CHARS}\npassword={MUTABLE_SECRET}"
     )
+    user_parts.extend(
+        [
+            {
+                "type": "file",
+                "mime": "image/png",
+                "url": PNG_ATTACHMENT_DATA_URL,
+                "filename": "direct.png",
+                "id": derive_part_id(user_base_part_id, "u01"),
+                "sessionID": session_id,
+                "messageID": user_message_id,
+            },
+            {
+                "type": "file",
+                "mime": "image/jpeg",
+                "url": JPEG_ATTACHMENT_DATA_URL,
+                "filename": "direct.jpg",
+                "id": derive_part_id(user_base_part_id, "u02"),
+                "sessionID": session_id,
+                "messageID": user_message_id,
+            },
+            {
+                "type": "file",
+                "mime": "application/pdf",
+                "url": PDF_ATTACHMENT_DATA_URL,
+                "filename": "direct.pdf",
+                "id": derive_part_id(user_base_part_id, "u03"),
+                "sessionID": session_id,
+                "messageID": user_message_id,
+            },
+        ]
+    )
     assistant_info["providerID"] = "openai"
-    assistant_info["modelID"] = "mock"
-    info["model"] = {"id": "mock", "providerID": "openai", "variant": "default"}
+    assistant_info["modelID"] = "gpt-4o"
+    info["model"] = {
+        "id": "gpt-4o",
+        "providerID": "openai",
+        "variant": "default",
+    }
 
     now = int(time.time() * 1000)
     reasoning = {
@@ -710,6 +745,9 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
     png_attachment_found = False
     jpeg_attachment_found = False
     pdf_attachment_found = False
+    direct_png_attachment_found = False
+    direct_jpeg_attachment_found = False
+    direct_pdf_attachment_found = False
     mutable_secret_found = False
     coherent_references = True
 
@@ -744,6 +782,22 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
                             "itemId" not in openai
                             and openai.get("reasoningEncryptedContent") == CIPHERTEXT
                         )
+            if message_info.get("role") == "user" and part.get("type") == "file":
+                direct_png_attachment_found |= (
+                    part.get("mime") == "image/png"
+                    and part.get("filename") == "direct.png"
+                    and part.get("url") == PNG_ATTACHMENT_DATA_URL
+                )
+                direct_jpeg_attachment_found |= (
+                    part.get("mime") == "image/jpeg"
+                    and part.get("filename") == "direct.jpg"
+                    and part.get("url") == JPEG_ATTACHMENT_DATA_URL
+                )
+                direct_pdf_attachment_found |= (
+                    part.get("mime") == "application/pdf"
+                    and part.get("filename") == "direct.pdf"
+                    and part.get("url") == PDF_ATTACHMENT_DATA_URL
+                )
             if part.get("type") == "tool":
                 state = part.get("state")
                 if isinstance(state, dict):
@@ -784,6 +838,9 @@ def verify_fixture(data: dict[str, Any], session_id: str) -> list[dict[str, Any]
     require(png_attachment_found, "png_attachment_fixture_missing")
     require(jpeg_attachment_found, "jpeg_attachment_fixture_missing")
     require(pdf_attachment_found, "pdf_attachment_fixture_missing")
+    require(direct_png_attachment_found, "direct_png_attachment_fixture_missing")
+    require(direct_jpeg_attachment_found, "direct_jpeg_attachment_fixture_missing")
+    require(direct_pdf_attachment_found, "direct_pdf_attachment_fixture_missing")
     require(mutable_secret_found, "mutable_secret_fixture_missing")
     return messages
 
@@ -828,6 +885,7 @@ def validate_native_wire(
         "native_reasoning_summary_invalid",
     )
 
+    user_contents: list[dict[str, Any]] = []
     user_texts: list[str] = []
     for item in items:
         if item.get("role") != "user":
@@ -836,6 +894,8 @@ def validate_native_wire(
         if not isinstance(content, list):
             continue
         for part in content:
+            if isinstance(part, dict):
+                user_contents.append(part)
             if (
                 isinstance(part, dict)
                 and part.get("type") == "input_text"
@@ -847,6 +907,37 @@ def validate_native_wire(
     )
     require(user_texts.count(expected_history) == 1, "native_history_text_invalid")
     require(user_texts.count(RESUME_CONTROL) == 1, "native_resume_prompt_invalid")
+    direct_user_images = [
+        part for part in user_contents if part.get("type") == "input_image"
+    ]
+    direct_user_files = [
+        part for part in user_contents if part.get("type") == "input_file"
+    ]
+    require(
+        {json.dumps(item, sort_keys=True) for item in direct_user_images}
+        == {
+            json.dumps(
+                {"type": "input_image", "image_url": PNG_ATTACHMENT_DATA_URL},
+                sort_keys=True,
+            ),
+            json.dumps(
+                {"type": "input_image", "image_url": JPEG_ATTACHMENT_DATA_URL},
+                sort_keys=True,
+            ),
+        },
+        "native_direct_user_image_invalid",
+    )
+    require(
+        direct_user_files
+        == [
+            {
+                "type": "input_file",
+                "filename": "direct.pdf",
+                "file_data": PDF_ATTACHMENT_DATA_URL,
+            }
+        ],
+        "native_direct_user_file_invalid",
+    )
 
     function_calls = [item for item in items if item.get("type") == "function_call"]
     require(len(function_calls) == 1, "native_function_call_count_invalid")
@@ -925,7 +1016,7 @@ def validate_native_wire(
         (JPEG_ATTACHMENT_DATA_URL, "native_jpeg_attachment_count_invalid"),
         (PDF_ATTACHMENT_DATA_URL, "native_pdf_attachment_count_invalid"),
     ):
-        require(list(iter_strings(payload)).count(marker) == 1, reason)
+        require(list(iter_strings(payload)).count(marker) == 2, reason)
 
     prompt_cache_key = payload.get("prompt_cache_key")
     require(isinstance(prompt_cache_key, str), "prompt_cache_key_missing")
@@ -954,6 +1045,9 @@ def validate_native_wire(
         "png_attachment_preserved_on_wire": True,
         "jpeg_attachment_preserved_on_wire": True,
         "pdf_attachment_preserved_on_wire": True,
+        "direct_user_png_attachment_preserved_on_wire": True,
+        "direct_user_jpeg_attachment_preserved_on_wire": True,
+        "direct_user_pdf_attachment_preserved_on_wire": True,
         "reasoning_without_item_id_on_wire": "id" not in reasoning,
         "prompt_cache_key_stable": True,
     }
@@ -1007,6 +1101,9 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         "png_attachment_preserved_on_wire": False,
         "jpeg_attachment_preserved_on_wire": False,
         "pdf_attachment_preserved_on_wire": False,
+        "direct_user_png_attachment_preserved_on_wire": False,
+        "direct_user_jpeg_attachment_preserved_on_wire": False,
+        "direct_user_pdf_attachment_preserved_on_wire": False,
         "reasoning_without_item_id_on_wire": False,
         "opaque_attachment_collision_omission_audit_seen": False,
         "prompt_cache_key_stable": False,
@@ -1203,7 +1300,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                         imported_session_id,
                         "--fork",
                         "--model",
-                        "openai/mock",
+                        "openai/gpt-4o",
                         "--agent",
                         "build",
                         "--format",
@@ -1268,7 +1365,10 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 require(request.path == "/v1/responses", "native_request_path_invalid")
                 require(request.authorization_expected, "native_authorization_invalid")
                 require(request.peer_is_loopback, "native_peer_not_loopback")
-                require(request.payload.get("model") == "mock", "native_model_invalid")
+                require(
+                    request.payload.get("model") == "gpt-4o",
+                    "native_model_invalid",
+                )
                 report.update(
                     validate_native_wire(
                         request.payload,
@@ -1308,6 +1408,18 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 require(
                     report["pdf_attachment_preserved_on_wire"],
                     "pdf_attachment_missing_on_wire",
+                )
+                require(
+                    report["direct_user_png_attachment_preserved_on_wire"],
+                    "direct_user_png_attachment_missing_on_wire",
+                )
+                require(
+                    report["direct_user_jpeg_attachment_preserved_on_wire"],
+                    "direct_user_jpeg_attachment_missing_on_wire",
+                )
+                require(
+                    report["direct_user_pdf_attachment_preserved_on_wire"],
+                    "direct_user_pdf_attachment_missing_on_wire",
                 )
                 require(
                     report["reasoning_without_item_id_on_wire"],
@@ -1432,7 +1544,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                     "opaque_attachment_collision_omission_audit_missing",
                 )
                 require(
-                    attachment_omission_rows[0].get("omitted_match_count") == 3,
+                    attachment_omission_rows[0].get("omitted_match_count") == 6,
                     "opaque_attachment_collision_omission_count_invalid",
                 )
                 redaction_row = redaction_rows[0]
