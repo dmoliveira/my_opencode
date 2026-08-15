@@ -74,12 +74,22 @@ function runHelperWithArgs(args, options = {}) {
   }
 }
 
-test("worktree helper tells operators to run allowed oc done directly", () => {
-  const report = runHelper('oc done task_175 --note "completed"')
+test("worktree helper reports allowed oc done as unexecuted direct guidance", () => {
+  const execution = runHelperWithArgs([
+    "maintenance",
+    "--directory",
+    repoDirectory,
+    "--command",
+    'oc done task_175 --note "completed"',
+    "--json",
+  ])
+  const report = JSON.parse(execution.stdout)
 
-  assert.equal(report.result, "PASS")
-  assert.equal(report.mode, "direct_run")
+  assert.equal(execution.status, 3)
+  assert.equal(report.result, "NOT_EXECUTED")
+  assert.equal(report.mode, "direct_guidance")
   assert.match(report.note, /already allowed directly on protected main/i)
+  assert.match(report.note, /did not execute/i)
   assert.deepEqual(report.commands, ['oc done task_175 --note "completed"'])
   assert.ok(!("suggested_worktree" in report))
 })
@@ -88,11 +98,11 @@ test("worktree helper tells operators to run allowed oc add commands directly", 
   const taskReport = runHelper('oc add task "Improve gateway stall recovery" --scope dmoliveira/my_opencode --kind feature --priority P1')
   const sessionReport = runHelper('oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery')
 
-  assert.equal(taskReport.result, "PASS")
-  assert.equal(taskReport.mode, "direct_run")
+  assert.equal(taskReport.result, "NOT_EXECUTED")
+  assert.equal(taskReport.mode, "direct_guidance")
   assert.deepEqual(taskReport.commands, ['oc add task "Improve gateway stall recovery" --scope dmoliveira/my_opencode --kind feature --priority P1'])
-  assert.equal(sessionReport.result, "PASS")
-  assert.equal(sessionReport.mode, "direct_run")
+  assert.equal(sessionReport.result, "NOT_EXECUTED")
+  assert.equal(sessionReport.mode, "direct_guidance")
   assert.deepEqual(sessionReport.commands, ['oc add session "Implement gateway stall recovery fixes" --task task_112 --worktree . --branch feat/gateway-stall-recovery'])
 })
 
@@ -100,20 +110,21 @@ test("worktree helper treats direct session doctor and repair commands as protec
   const doctorReport = runHelper("python3 scripts/session_command.py doctor --json")
   const repairReport = runHelper("python3 scripts/session_command.py repair-stale --stale-seconds 300 --apply --json")
 
-  assert.equal(doctorReport.result, "PASS")
-  assert.equal(doctorReport.mode, "direct_run")
+  assert.equal(doctorReport.result, "NOT_EXECUTED")
+  assert.equal(doctorReport.mode, "direct_guidance")
   assert.deepEqual(doctorReport.commands, ["python3 scripts/session_command.py doctor --json"])
-  assert.equal(repairReport.result, "PASS")
-  assert.equal(repairReport.mode, "direct_run")
+  assert.equal(repairReport.result, "NOT_EXECUTED")
+  assert.equal(repairReport.mode, "direct_guidance")
   assert.deepEqual(repairReport.commands, ["python3 scripts/session_command.py repair-stale --stale-seconds 300 --apply --json"])
 })
 
-test("worktree helper tells operators to run allowed oc end-session directly", () => {
+test("worktree helper reports allowed oc end-session as unexecuted direct guidance", () => {
   const report = runHelper('oc end-session --outcome done session_64 --achievements "cleanup complete"')
 
-  assert.equal(report.result, "PASS")
-  assert.equal(report.mode, "direct_run")
+  assert.equal(report.result, "NOT_EXECUTED")
+  assert.equal(report.mode, "direct_guidance")
   assert.match(report.note, /do not wrap it with the maintenance helper/i)
+  assert.match(report.note, /did not execute/i)
   assert.deepEqual(report.commands, ['oc end-session --outcome done session_64 --achievements "cleanup complete"'])
 })
 
@@ -127,11 +138,11 @@ test("worktree helper does not classify bare oc closeout verbs as direct-run saf
   assert.equal(sessionReport.result, "FAIL")
 })
 
-test("worktree helper treats scoped oc status commands as direct-run safe guidance", () => {
+test("worktree helper treats scoped oc status commands as unexecuted safe guidance", () => {
   const report = runHelper("oc next --scope dmoliveira/my_opencode --limit 5")
 
-  assert.equal(report.result, "PASS")
-  assert.equal(report.mode, "direct_run")
+  assert.equal(report.result, "NOT_EXECUTED")
+  assert.equal(report.mode, "direct_guidance")
   assert.deepEqual(report.commands, ["oc next --scope dmoliveira/my_opencode --limit 5"])
 })
 
@@ -224,11 +235,11 @@ test("worktree helper stays aligned with allowed readonly sqlite inspection comm
   ])
 })
 
-test("worktree helper treats chained oc status bundles as direct-run safe guidance", () => {
+test("worktree helper treats chained oc status bundles as unexecuted safe guidance", () => {
   const report = runHelper("oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true")
 
-  assert.equal(report.result, "PASS")
-  assert.equal(report.mode, "direct_run")
+  assert.equal(report.result, "NOT_EXECUTED")
+  assert.equal(report.mode, "direct_guidance")
   assert.deepEqual(report.commands, ["oc current || true; printf '\n---\n'; oc next || true; printf '\n---\n'; oc queue || true"])
 })
 
@@ -734,21 +745,21 @@ test("worktree helper execute mode closes stdin for input-reading commands", () 
   assert.match(report.stderr, /EOF when reading a line/)
 })
 
-test("worktree helper execute mode preserves direct-run guidance for allowed commands", () => {
-  const report = JSON.parse(
-    runHelperWithArgs([
-      "maintenance",
-      "--directory",
-      repoDirectory,
-      "--command",
-      'oc done task_175 --note "completed"',
-      "--execute",
-      "--json",
-    ]).stdout,
-  )
+test("worktree helper execute mode preserves unexecuted guidance for allowed commands", () => {
+  const execution = runHelperWithArgs([
+    "maintenance",
+    "--directory",
+    repoDirectory,
+    "--command",
+    'oc done task_175 --note "completed"',
+    "--execute",
+    "--json",
+  ])
+  const report = JSON.parse(execution.stdout)
 
-  assert.equal(report.result, "PASS")
-  assert.equal(report.mode, "direct_run")
+  assert.equal(execution.status, 3)
+  assert.equal(report.result, "NOT_EXECUTED")
+  assert.equal(report.mode, "direct_guidance")
   assert.deepEqual(report.commands, ['oc done task_175 --note "completed"'])
 })
 
