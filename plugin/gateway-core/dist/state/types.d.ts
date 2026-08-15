@@ -19,10 +19,23 @@ export interface GatewayConciseModeState {
     activatedAt: string;
     updatedAt: string;
 }
+export interface GatewayExecutionStatusEntry {
+    [key: string]: unknown;
+    sessionId: string;
+    last: string;
+    next: string;
+    updatedAt: string;
+}
+export interface GatewayExecutionStatusState {
+    [key: string]: unknown;
+    version: 1;
+    sessions: Record<string, GatewayExecutionStatusEntry>;
+}
 export interface GatewayState {
     [key: string]: unknown;
     activeLoop: GatewayLoopState | null;
     conciseMode?: GatewayConciseModeState | null;
+    executionStatus?: GatewayExecutionStatusState | null;
     lastUpdatedAt: string;
     source?: string;
 }

@@ -447,7 +447,7 @@
     }
   },
   "plugin": [
-    "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+    "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"
   ],
   "instructions": [
     "{env:HOME}/.config/opencode/my_opencode/AGENTS.md",

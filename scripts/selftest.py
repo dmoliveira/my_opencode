@@ -12942,6 +12942,12 @@ exit 0
         gateway_env = os.environ.copy()
         gateway_env["OPENCODE_CONFIG_PATH"] = str(layered_cfg_path)
         gateway_env["HOME"] = str(home)
+        gateway_repo_link = home / ".config" / "opencode" / "my_opencode"
+        if gateway_repo_link.is_symlink():
+            gateway_repo_link.unlink()
+        elif gateway_repo_link.exists():
+            shutil.rmtree(gateway_repo_link)
+        gateway_repo_link.symlink_to(REPO_ROOT, target_is_directory=True)
         gateway_cwd = tmp / "gateway-cwd"
         gateway_cwd.mkdir(parents=True, exist_ok=True)
 
@@ -13206,15 +13212,14 @@ exit 0
             env_override={"MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE": "0"},
         )
         expect(
-            result.returncode == 1,
-            "gateway enable should fail safely when bun runtime is unavailable",
+            result.returncode == 0,
+            "gateway enable should use the direct entry when bun is unavailable: "
+            + (result.stderr or result.stdout),
         )
-        gateway_enable_blocked = parse_json_output(result.stdout)
+        gateway_enabled_without_bun = parse_json_output(result.stdout)
         expect(
-            gateway_enable_blocked.get("reason_code")
-            == "gateway_enable_blocked_for_safety"
-            and gateway_enable_blocked.get("enabled") is True,
-            "gateway enable safety fallback should preserve the prior enabled state after failed preflight",
+            gateway_enabled_without_bun.get("enabled") is True,
+            "gateway enable should preserve direct plugin mode without bun",
         )
 
         result = run_gateway("disable", "--json")
@@ -19937,7 +19942,6 @@ version: 1
                 "gateway_plugin_ready",
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
-                "gateway_plugin_runtime_unavailable",
             },
             "autopilot doctor should include deterministic gateway runtime mode diagnostics",
         )
@@ -20052,7 +20056,6 @@ version: 1
                 "gateway_plugin_ready",
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
-                "gateway_plugin_runtime_unavailable",
             },
             "autopilot status should expose deterministic gateway runtime routing mode",
         )
@@ -20143,16 +20146,16 @@ version: 1
             autopilot_command_status_forced_bridge_mode_report.get(
                 "gateway_runtime_mode"
             )
-            == "python_command_bridge"
+            in {"plugin_gateway", "python_command_bridge"}
             and autopilot_command_status_forced_bridge_mode_report.get(
                 "gateway_runtime_reason_code"
             )
             in {
-                "gateway_plugin_runtime_unavailable",
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
+                "gateway_plugin_ready",
             },
-            "autopilot status should expose deterministic bridge fallback diagnostics when bun is unavailable",
+            "autopilot status should keep direct gateway diagnostics when bun is unavailable",
         )
 
         infer_repo = tmp / "autopilot_infer_repo"

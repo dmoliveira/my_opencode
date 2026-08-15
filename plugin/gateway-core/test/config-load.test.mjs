@@ -61,6 +61,9 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.notifyEvents.style, "brief")
   assert.equal(config.conciseMode.enabled, false)
   assert.equal(config.conciseMode.defaultMode, "off")
+  assert.equal(config.executionStatus.enabled, false)
+  assert.equal(config.executionStatus.maxSessions, 16)
+  assert.equal(config.executionStatus.maxLabelChars, 80)
   assert.equal(config.contextInjector.dedupeEnabled, true)
   assert.equal(config.contextInjector.minDeltaChars, 120)
   assert.equal(config.contextInjector.dedupeNormalizeWhitespace, true)
@@ -191,6 +194,20 @@ test("loadGatewayConfig bounds prompt cache routing config strictly", () => {
   })
   for (const shardCount of [0, 65, 1.5, "16", null]) {
     assert.equal(loadGatewayConfig({ promptCache: { shardCount } }).promptCache.shardCount, 1)
+  }
+})
+
+test("loadGatewayConfig bounds execution status configuration strictly", () => {
+  assert.deepEqual(
+    loadGatewayConfig({ executionStatus: { enabled: true, maxSessions: 64, maxLabelChars: 160 } })
+      .executionStatus,
+    { enabled: true, maxSessions: 64, maxLabelChars: 160 },
+  )
+  for (const maxSessions of [0, 65, 1.5, "16", null]) {
+    assert.equal(loadGatewayConfig({ executionStatus: { maxSessions } }).executionStatus.maxSessions, 16)
+  }
+  for (const maxLabelChars of [23, 161, 80.5, "80", null]) {
+    assert.equal(loadGatewayConfig({ executionStatus: { maxLabelChars } }).executionStatus.maxLabelChars, 80)
   }
 })
 

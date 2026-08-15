@@ -93,6 +93,7 @@ from config_layering import (  # type: ignore
 )
 from gateway_plugin_bridge import (  # type: ignore
     cleanup_orphan_loop,
+    gateway_plugin_entry_format,
     gateway_loop_state_path,
     gateway_plugin_entries,
     gateway_plugin_spec,
@@ -105,7 +106,6 @@ from gateway_reason_codes import (  # type: ignore
     GATEWAY_PLUGIN_DISABLED,
     GATEWAY_PLUGIN_NOT_READY,
     GATEWAY_PLUGIN_READY,
-    GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE,
     LOOP_STATE_AVAILABLE,
 )
 from gateway_state_protocol import (  # type: ignore
@@ -2560,6 +2560,7 @@ def bun_runtime_available() -> bool:
 def gateway_runtime_mode(
     *, enabled: bool, bun_available: bool, hooks: dict[str, Any]
 ) -> dict[str, Any]:
+    del bun_available
     required_dist_flags = [
         "dist_exposes_tool_execute_before",
         "dist_exposes_command_execute_before",
@@ -2575,7 +2576,6 @@ def gateway_runtime_mode(
     missing = [flag for flag in required_dist_flags if hooks.get(flag) is not True]
     plugin_ready = (
         enabled
-        and bun_available
         and hooks.get("dist_index_exists") is True
         and not missing
     )
@@ -2583,8 +2583,6 @@ def gateway_runtime_mode(
     reason_code = GATEWAY_PLUGIN_READY
     if not enabled:
         reason_code = GATEWAY_PLUGIN_DISABLED
-    elif not bun_available:
-        reason_code = GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE
     elif not plugin_ready:
         reason_code = GATEWAY_PLUGIN_NOT_READY
     return {
@@ -2676,6 +2674,9 @@ def status_payload(
         "plugin_spec": gateway_plugin_spec(home),
         "plugin_entry_count": len(gateway_entries),
         "plugin_entries": gateway_entries,
+        "plugin_entry_formats": [
+            gateway_plugin_entry_format(entry, home) for entry in gateway_entries
+        ],
         "plugin_dir": str(pdir),
         "plugin_dir_exists": pdir.exists(),
         "plugin_dist_exists": (pdir / "dist" / "index.js").exists(),
@@ -2708,37 +2709,12 @@ def status_payload(
     return payload
 
 
-# Ensures Bun/OpenCode compatibility aliases for local file plugins.
+# Direct built-entrypoint specs do not need the legacy package-directory aliases.
 def ensure_file_plugin_compat(home: Path, pdir: Path) -> dict[str, Any]:
-    if not pdir.exists():
-        return {"applied": False, "reason": "plugin_dir_missing"}
-    if not bun_runtime_available():
-        return {"applied": False, "reason": "bun_unavailable"}
-
-    alias_path = pdir.parent / "gateway-core@latest"
-    cache_home = Path(
-        os.environ.get("XDG_CACHE_HOME", str(home / ".cache"))
-    ).expanduser()
-    cache_plugin_path = (
-        cache_home
-        / "opencode"
-        / "node_modules"
-        / f"file:{pdir.parent}"
-        / "gateway-core"
-    )
-
-    alias_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_plugin_path.parent.mkdir(parents=True, exist_ok=True)
-    alias_path.unlink(missing_ok=True)
-    cache_plugin_path.unlink(missing_ok=True)
-    alias_path.symlink_to(pdir)
-    cache_plugin_path.symlink_to(pdir)
-
+    del home, pdir
     return {
-        "applied": True,
-        "reason": "ok",
-        "latest_alias_path": str(alias_path),
-        "cache_alias_path": str(cache_plugin_path),
+        "applied": False,
+        "reason": "direct_dist_entry_no_compat_needed",
     }
 
 
@@ -2749,8 +2725,6 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
         problems.append("gateway plugin directory is missing")
     if status.get("plugin_dist_exists") is not True:
         problems.append("gateway plugin dist build is missing")
-    if status.get("bun_available") is not True:
-        problems.append("bun runtime is unavailable")
     hooks_any = status.get("hook_diagnostics")
     hooks = hooks_any if isinstance(hooks_any, dict) else {}
     required_dist_flags = [
@@ -2790,8 +2764,8 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
         fallback["problems"] = problems
         fallback["config"] = str(cfg_path)
         fallback["quick_fixes"] = [
-            "install bun and run /gateway doctor",
             "run npm run build in plugin/gateway-core",
+            "run /gateway doctor",
             "run /gateway enable --force to bypass safeguard",
         ]
         emit(fallback, as_json=as_json)
@@ -2866,11 +2840,14 @@ def command_doctor(
         warnings.append("gateway plugin is not built (dist/index.js missing)")
     if status["enabled"] and not status["plugin_dist_exists"]:
         problems.append("gateway plugin enabled without built dist assets")
-    if status["enabled"] and not status["bun_available"]:
-        warnings.append("gateway plugin is enabled but bun is not available")
-    if status.get("bun_available") is True and status.get("enabled") is not True:
+    if status.get("plugin_dist_exists") is True and status.get("enabled") is not True:
         warnings.append(
-            "gateway plugin runtime is available but disabled; enable for plugin-first mode"
+            "gateway direct entrypoint is built but disabled; enable for plugin-first mode"
+        )
+    entry_formats = status.get("plugin_entry_formats")
+    if isinstance(entry_formats, list) and "legacy_directory" in entry_formats:
+        warnings.append(
+            "gateway plugin uses the legacy directory entry; run /gateway enable to migrate to direct dist loading"
         )
     plugin_entry_count = int(status.get("plugin_entry_count") or 0)
     if plugin_entry_count > 1:
@@ -3068,12 +3045,12 @@ def command_doctor(
             "/gateway disable",
             "/gateway enable",
             "run npm run build in plugin/gateway-core",
-            "install bun if file plugins must auto-install",
-            "dedupe gateway plugin entries in config to a single file:<...>/gateway-core spec",
+            "dedupe gateway plugin entries to file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js",
             "run /autopilot report to inspect blockers and stale runtime status",
             "stop the gateway state owner, then manually remove .opencode/gateway-core.state.json.lock only when the owner is stopped",
             "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode direct --output json",
             "run python3 scripts/gateway_local_plugin_runtime_smoke.py --mode contract --output json for uncached direct+tuple loader evidence",
+            "run make gateway-execution-status-live-smoke for a no-model server lifecycle check",
         ]
         + [
             item

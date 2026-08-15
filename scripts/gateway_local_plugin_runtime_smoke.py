@@ -448,28 +448,20 @@ def prepare_home(base_dir: Path) -> Path:
         sanitized_config = {}
     sanitized_config.setdefault("$schema", "https://opencode.ai/config.json")
     sanitized_config["plugin"] = [
-        "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+        "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"
     ]
     write_json(config_path, sanitized_config)
     node_modules = DEFAULT_CONFIG_HOME / "node_modules"
     if node_modules.exists():
         os.symlink(node_modules, config_dir / "node_modules")
     os.symlink(REPO_ROOT, config_dir / "my_opencode")
-    plugin_root = config_dir / "my_opencode" / "plugin"
-    plugin_root.mkdir(parents=True, exist_ok=True)
-    gateway_core = plugin_root / "gateway-core"
-    gateway_latest = plugin_root / "gateway-core@latest"
-    if not gateway_core.exists():
-        os.symlink(PLUGIN_DIR, gateway_core)
-    if not gateway_latest.exists():
-        os.symlink(gateway_core, gateway_latest)
     return base_dir
 
 
 def prepare_plugin_spec(mode: str, config_path: Path) -> str:
     payload = json.loads(config_path.read_text(encoding="utf-8"))
     if mode == "path":
-        spec = "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+        spec = "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"
     else:
         pack = subprocess.run(
             ["npm", "pack"],

@@ -401,6 +401,60 @@ test("one-domain writes preserve sibling and unknown root/nested fields", () => 
   })
 })
 
+test("execution-status domain preserves active and concise siblings", () => {
+  withTempDir((directory) => {
+    const path = seedRawState(directory)
+    updateGatewayStateDomain(
+      directory,
+      "executionStatus",
+      {
+        version: 1,
+        sessions: {
+          "ses-status": {
+            sessionId: "ses-status",
+            last: "Validation passed",
+            next: "Review changes",
+            updatedAt: nowIso(),
+          },
+        },
+      },
+      { mode: "replace", rootUpdates: { lastUpdatedAt: nowIso() } },
+    )
+    const state = loadGatewayState(directory)
+    assert.equal(state?.executionStatus?.sessions["ses-status"]?.last, "Validation passed")
+    const raw = JSON.parse(readFileSync(path, "utf-8"))
+    assert.equal(raw.activeLoop.sessionId, "seed")
+    assert.equal(raw.conciseMode.sessionId, "seed")
+    assert.equal(raw.unknownRoot.sentinel, "root")
+  })
+})
+
+test("loadGatewayState rejects malformed execution-status entries", () => {
+  withTempDir((directory) => {
+    const path = resolveGatewayStatePath(directory)
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(
+      path,
+      JSON.stringify({
+        activeLoop: null,
+        executionStatus: {
+          version: 1,
+          sessions: {
+            "ses-invalid": {
+              sessionId: "ses-invalid",
+              last: "\u001b[31munsafe",
+              next: "Continue",
+              updatedAt: nowIso(),
+            },
+          },
+        },
+        lastUpdatedAt: nowIso(),
+      }),
+    )
+    assert.equal(loadGatewayState(directory)?.executionStatus?.sessions["ses-invalid"], undefined)
+  })
+})
+
 test("prototype-sensitive unknown keys remain inert own JSON properties", () => {
   withTempDir((directory) => {
     const stateDirectory = join(directory, ".opencode")

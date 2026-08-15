@@ -920,60 +920,6 @@
   {
     "language": "python",
     "file": "gateway_command.py",
-    "function": "ensure_file_plugin_compat",
-    "kind": "path.mkdir",
-    "destination": "alias_path.parent",
-    "count": 1,
-    "classification": "checked_config_writer_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_command.py",
-    "function": "ensure_file_plugin_compat",
-    "kind": "path.mkdir",
-    "destination": "cache_plugin_path.parent",
-    "count": 1,
-    "classification": "checked_config_writer_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_command.py",
-    "function": "ensure_file_plugin_compat",
-    "kind": "path.symlink_to",
-    "destination": "alias_path",
-    "count": 1,
-    "classification": "checked_config_writer_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_command.py",
-    "function": "ensure_file_plugin_compat",
-    "kind": "path.symlink_to",
-    "destination": "cache_plugin_path",
-    "count": 1,
-    "classification": "checked_config_writer_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_command.py",
-    "function": "ensure_file_plugin_compat",
-    "kind": "path.unlink",
-    "destination": "alias_path",
-    "count": 1,
-    "classification": "checked_config_writer_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_command.py",
-    "function": "ensure_file_plugin_compat",
-    "kind": "path.unlink",
-    "destination": "cache_plugin_path",
-    "count": 1,
-    "classification": "checked_config_writer_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_command.py",
     "function": "gateway_mistake_ledger_summary",
     "kind": "os.open",
     "destination": "path",
@@ -1128,35 +1074,8 @@
     "language": "python",
     "file": "gateway_local_plugin_runtime_smoke.py",
     "function": "prepare_home",
-    "kind": "os.symlink",
-    "destination": "gateway_core",
-    "count": 1,
-    "classification": "isolated_fixture_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_local_plugin_runtime_smoke.py",
-    "function": "prepare_home",
-    "kind": "os.symlink",
-    "destination": "gateway_latest",
-    "count": 1,
-    "classification": "isolated_fixture_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_local_plugin_runtime_smoke.py",
-    "function": "prepare_home",
     "kind": "path.mkdir",
     "destination": "config_dir",
-    "count": 1,
-    "classification": "isolated_fixture_exemption"
-  },
-  {
-    "language": "python",
-    "file": "gateway_local_plugin_runtime_smoke.py",
-    "function": "prepare_home",
-    "kind": "path.mkdir",
-    "destination": "plugin_root",
     "count": 1,
     "classification": "isolated_fixture_exemption"
   },
@@ -3101,13 +3020,6 @@
   {
     "language": "shell",
     "file": "setup_dual_opencode.sh",
-    "command": "ln -sfn \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core\" \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest\"",
-    "count": 1,
-    "classification": "shell_non_config_exemption"
-  },
-  {
-    "language": "shell",
-    "file": "setup_dual_opencode.sh",
     "command": "mkdir -p \"$OHMY_CONFIG_HOME/opencode\"",
     "count": 1,
     "classification": "shell_non_config_exemption"
@@ -3172,13 +3084,6 @@
     "language": "shell",
     "file": "setup_local_dev_symlinks.sh",
     "command": "ln -sfn \"$AGENTS_LINK_TARGET\" \"$MY_OPENCODE_REPO/AGENTS.md\"",
-    "count": 1,
-    "classification": "shell_non_config_exemption"
-  },
-  {
-    "language": "shell",
-    "file": "setup_local_dev_symlinks.sh",
-    "command": "ln -sfn \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core\" \"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest\"",
     "count": 1,
     "classification": "shell_non_config_exemption"
   },
@@ -3340,6 +3245,69 @@
     "function": "prepare_tasker_runtime",
     "kind": "path.write_text",
     "destination": "config_root / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "ensure_private_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "ensure_private_directory",
+    "kind": "os.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "write_isolated_config",
+    "kind": "path.symlink_to",
+    "destination": "repo_link",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "write_isolated_config",
+    "kind": "path.write_text",
+    "destination": "config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "write_isolated_config",
+    "kind": "os.chmod",
+    "destination": "config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "start_server",
+    "kind": "path.open",
+    "destination": "log_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_execution_status_live_smoke.py",
+    "function": "post_json",
+    "kind": "path.open",
+    "destination": "build_opener(ProxyHandler({}))",
     "count": 1,
     "classification": "isolated_fixture_exemption"
   }

@@ -36,6 +36,7 @@ import { createDocsDriftGuardHook } from "./hooks/docs-drift-guard/index.js";
 import { createDoneProofEnforcerHook } from "./hooks/done-proof-enforcer/index.js";
 import { createDangerousCommandGuardHook } from "./hooks/dangerous-command-guard/index.js";
 import { createEmptyTaskResponseDetectorHook } from "./hooks/empty-task-response-detector/index.js";
+import { createExecutionStatusHook } from "./hooks/execution-status/index.js";
 import { createEditErrorRecoveryHook } from "./hooks/edit-error-recovery/index.js";
 import { createJsonErrorRecoveryHook } from "./hooks/json-error-recovery/index.js";
 import { createProviderTokenLimitRecoveryHook } from "./hooks/provider-token-limit-recovery/index.js";
@@ -1316,6 +1317,14 @@ function configuredHooks(
         requireDeleteBranch: cfg.postMergeSyncGuard.requireDeleteBranch,
         enforceMainSyncInline: cfg.postMergeSyncGuard.enforceMainSyncInline,
         reminderCommands: cfg.postMergeSyncGuard.reminderCommands,
+      }),
+    ),
+    safeHook("execution-status", () =>
+      createExecutionStatusHook({
+        directory,
+        enabled: cfg.executionStatus.enabled,
+        maxSessions: cfg.executionStatus.maxSessions,
+        maxLabelChars: cfg.executionStatus.maxLabelChars,
       }),
     ),
     safeHook("codememory-milestone-bridge", () =>

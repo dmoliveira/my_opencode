@@ -45,6 +45,53 @@ function parseConciseModeState(value) {
 function isNonnegativeInteger(value) {
     return Number.isSafeInteger(value) && Number(value) >= 0;
 }
+function setOwn(target, key, value) {
+    Object.defineProperty(target, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+    });
+}
+function isExecutionStatusLabel(value) {
+    return (typeof value === "string" &&
+        value.trim().length > 0 &&
+        value.length <= 160 &&
+        !/[\u0000-\u001f\u007f]/.test(value));
+}
+function isIsoTimestamp(value) {
+    return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+function parseExecutionStatus(value) {
+    if (!isRecord(value) || value.version !== 1 || !isRecord(value.sessions)) {
+        return null;
+    }
+    const sessions = Object.create(null);
+    for (const [sessionId, entry] of Object.entries(value.sessions)) {
+        if (!sessionId ||
+            sessionId.length > 160 ||
+            /[\u0000-\u001f\u007f]/.test(sessionId) ||
+            !isRecord(entry) ||
+            entry.sessionId !== sessionId ||
+            !isExecutionStatusLabel(entry.last) ||
+            !isExecutionStatusLabel(entry.next) ||
+            !isIsoTimestamp(entry.updatedAt)) {
+            continue;
+        }
+        setOwn(sessions, sessionId, {
+            ...entry,
+            sessionId,
+            last: entry.last,
+            next: entry.next,
+            updatedAt: entry.updatedAt,
+        });
+    }
+    return {
+        ...value,
+        version: 1,
+        sessions,
+    };
+}
 function cloneActiveLoop(value) {
     if (!isRecord(value)) {
         return null;
@@ -94,6 +141,7 @@ function normalizeGatewayState(raw) {
     const state = {
         activeLoop,
         conciseMode: parseConciseModeState(raw.conciseMode),
+        executionStatus: parseExecutionStatus(raw.executionStatus),
         lastUpdatedAt: String(raw.lastUpdatedAt ?? new Date().toISOString()),
         source: typeof raw.source === "string" ? raw.source : undefined,
     };

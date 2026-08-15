@@ -44,11 +44,70 @@ class PluginConfigEntriesTest(unittest.TestCase):
             self.assertEqual(1, config["plugin"].count(gateway))
             self.assertIn(external, config["plugin"])
             self.assertIn(malformed, config["plugin"])
-
             gateway_plugin_bridge.set_plugin_enabled(config, home, False)
             self.assertFalse(gateway_plugin_bridge.plugin_enabled(config, home))
             self.assertIn(external, config["plugin"])
             self.assertIn(malformed, config["plugin"])
+
+    def test_gateway_enable_migrates_legacy_directory_entries_to_direct_dist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            legacy = "file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"
+            canonical = gateway_plugin_bridge.gateway_plugin_spec(home)
+            legacy_tuple = [legacy, {"hooks": {"enabled": False}}]
+            external = ["@scope/external", {"mode": "safe"}]
+            config = {"plugin": [legacy_tuple, canonical, external]}
+
+            self.assertEqual(
+                ["legacy_directory", "direct_dist"],
+                [
+                    gateway_plugin_bridge.gateway_plugin_entry_format(entry, home)
+                    for entry in gateway_plugin_bridge.gateway_plugin_entries(config, home)
+                ],
+            )
+            gateway_plugin_bridge.set_plugin_enabled(config, home, True)
+
+            self.assertEqual(
+                [[canonical, {"hooks": {"enabled": False}}], external],
+                config["plugin"],
+            )
+            gateway_plugin_bridge.set_plugin_enabled(config, home, False)
+            self.assertEqual([external], config["plugin"])
+
+    def test_gateway_runtime_mode_uses_direct_entry_without_bun(self) -> None:
+        module = importlib.import_module("gateway_command")
+        hooks = {
+            "dist_index_exists": True,
+            "dist_exposes_tool_execute_before": True,
+            "dist_exposes_command_execute_before": True,
+            "dist_exposes_command_execute_after": True,
+            "dist_exposes_chat_message": True,
+            "dist_exposes_messages_transform": True,
+            "dist_autopilot_handles_slashcommand": True,
+            "dist_continuation_handles_session_idle": True,
+            "dist_safety_handles_session_deleted": True,
+            "dist_safety_handles_session_error": True,
+            "dist_state_protocol_exists": True,
+        }
+        result = module.gateway_runtime_mode(
+            enabled=True,
+            bun_available=False,
+            hooks=hooks,
+        )
+
+        self.assertEqual("plugin_gateway", result["mode"])
+        self.assertEqual("gateway_plugin_ready", result["reason_code"])
+        self.assertNotIn(
+            "bun runtime is unavailable",
+            module.enable_safety_problems(
+                {
+                    "plugin_dir_exists": True,
+                    "plugin_dist_exists": True,
+                    "bun_available": False,
+                    "hook_diagnostics": hooks,
+                }
+            ),
+        )
 
     def test_external_free_composition_removes_retired_and_preserves_unknown(self) -> None:
         notifier = [

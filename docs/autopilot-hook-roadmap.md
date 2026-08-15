@@ -7,7 +7,7 @@ Autopilot now runs through `gateway-core` hook events plus Python command orches
 - `session.idle` and related lifecycle hooks are handled in `plugin/gateway-core/src/hooks/`
 - `/autopilot` remains the canonical command entrypoint
 - runtime mode is reported as:
-  - `plugin_gateway` when Bun + gateway dist hooks are available and enabled
+  - `plugin_gateway` when the direct gateway dist entry is enabled and hook-complete
   - `python_command_bridge` otherwise
 
 ## Compatibility

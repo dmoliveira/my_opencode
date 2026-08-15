@@ -22,11 +22,28 @@ export interface GatewayConciseModeState {
   updatedAt: string
 }
 
+// Declares one privacy-safe execution milestone for a TUI session.
+export interface GatewayExecutionStatusEntry {
+  [key: string]: unknown
+  sessionId: string
+  last: string
+  next: string
+  updatedAt: string
+}
+
+// Declares the bounded execution-status state consumed by the TUI sidebar.
+export interface GatewayExecutionStatusState {
+  [key: string]: unknown
+  version: 1
+  sessions: Record<string, GatewayExecutionStatusEntry>
+}
+
 // Declares persisted gateway-wide runtime state shape.
 export interface GatewayState {
   [key: string]: unknown
   activeLoop: GatewayLoopState | null
   conciseMode?: GatewayConciseModeState | null
+  executionStatus?: GatewayExecutionStatusState | null
   lastUpdatedAt: string
   source?: string
 }

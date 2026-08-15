@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from gateway_state_protocol import (
     DomainMutation,
@@ -30,19 +31,42 @@ def parse_iso(value: Any) -> datetime | None:
         return None
 
 
+# Returns the built gateway-core entrypoint under local OpenCode configuration.
+def gateway_plugin_entrypoint(home: Path) -> Path:
+    return (
+        home
+        / ".config"
+        / "opencode"
+        / "my_opencode"
+        / "plugin"
+        / "gateway-core"
+        / "dist"
+        / "index.js"
+    )
+
+
+# Returns the historical directory spec target retained for migration only.
+def legacy_gateway_plugin_directory(home: Path) -> Path:
+    return home / ".config" / "opencode" / "my_opencode" / "plugin" / "gateway-core"
+
+
 # Returns canonical local file plugin spec for gateway-core.
 def gateway_plugin_spec(home: Path) -> str:
-    return f"file:{home / '.config' / 'opencode' / 'my_opencode' / 'plugin' / 'gateway-core'}"
+    del home
+    return "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"
 
 
 def _resolve_file_plugin_path(spec: str, home: Path) -> Path | None:
     if not isinstance(spec, str) or not spec.startswith("file:"):
         return None
-    raw_path = spec[5:].strip()
+    normalized = spec.replace("{env:HOME}", str(home))
+    parsed = urlparse(normalized)
+    if parsed.scheme != "file" or parsed.netloc not in {"", "localhost"}:
+        return None
+    raw_path = unquote(parsed.path)
     if not raw_path:
         return None
-    normalized = raw_path.replace("{env:HOME}", str(home))
-    path = Path(normalized).expanduser()
+    path = Path(raw_path).expanduser()
     try:
         return path.resolve(strict=False)
     except OSError:
@@ -66,10 +90,19 @@ def _is_gateway_plugin_spec(spec: str, home: Path) -> bool:
     resolved = _resolve_file_plugin_path(spec, home)
     if resolved is None:
         return False
-    target = (
-        home / ".config" / "opencode" / "my_opencode" / "plugin" / "gateway-core"
-    ).resolve(strict=False)
-    return resolved == target
+    return resolved in {
+        gateway_plugin_entrypoint(home).resolve(strict=False),
+        legacy_gateway_plugin_directory(home).resolve(strict=False),
+    }
+
+
+def gateway_plugin_entry_format(spec: str, home: Path) -> str:
+    resolved = _resolve_file_plugin_path(spec, home)
+    if resolved == gateway_plugin_entrypoint(home).resolve(strict=False):
+        return "direct_dist"
+    if resolved == legacy_gateway_plugin_directory(home).resolve(strict=False):
+        return "legacy_directory"
+    return "unknown"
 
 
 def gateway_plugin_entries(config: dict[str, Any], home: Path) -> list[str]:
@@ -106,7 +139,15 @@ def set_plugin_enabled(config: dict[str, Any], home: Path, enabled: bool) -> Non
         or not _is_gateway_plugin_spec(entry_spec, home)
     ]
     if enabled:
-        filtered.insert(0, matches[0] if matches else spec)
+        first = matches[0] if matches else None
+        if (
+            isinstance(first, (list, tuple))
+            and len(first) == 2
+            and isinstance(first[1], dict)
+        ):
+            filtered.insert(0, [spec, first[1]])
+        else:
+            filtered.insert(0, spec)
     config["plugin"] = filtered
 
 

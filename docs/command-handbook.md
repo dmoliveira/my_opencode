@@ -528,10 +528,10 @@ Use these directly in OpenCode:
 ```
 
 Notes:
-- `/gateway enable` adds local file plugin entry for `gateway-core` into your config plugin list.
-- `/gateway enable` runs a safety preflight (bun + dist + required hook capabilities) and leaves the existing plugin configuration unchanged when preflight fails.
+- `/gateway enable` adds the direct built `gateway-core/dist/index.js` file entry to your config plugin list. It migrates older directory entries and preserves the first matching tuple's options.
+- `/gateway enable` runs a safety preflight (built dist + required hook capabilities) and leaves the existing plugin configuration unchanged when preflight fails.
 - use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
-- `install.sh` now auto-prefers `plugin_gateway` mode when `bun` is available, and falls back to `python_command_bridge` when not available.
+- `install.sh` enables the direct plugin entry after building gateway-core. OpenCode `1.18.18` loads this entry without a standalone `bun` executable.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
 - `/gateway watchdog status` shows the effective long-turn watchdog thresholds and any sidecar overrides.
 - `/gateway watchdog doctor` flags disabled pulse injection, overly aggressive thresholds, and missing cooldown protection with quick fix commands.
