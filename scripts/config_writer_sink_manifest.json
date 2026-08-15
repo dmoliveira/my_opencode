@@ -129,6 +129,15 @@
     "language": "python",
     "file": "background_task_manager.py",
     "function": "_atomic_write_json",
+    "kind": "os.open",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_atomic_write_json",
     "kind": "path.mkdir",
     "destination": "path.parent",
     "count": 1,
@@ -139,7 +148,16 @@
     "file": "background_task_manager.py",
     "function": "_atomic_write_json",
     "kind": "path.replace",
-    "destination": "Path(temp_name)",
+    "destination": "temporary_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_atomic_write_json",
+    "kind": "path.unlink",
+    "destination": "temporary_path",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
@@ -149,6 +167,24 @@
     "function": "_atomic_write_json",
     "kind": "tempfile.NamedTemporaryFile",
     "destination": "str(path.parent)",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_drain_bounded_output",
+    "kind": "path.mkdir",
+    "destination": "log_path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_drain_bounded_output",
+    "kind": "path.open",
+    "destination": "log_path",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
@@ -166,6 +202,15 @@
     "file": "background_task_manager.py",
     "function": "_run_single_job",
     "kind": "path.open",
+    "destination": "log_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
+    "function": "_validate_terminal_receipt",
+    "kind": "os.open",
     "destination": "log_path",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
