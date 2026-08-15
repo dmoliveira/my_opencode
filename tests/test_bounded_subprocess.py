@@ -164,7 +164,7 @@ class BoundedSubprocessTest(unittest.TestCase):
         self.assertTrue(fake_process.killed)
 
     def test_registry_uses_known_command_classes(self) -> None:
-        self.assertEqual(35, len(OPERATION_CLASSES))
+        self.assertEqual(37, len(OPERATION_CLASSES))
         self.assertEqual(
             set(OPERATION_CLASSES.values()),
             set(COMMAND_CLASS_POLICIES),

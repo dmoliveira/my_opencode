@@ -61,7 +61,7 @@ Machine-readable payloads differ slightly by subcommand, but the currently emitt
 
 Shared runtime authority:
 
-- `task_graph.json` is the authoritative dependency graph store for canonical local flows.
+- `task_graph.json` is the shared execution view for canonical local flows. Codememory-managed nodes are a one-way projection; workflow-owned nodes remain local runtime state.
 - `/autoflow` runtime/checkpoint files remain command-local execution metadata and must not create a second dependency graph schema.
 - `/autoflow status --json` and `/autoflow report --json` should expose `task_graph_path` so operators can inspect the shared graph with `/task` commands.
 - `/autoflow status --json` and `/autoflow report --json` should also set `model_routing.entrypoint = "autoflow"` so command identity does not leak the `/start-work` backend.

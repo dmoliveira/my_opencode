@@ -7,7 +7,7 @@ updated: 2026-08-15
 # Intent Control Plane Roadmap
 
 Codememory epic: `epic_24`
-Current slice: `task_126`
+Current slice: `task_125`
 
 ## Outcome
 
@@ -21,7 +21,7 @@ requiring the primary agent to remember every tracking command.
 | --- | --- | --- | --- |
 | `task_123` Intent graph authority contract | done | none | Versioned proposal, authority, privacy, and replay contract |
 | `task_124` Manual intent coordinator MVP | done | `task_123` | Fresh add-only dry-run and idempotent transactional apply |
-| `task_125` Task graph projection | ready | `task_124` | One-way Codememory projection and drift detection |
+| `task_125` Task graph projection | doing | `task_124` | One-way Codememory projection and drift detection |
 | `task_126` Durable intent ingress | done | `task_124` | Private bounded local hook outbox and deterministic replay contract |
 | `task_127` Proposal-only planner | blocked | `task_126`, `task_122` | Bounded read-only research and typed proposals |
 | `task_128` Fenced task leases | ready | none | Atomic claim, heartbeat, expiry, and fencing |
@@ -34,18 +34,22 @@ manual coordinator.
 
 ## Current Slice
 
-1. Add an opt-in `chat.message` ingress hook with stable source identity.
-2. Persist metadata-only envelopes by default with optional redacted previews.
-3. Bound input, envelope size, and pending entries; reject unsafe paths.
-4. Validate deduplication, conflicts, interruption recovery, replay ordering,
-   privacy, and gateway registration without enabling the hook by default.
+1. Project every Codememory task lifecycle status and task dependency into the
+   shared task graph with exact source IDs.
+2. Store a deterministic content revision and expose non-mutating drift checks.
+3. Preserve workflow/local nodes while rejecting collisions, scope changes,
+   malformed state, and unsafe retained references.
+4. Prevent ordinary graph writers and scheduler readers from accepting
+   tampered Codememory-managed state.
 
 ## Safety Boundaries
 
-- No LLM, network, subprocess, or `oc` work in the ingress hook; only bounded
-  local durable file writes are awaited.
+- The projector performs bounded read-only `oc list|get` calls and never mutates
+  Codememory.
+- One Codememory scope owns each projection; changing scope fails closed.
+- Only projection apply may change managed task semantics.
 - No autonomous task dispatch before fenced leases exist.
-- No competing task authority is introduced in this slice.
+- Unmanaged workflow nodes remain local execution state, not Codememory tasks.
 - No raw user prompt is persisted by default.
 - No more than ten combined records and links per MVP proposal.
 - Any collision or unresolved item aborts the complete proposal.
@@ -55,7 +59,7 @@ manual coordinator.
 ## Validation
 
 - `git diff --check`
-- targeted config and intent outbox tests
-- private-path, restart, overflow, and deterministic replay smoke
+- targeted projection, strict-state, writer-guard, and bounded-subprocess tests
+- live check/apply/check smoke against an isolated task graph path
 - `make validate`
 - reviewer and verifier pass on the final diff

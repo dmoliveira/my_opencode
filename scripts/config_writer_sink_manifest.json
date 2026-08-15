@@ -2936,6 +2936,42 @@
   {
     "language": "python",
     "file": "task_graph_runtime.py",
+    "function": "_atomic_write_json_durable",
+    "kind": "os.open",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "_atomic_write_json_durable",
+    "kind": "os.replace",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "_atomic_write_json_durable",
+    "kind": "path.mkdir",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "_atomic_write_json_durable",
+    "kind": "path.unlink",
+    "destination": "temp_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
     "function": "_atomic_write_json",
     "kind": "path.replace",
     "destination": "Path(tmp.name)",
@@ -2948,6 +2984,24 @@
     "function": "with_locked_state",
     "kind": "path.mkdir",
     "destination": "lock.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "with_locked_projection_state",
+    "kind": "path.mkdir",
+    "destination": "lock.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_graph_runtime.py",
+    "function": "with_locked_projection_state",
+    "kind": "path.open",
+    "destination": "lock",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },

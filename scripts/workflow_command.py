@@ -13,15 +13,15 @@ from pathlib import Path
 from typing import Any
 
 from background_task_manager import enqueue_job  # type: ignore
-from runtime_audit import append_event  # type: ignore
 from governance_policy import check_operation  # type: ignore
 from model_routing_command import resolve_for_entrypoint  # type: ignore
+from runtime_audit import append_event  # type: ignore
 from task_graph_bridge import (  # type: ignore
     sync_workflow_run_to_task_graph,
-    task_graph_status_snapshot,
     task_graph_runtime_path,
+    task_graph_status_snapshot,
 )
-
+from task_graph_runtime import TaskGraphStateError  # type: ignore
 
 DEFAULT_STATE_PATH = Path(
     os.environ.get(
@@ -1972,6 +1972,9 @@ def cmd_run(argv: list[str]) -> int:
             as_json,
         )
 
+    if execute_commands:
+        task_graph_runtime_path()
+
     run_id = next_run_id(state)
     started_at = now_iso()
     interrupt_after_steps = 0
@@ -2236,6 +2239,9 @@ def cmd_resume(argv: list[str]) -> int:
         prior_status = str(source_step_map.get(prior_step_id, {}).get("status") or "")
         if prior_status:
             prior_step_statuses[prior_step_id] = prior_status
+
+    if execute_commands:
+        task_graph_runtime_path()
 
     started_at = now_iso()
     active_resume = {
@@ -3697,7 +3703,7 @@ def cmd_doctor(argv: list[str]) -> int:
     )
 
 
-def main(argv: list[str]) -> int:
+def _main(argv: list[str]) -> int:
     if not argv:
         return usage()
     command = argv[0]
@@ -3723,6 +3729,22 @@ def main(argv: list[str]) -> int:
     if command == "doctor":
         return cmd_doctor(rest)
     return usage()
+
+
+def main(argv: list[str]) -> int:
+    try:
+        return _main(argv)
+    except TaskGraphStateError as exc:
+        return emit(
+            {
+                "result": "FAIL",
+                "command": argv[0] if argv else "unknown",
+                "reason_code": "task_graph_state_invalid",
+                "error": "task graph state is invalid",
+                "detail": str(exc),
+            },
+            "--json" in argv,
+        )
 
 
 if __name__ == "__main__":

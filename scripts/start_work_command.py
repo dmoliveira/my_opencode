@@ -16,15 +16,39 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+from checkpoint_snapshot_manager import (  # type: ignore
+    prune_snapshots,
+    write_snapshot,
+)
+from completion_gates import (  # type: ignore
+    evaluate_completion_gates,
+    normalize_completion_gates,
+)
 from config_layering import (  # type: ignore
     load_layered_config,
     resolve_write_path,
+)
+from execution_budget_runtime import (  # type: ignore
+    build_budget_state,
+    evaluate_budget,
+    resolve_budget_policy,
 )
 from model_routing_command import resolve_for_entrypoint  # type: ignore
 from plan_execution_runtime import (  # type: ignore
     load_plan_execution_state,
     save_plan_execution_state,
 )
+from recovery_engine import (  # type: ignore
+    build_resume_hints,
+    evaluate_resume_eligibility,
+    execute_resume,
+    explain_resume_reason,
+)
+from task_graph_bridge import (  # type: ignore
+    task_graph_runtime_path,
+    task_graph_status_snapshot,
+)
+from task_graph_runtime import TaskGraphStateError  # type: ignore
 from todo_enforcement import (  # type: ignore
     build_transition_event,
     normalize_todo_state,
@@ -33,24 +57,6 @@ from todo_enforcement import (  # type: ignore
     validate_todo_set,
     validate_todo_transition,
 )
-from recovery_engine import (  # type: ignore
-    build_resume_hints,
-    execute_resume,
-    evaluate_resume_eligibility,
-    explain_resume_reason,
-)
-from checkpoint_snapshot_manager import (  # type: ignore
-    prune_snapshots,
-    write_snapshot,
-)
-from completion_gates import evaluate_completion_gates, normalize_completion_gates  # type: ignore
-from execution_budget_runtime import (  # type: ignore
-    build_budget_state,
-    evaluate_budget,
-    resolve_budget_policy,
-)
-from task_graph_bridge import task_graph_runtime_path, task_graph_status_snapshot  # type: ignore
-
 
 PLAN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-_]{2,63}$")
 STEP_RE = re.compile(r"^- \[(?P<mark>[ xX])\] (?P<text>.+)$")
@@ -1168,7 +1174,7 @@ def command_recover(args: list[str]) -> int:
     return 0 if report["result"] == "PASS" else 1
 
 
-def main(argv: list[str]) -> int:
+def _main(argv: list[str]) -> int:
     if not argv:
         return usage()
     command = argv[0]
@@ -1185,6 +1191,23 @@ def main(argv: list[str]) -> int:
     if command == "doctor":
         return command_doctor(rest)
     return command_start(argv)
+
+
+def main(argv: list[str]) -> int:
+    try:
+        return _main(argv)
+    except TaskGraphStateError as error:
+        report = {
+            "result": "FAIL",
+            "reason_code": "task_graph_state_invalid",
+            "detail": str(error),
+        }
+        decorate_report(report)
+        if "--json" in argv:
+            print(json.dumps(report, indent=2))
+        else:
+            print("error: task graph state is invalid")
+        return 1
 
 
 if __name__ == "__main__":

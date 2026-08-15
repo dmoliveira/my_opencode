@@ -78,6 +78,8 @@ OPERATION_CLASSES: dict[str, str] = {
     "intent_codememory_doctor": "codememory_probe",
     "intent_codememory_find": "codememory_probe",
     "intent_codememory_apply": "codememory_mutation",
+    "task_projection_codememory_list": "codememory_probe",
+    "task_projection_codememory_get": "codememory_probe",
 }
 
 

@@ -670,7 +670,7 @@ Validation:
 
 Decision note:
 
-- E2-T1 source of truth stays in shared runtime storage via `task_graph.json`; command-specific runtimes remain local execution metadata stores that can reference the shared graph.
+- Historical E2-T1 decision: source of truth stayed in shared runtime storage via `task_graph.json`. `task_125` supersedes this for Codememory-managed tasks: Codememory is authoritative, `task_graph.json` is the execution projection, and command-specific runtimes remain local execution metadata.
 
 Immediate next slice:
 
@@ -683,8 +683,8 @@ Current status: `done`
 
 Findings:
 
-- Documented the source-of-truth decision explicitly: shared runtime storage via `task_graph.json` is authoritative for dependency state.
-- Clarified that `/workflow` writes dependency projections into the shared graph, while `/autoflow` and `/autopilot` retain only command-local lifecycle metadata and expose `task_graph_path` as a reference.
+- Historical E2-T2 decision: shared runtime storage via `task_graph.json` was authoritative for dependency state. `task_125` supersedes that model for Codememory-managed tasks with a one-way execution projection.
+- `/workflow` still writes workflow-owned execution nodes into the shared graph, while `/autoflow` and `/autopilot` retain only command-local lifecycle metadata and expose `task_graph_path` as a reference.
 - Updated command contracts and continuity spec so operators and future implementation slices have one documented dependency-store model.
 
 Primary evidence references:
