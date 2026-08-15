@@ -98,6 +98,12 @@ class AttemptSuperseded(RuntimeError):
     pass
 
 
+class GateAdmissionError(RuntimeError):
+    def __init__(self, detail: str, *, grant_delivered: bool) -> None:
+        super().__init__(detail)
+        self.grant_delivered = grant_delivered
+
+
 def env_bool(name: str, default: bool) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -1678,6 +1684,115 @@ def _persist_running_attempt(
     guarded_local_commit(identity, commit, state_path=state_path)
 
 
+def _grant_lease_gate(
+    job_id: str,
+    attempt_id: str,
+    identity: LeaseIdentity,
+    process: subprocess.Popen[bytes],
+    process_start: str,
+    write_fd: int,
+    *,
+    state_path: Path,
+) -> None:
+    grant_delivered = False
+
+    def commit() -> None:
+        nonlocal grant_delivered
+        with locked_jobs(writeback=False) as data:
+            job = find_job(data, job_id)
+            attempt = current_attempt(job) if job is not None else None
+            if (
+                job is None
+                or not _attempt_matches(job, attempt_id, {"running"})
+                or job.get("cancel_requested_at")
+                or not isinstance(attempt, dict)
+                or _attempt_identity(attempt) != identity
+                or int(attempt.get("pid") or 0) != process.pid
+                or int(attempt.get("pgid") or 0) != process.pid
+                or str(attempt.get("process_start_fingerprint") or "")
+                != process_start
+            ):
+                raise AttemptSuperseded("attempt changed before lease gate admission")
+            if os.write(write_fd, b"1") != 1:
+                raise OSError("lease gate grant was incomplete")
+            grant_delivered = True
+
+    try:
+        guarded_local_commit(identity, commit, state_path=state_path)
+    except (AttemptSuperseded, BackgroundStoreError, OSError, TaskLeaseError) as exc:
+        raise GateAdmissionError(
+            "lease gate admission failed",
+            grant_delivered=grant_delivered,
+        ) from exc
+
+
+def _settle_unadmitted_lease_gate(
+    job_id: str,
+    attempt_id: str,
+    identity: LeaseIdentity,
+    process: subprocess.Popen[bytes],
+    process_start: str,
+    gate_attempt: dict,
+    drain_thread: threading.Thread,
+    write_fd: int,
+    *,
+    state_path: Path,
+    failure_class: str,
+) -> str:
+    try:
+        _write_gate_marker(
+            Path(str(gate_attempt["gate_path"])),
+            "gate_aborted",
+            job_id=job_id,
+            attempt_id=attempt_id,
+            pid=process.pid,
+            process_start_fingerprint=process_start,
+        )
+    except BackgroundStoreError:
+        pass
+    finally:
+        try:
+            os.close(write_fd)
+        except OSError:
+            pass
+
+    containment_proven = True
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        action = terminate_process(
+            process.pid,
+            process.pid,
+            expected_start_fingerprint=process_start,
+        )
+        containment_proven = termination_proves_containment(action)
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            containment_proven = False
+    drain_thread.join(timeout=5)
+    if (
+        process.returncode is None
+        or drain_thread.is_alive()
+        or not containment_proven
+        or _gate_state(job_id, gate_attempt) != "gate_aborted"
+    ):
+        return _mark_attempt_reconciling(
+            job_id,
+            attempt_id,
+            reason="lease gate admission could not prove the command was aborted",
+            failure_class=failure_class,
+        )
+    return _finish_prestart_attempt(
+        job_id,
+        attempt_id,
+        failure_class=failure_class,
+        summary="command admission was fenced before gate release",
+        identity=identity,
+        state_path=state_path,
+    )
+
+
 def _project_terminal_receipt(
     job_id: str,
     attempt_id: str,
@@ -1886,6 +2001,14 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
         _best_effort_release(identity, state_path)
         return result, None
     receipt["process_start_fingerprint"] = process_start
+    gate_attempt = dict(attempt)
+    gate_attempt.update(
+        {
+            "pid": process.pid,
+            "pgid": process.pid,
+            "process_start_fingerprint": process_start,
+        }
+    )
 
     try:
         _persist_running_attempt(
@@ -1896,24 +2019,53 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
             process_start,
             state_path=state_path,
         )
-        check_lease(identity, state_path=state_path)
-    except (AttemptSuperseded, TaskLeaseError, BackgroundStoreError) as exc:
-        os.close(write_fd)
-        process.wait(timeout=5)
-        drain_thread.join(timeout=5)
-        failure_class = getattr(exc, "reason_code", "attempt_superseded")
-        result = _finish_prestart_attempt(
+        _grant_lease_gate(
             job_id,
             attempt_id,
-            failure_class=str(failure_class),
-            summary="command admission was fenced before gate release",
-            identity=identity,
+            identity,
+            process,
+            process_start,
+            write_fd,
             state_path=state_path,
+        )
+    except (AttemptSuperseded, TaskLeaseError, BackgroundStoreError) as exc:
+        failure_class = getattr(exc, "reason_code", "attempt_superseded")
+        result = _settle_unadmitted_lease_gate(
+            job_id,
+            attempt_id,
+            identity,
+            process,
+            process_start,
+            gate_attempt,
+            drain_thread,
+            write_fd,
+            state_path=state_path,
+            failure_class=str(failure_class),
         )
         _best_effort_release(identity, state_path)
         return result, None
-
-    os.write(write_fd, b"1")
+    except GateAdmissionError as exc:
+        if not exc.grant_delivered:
+            cause = exc.__cause__
+            failure_class = str(
+                getattr(cause, "reason_code", "gate_admission_rejected")
+            )
+            result = _settle_unadmitted_lease_gate(
+                job_id,
+                attempt_id,
+                identity,
+                process,
+                process_start,
+                gate_attempt,
+                drain_thread,
+                write_fd,
+                state_path=state_path,
+                failure_class=failure_class,
+            )
+            _best_effort_release(identity, state_path)
+            return result, None
+        # A delivered byte is the irreversible effect boundary. Never replace
+        # its later gate evidence with a parent-authored aborted marker.
     os.close(write_fd)
     receipt["started_at"] = to_iso(now_utc())
     receipt["pid"] = process.pid

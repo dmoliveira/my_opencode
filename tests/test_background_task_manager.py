@@ -1087,6 +1087,144 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                 {"cancelled", "unknown"},
             )
 
+    def test_lease_cancel_before_gate_admission_aborts_without_effect(self) -> None:
+        command_marker = self.root / "lease-command-ran"
+        admission_entered = threading.Event()
+        release_admission = threading.Event()
+        termination_entered = threading.Event()
+        release_termination = threading.Event()
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import pathlib; "
+                        f"pathlib.Path({str(command_marker)!r}).write_text('ran')"
+                    ),
+                ],
+            )
+            real_admission = bg._grant_lease_gate
+            real_terminate = bg.terminate_process
+
+            def delayed_admission(*args, **kwargs):
+                admission_entered.set()
+                self.assertTrue(release_admission.wait(timeout=5))
+                return real_admission(*args, **kwargs)
+
+            def delayed_termination(*args, **kwargs):
+                termination_entered.set()
+                self.assertTrue(release_termination.wait(timeout=5))
+                return real_terminate(*args, **kwargs)
+
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "_grant_lease_gate",
+                    side_effect=delayed_admission,
+                ),
+                patch.object(
+                    bg,
+                    "terminate_process",
+                    side_effect=delayed_termination,
+                ),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    runner = executor.submit(bg._run_lease_job, leased[0])
+                    self.assertTrue(admission_entered.wait(timeout=5))
+                    cancelled = executor.submit(
+                        bg.command_cancel, argparse.Namespace(id=job["id"])
+                    )
+                    self.assertTrue(termination_entered.wait(timeout=5))
+                    during = bg._snapshot_job(job["id"])
+                    assert during is not None
+                    attempt = bg.current_attempt(during)
+                    assert attempt is not None
+                    release_admission.set()
+                    gate_path = Path(attempt["gate_path"])
+                    for _ in range(100):
+                        if gate_path.is_file():
+                            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+                            if gate.get("state") == "gate_aborted":
+                                break
+                        time.sleep(0.03)
+                    else:
+                        self.fail("lease gate did not record an aborted admission")
+                    self.assertEqual("gate_aborted", gate["state"])
+                    self.assertEqual(attempt["id"], gate["attempt_id"])
+                    self.assertEqual(attempt["pid"], gate["pid"])
+                    self.assertEqual(attempt["pgid"], gate["pgid"])
+                    self.assertEqual(
+                        attempt["process_start_fingerprint"],
+                        gate["process_start_fingerprint"],
+                    )
+                    release_termination.set()
+                    self.assertEqual(0, cancelled.result(timeout=10))
+                    runner.result(timeout=10)
+            self.assertFalse(command_marker.exists())
+            final = bg._snapshot_job(job["id"])
+            assert final is not None
+            self.assertEqual("cancelled", final["status"])
+
+    def test_lease_gate_write_failure_aborts_without_effect(self) -> None:
+        command_marker = self.root / "lease-command-ran"
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import pathlib; "
+                        f"pathlib.Path({str(command_marker)!r}).write_text('ran')"
+                    ),
+                ],
+            )
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg.os,
+                    "write",
+                    side_effect=OSError("forced gate write failure"),
+                ),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                status, exit_code = bg._run_lease_job(leased[0])
+            self.assertEqual(("failed", None), (status, exit_code))
+            self.assertFalse(command_marker.exists())
+            failed = bg._snapshot_job(job["id"])
+            assert failed is not None
+            attempt = failed["attempts"][0]
+            self.assertEqual("failed", failed["status"])
+            self.assertEqual("known_no_effect", attempt["outcome_confidence"])
+            self.assertEqual(
+                "gate_aborted",
+                json.loads(Path(attempt["gate_path"]).read_text(encoding="utf-8"))["state"],
+            )
+            self.assertEqual(
+                0,
+                leases.lease_status(state_path=self.root / "leases.json")["count"],
+            )
+
     def test_natural_exit_contains_background_descendants(self) -> None:
         child_pid_path = self.root / "child.pid"
         child_code = "import time; time.sleep(30)"
