@@ -82,6 +82,7 @@ class TuiConfigTests(unittest.TestCase):
                                 {"enabled": True, "position": "right"},
                             ],
                             "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-sidebar",
+                            "FILE://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-sidebar",
                             [unrelated_local_plugin.as_uri(), {"keep": "local"}],
                             [
                                 nested_unrelated_local_plugin.as_uri(),

@@ -3,6 +3,14 @@ import { jsx as _jsx, jsxs as _jsxs } from "@opentui/solid/jsx-runtime";
 import { watch } from "node:fs";
 import { join } from "node:path";
 import { EXECUTION_STATUS_DIRECTORY, EXECUTION_STATUS_FILE, readExecutionStatus, statusForSession, } from "./state-reader.js";
+export function shouldBindStateDirectory(filename) {
+    return (filename === null ||
+        filename === undefined ||
+        String(filename) === EXECUTION_STATUS_DIRECTORY);
+}
+export function shouldApplyRefresh(closed, generation, latestGeneration) {
+    return !closed && generation === latestGeneration;
+}
 function displayText(value, fallback) {
     if (typeof value !== "string") {
         return fallback;
@@ -17,6 +25,7 @@ export function createExecutionStatusSidebar(api) {
     let stateWatcher;
     let timer;
     let closed = false;
+    let refreshGeneration = 0;
     const views = new Map();
     const updateView = (sessionId, refs = views.get(sessionId)) => {
         if (!refs || closed) {
@@ -40,8 +49,9 @@ export function createExecutionStatusSidebar(api) {
         }
     };
     const refresh = () => {
+        const generation = ++refreshGeneration;
         void readExecutionStatus(api.state.path.directory).then((value) => {
-            if (closed) {
+            if (!shouldApplyRefresh(closed, generation, refreshGeneration)) {
                 return;
             }
             snapshot = value;
@@ -75,7 +85,7 @@ export function createExecutionStatusSidebar(api) {
     };
     try {
         rootWatcher = watch(api.state.path.directory, { persistent: false }, (_event, filename) => {
-            if (String(filename ?? "") === EXECUTION_STATUS_DIRECTORY) {
+            if (shouldBindStateDirectory(filename)) {
                 bindStateDirectory();
                 schedule();
             }

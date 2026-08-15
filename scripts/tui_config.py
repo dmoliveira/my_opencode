@@ -36,7 +36,7 @@ def _plugin_source(entry: Any) -> str | None:
 
 def _managed_plugin_path(source: str) -> Path | None:
     """Return a normalized local path when source names our managed sidebar."""
-    if not source.startswith("file:"):
+    if not source.lower().startswith("file:"):
         return None
 
     home = os.environ.get("HOME", str(Path.home()))

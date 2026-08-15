@@ -43,6 +43,15 @@ function label(value, maxChars) {
     }
     return `${compact.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
 }
+function isSafeStatusLabel(value) {
+    return (typeof value === "string" &&
+        value.trim().length > 0 &&
+        value.length <= 160 &&
+        !CONTROL_CHARACTER.test(value));
+}
+function isSafeStatusTimestamp(value) {
+    return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
 function stageFor(payload) {
     const name = tool(payload);
     if (["edit", "write", "apply_patch"].includes(name)) {
@@ -127,17 +136,22 @@ function stageFor(payload) {
 function parseStatus(value) {
     const sessions = Object.create(null);
     if (!isRecord(value) || value.version !== 1 || !isRecord(value.sessions)) {
-        return { version: 1, sessions };
+        return {
+            status: { version: 1, sessions },
+            rejected: value !== null && value !== undefined,
+        };
     }
+    let rejected = false;
     for (const [id, entry] of Object.entries(value.sessions)) {
         if (!id ||
             id.length > 160 ||
             CONTROL_CHARACTER.test(id) ||
             !isRecord(entry) ||
             entry.sessionId !== id ||
-            typeof entry.last !== "string" ||
-            typeof entry.next !== "string" ||
-            typeof entry.updatedAt !== "string") {
+            !isSafeStatusLabel(entry.last) ||
+            !isSafeStatusLabel(entry.next) ||
+            !isSafeStatusTimestamp(entry.updatedAt)) {
+            rejected = true;
             continue;
         }
         setOwn(sessions, id, {
@@ -147,19 +161,22 @@ function parseStatus(value) {
             updatedAt: entry.updatedAt,
         });
     }
-    return { version: 1, sessions };
+    return { status: { version: 1, sessions }, rejected };
 }
 function boundedSessions(sessions, maxSessions, protectedSessionId) {
-    const entries = Object.entries(sessions).sort((left, right) => left[1].updatedAt.localeCompare(right[1].updatedAt));
+    const entries = Object.entries(sessions).sort((left, right) => {
+        const timestampDifference = Date.parse(left[1].updatedAt) - Date.parse(right[1].updatedAt);
+        return timestampDifference || left[0].localeCompare(right[0]);
+    });
     const retained = Object.create(null);
-    const keep = new Set(entries
-        .slice(Math.max(0, entries.length - maxSessions))
-        .map(([sessionId]) => sessionId));
-    keep.add(protectedSessionId);
-    for (const [id, entry] of entries) {
-        if (keep.has(id)) {
-            setOwn(retained, id, entry);
-        }
+    const protectedEntry = sessions[protectedSessionId];
+    const capacityForOtherSessions = Math.max(0, maxSessions - (protectedEntry ? 1 : 0));
+    const otherSessions = entries.filter(([id]) => id !== protectedSessionId);
+    for (const [id, entry] of otherSessions.slice(Math.max(0, otherSessions.length - capacityForOtherSessions))) {
+        setOwn(retained, id, entry);
+    }
+    if (protectedEntry) {
+        setOwn(retained, protectedSessionId, protectedEntry);
     }
     return retained;
 }
@@ -174,7 +191,8 @@ export function createExecutionStatusHook(options) {
         }
         try {
             const result = transactGatewayStateDomain(options.directory, "executionStatus", (current) => {
-                const status = parseStatus(current);
+                const parsed = parseStatus(current);
+                const status = parsed.status;
                 const existing = status.sessions[id];
                 const next = {
                     sessionId: id,
@@ -182,18 +200,21 @@ export function createExecutionStatusHook(options) {
                     next: label(change.next ?? existing?.next ?? "Begin execution", options.maxLabelChars),
                     updatedAt: nowIso(),
                 };
-                if (sameEntry(existing, next)) {
-                    return null;
-                }
                 const sessions = Object.create(null);
                 for (const [sessionId, entry] of Object.entries(status.sessions)) {
                     setOwn(sessions, sessionId, entry);
                 }
                 setOwn(sessions, id, next);
+                const bounded = boundedSessions(sessions, options.maxSessions, id);
+                if (sameEntry(existing, next) &&
+                    Object.keys(bounded).length === Object.keys(status.sessions).length &&
+                    !parsed.rejected) {
+                    return null;
+                }
                 return {
                     value: {
                         version: 1,
-                        sessions: boundedSessions(sessions, options.maxSessions, id),
+                        sessions: bounded,
                     },
                     mode: "replace",
                     rootUpdates: { lastUpdatedAt: next.updatedAt, source: "execution-status" },
@@ -223,8 +244,9 @@ export function createExecutionStatusHook(options) {
         }
         try {
             transactGatewayStateDomain(options.directory, "executionStatus", (current) => {
-                const status = parseStatus(current);
-                if (!status.sessions[id]) {
+                const parsed = parseStatus(current);
+                const status = parsed.status;
+                if (!status.sessions[id] && !parsed.rejected) {
                     return null;
                 }
                 const sessions = Object.create(null);

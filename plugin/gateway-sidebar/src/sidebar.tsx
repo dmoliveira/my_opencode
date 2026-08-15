@@ -18,6 +18,22 @@ type ViewRefs = {
   next?: TextRenderable
 }
 
+export function shouldBindStateDirectory(filename: string | Buffer | null | undefined): boolean {
+  return (
+    filename === null ||
+    filename === undefined ||
+    String(filename) === EXECUTION_STATUS_DIRECTORY
+  )
+}
+
+export function shouldApplyRefresh(
+  closed: boolean,
+  generation: number,
+  latestGeneration: number,
+): boolean {
+  return !closed && generation === latestGeneration
+}
+
 function displayText(value: unknown, fallback: string): string {
   if (typeof value !== "string") {
     return fallback
@@ -33,6 +49,7 @@ export function createExecutionStatusSidebar(api: TuiPluginApi) {
   let stateWatcher: FSWatcher | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let closed = false
+  let refreshGeneration = 0
   const views = new Map<string, ViewRefs>()
 
   const updateView = (sessionId: string, refs = views.get(sessionId)): void => {
@@ -59,8 +76,9 @@ export function createExecutionStatusSidebar(api: TuiPluginApi) {
   }
 
   const refresh = (): void => {
+    const generation = ++refreshGeneration
     void readExecutionStatus(api.state.path.directory).then((value) => {
-      if (closed) {
+      if (!shouldApplyRefresh(closed, generation, refreshGeneration)) {
         return
       }
       snapshot = value
@@ -96,7 +114,7 @@ export function createExecutionStatusSidebar(api: TuiPluginApi) {
 
   try {
     rootWatcher = watch(api.state.path.directory, { persistent: false }, (_event, filename) => {
-      if (String(filename ?? "") === EXECUTION_STATUS_DIRECTORY) {
+      if (shouldBindStateDirectory(filename)) {
         bindStateDirectory()
         schedule()
       }
