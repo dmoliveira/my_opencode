@@ -464,6 +464,57 @@ test("soft capacity drops new identities without disturbing pending envelopes", 
   });
 });
 
+test("soft capacity ignores unpublished stages and non-file envelope names", async () => {
+  await withDirectory(async (directory) => {
+    const stateDir = join(directory, "state");
+    const pending = pendingDirectory(stateDir);
+    mkdirSync(pending, { recursive: true, mode: 0o700 });
+    for (const path of [stateDir, join(stateDir, "ingress"), pending]) {
+      chmodSync(path, 0o700);
+    }
+    const stageEnvelope = directEnvelope({ messageId: "message-stage" });
+    const stagePath = join(
+      pending,
+      `.intent-ingress-stage-${stageEnvelope.envelope_id}-crash`,
+    );
+    writeFileSync(stagePath, "crash-left stage", { mode: 0o600 });
+    chmodSync(stagePath, 0o600);
+    const directoryName = join(
+      pending,
+      `intent_ingress_${"a".repeat(32)}.json`,
+    );
+    mkdirSync(directoryName, { mode: 0o700 });
+    const symlinkTarget = join(directory, "symlink-target");
+    writeFileSync(symlinkTarget, "not an envelope", { mode: 0o600 });
+    symlinkSync(
+      symlinkTarget,
+      join(pending, `intent_ingress_${"b".repeat(32)}.json`),
+    );
+    const envelope = directEnvelope({ messageId: "message-after-stage" });
+
+    assert.equal(
+      (await persistIntentIngressEnvelope(envelope, {
+        stateDir,
+        maxEnvelopeBytes: 4096,
+        softMaxPendingEntries: 1,
+      })).outcome,
+      "enqueued",
+    );
+    assert.deepEqual(
+      JSON.parse(
+        readFileSync(join(pending, `${envelope.envelope_id}.json`), "utf8"),
+      ),
+      envelope,
+    );
+    assert.equal(existsSync(stagePath), true);
+    assert.equal(lstatSync(directoryName).isDirectory(), true);
+    assert.equal(
+      lstatSync(join(pending, `intent_ingress_${"b".repeat(32)}.json`)).isSymbolicLink(),
+      true,
+    );
+  });
+});
+
 test("unsafe pending symlinks fail open without writing through the link", async () => {
   await withDirectory(async (directory) => {
     const stateDir = join(directory, "state");

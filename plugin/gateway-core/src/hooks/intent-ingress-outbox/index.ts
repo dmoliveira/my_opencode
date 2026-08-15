@@ -35,6 +35,7 @@ const TEMP_PREFIX = ".intent-ingress-stage-";
 const MAX_PENDING_ENTRIES = 10_000;
 const MAX_ENVELOPE_BYTES = 262_144;
 const MAX_DIRECTORY_SCAN_ENTRIES = MAX_PENDING_ENTRIES + 64;
+const PUBLISHED_ENVELOPE_FILENAME = /^intent_ingress_[0-9a-f]{32}\.json$/;
 
 interface ChatPayload {
   properties?: {
@@ -492,12 +493,21 @@ async function pendingCapacityReached(
 ): Promise<boolean> {
   const directory = await opendir(pending);
   try {
-    for (let count = 0; count < maxEntries; count += 1) {
-      if (!(await directory.read())) {
+    let publishedEntries = 0;
+    for (let scanned = 0; scanned < MAX_DIRECTORY_SCAN_ENTRIES; scanned += 1) {
+      const entry = await directory.read();
+      if (!entry) {
         return false;
       }
+      if (!entry.isFile() || !PUBLISHED_ENVELOPE_FILENAME.test(entry.name)) {
+        continue;
+      }
+      publishedEntries += 1;
+      if (publishedEntries >= maxEntries) {
+        return true;
+      }
     }
-    return true;
+    return (await directory.read()) !== null;
   } finally {
     await directory.close().catch(() => undefined);
   }
