@@ -164,7 +164,7 @@ class BoundedSubprocessTest(unittest.TestCase):
         self.assertTrue(fake_process.killed)
 
     def test_registry_uses_known_command_classes(self) -> None:
-        self.assertEqual(37, len(OPERATION_CLASSES))
+        self.assertEqual(40, len(OPERATION_CLASSES))
         self.assertEqual(
             set(OPERATION_CLASSES.values()),
             set(COMMAND_CLASS_POLICIES),
@@ -239,6 +239,48 @@ class BoundedSubprocessTest(unittest.TestCase):
             text=True,
         )
         self.assertEqual(7, nonzero.returncode)
+
+    def test_output_limit_terminates_capture_at_combined_byte_cap(self) -> None:
+        script = (
+            "import sys, time; "
+            "sys.stdout.write('a' * 8192); sys.stdout.flush(); "
+            "sys.stderr.write('b' * 8192); sys.stderr.flush(); "
+            "time.sleep(60)"
+        )
+        started = time.monotonic()
+        with self.assertRaises(BoundedCommandError) as raised:
+            run_bounded(
+                [sys.executable, "-c", script],
+                operation="task_lease_codememory_doctor",
+                capture_output=True,
+                text=True,
+                max_output_bytes=1024,
+            )
+        self.assertEqual(
+            "task_lease_codememory_doctor_output_limit",
+            raised.exception.reason_code,
+        )
+        captured = raised.exception.failure.stdout + raised.exception.failure.stderr
+        self.assertLessEqual(len(captured.encode("utf-8")), 1024)
+        self.assertLess(time.monotonic() - started, 3.0)
+
+    def test_output_limit_requires_positive_capture_without_input(self) -> None:
+        for options in (
+            {"max_output_bytes": 0, "capture_output": True},
+            {"max_output_bytes": 10},
+            {
+                "max_output_bytes": 10,
+                "capture_output": True,
+                "input": "not supported",
+                "text": True,
+            },
+        ):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                run_bounded(
+                    [sys.executable, "-c", "pass"],
+                    operation="task_lease_codememory_doctor",
+                    **options,
+                )
 
     def test_input_matches_subprocess_run_semantics(self) -> None:
         text = run_bounded(

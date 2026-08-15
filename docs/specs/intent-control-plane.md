@@ -16,6 +16,7 @@ Codememory graph without giving multiple agents direct write authority.
 | GitHub | Pull requests, checks, reviews, and merge state |
 | Intent proposal | Advisory input awaiting deterministic reconciliation |
 | `task_graph.json` | Derived execution view: Codememory-managed tasks are one-way projections; workflow-owned nodes remain local runtime state |
+| `codememory_task_leases.json` | Cooperative single-host execution leases and per-task fencing high-water marks; never task lifecycle authority |
 | `/bg/jobs.json` | Existing process execution state; lease-backed adaptation is tracked by `task_129` |
 | OpenCode todos | Session-local presentation only; never durable task authority |
 
@@ -68,6 +69,67 @@ fingerprint, count, and managed task identity before exposing scheduler state.
 They cannot mutate managed fields and fail closed on malformed or tampered
 state. `--check` reports source or destination drift without writing; `--apply`
 is the only task graph path that may repair managed state.
+
+## Fenced Task Leases
+
+`scripts/task_lease_command.py claim|heartbeat|check|release|status|doctor`
+provides the local
+execution lease used before autonomous dispatch. Codememory remains task and
+session authority. A claim is admitted only after four bounded, read-only
+probes against one explicit config and the caller's worktree:
+
+1. `oc config --doctor` must report the selected backend ready.
+2. `oc current --scope <scope>` must report the exact active, non-stale
+   session, worktree, and task.
+3. `oc get <task> --view full` must report that task as `doing` in the same
+   scope.
+4. A second `oc current --scope <scope>` must still report the same holder,
+   rejecting a context switch during the source sample.
+
+Each probe has a two-second maximum and a 256 KiB response cap. The complete
+source sample has an eight-second deadline. The store binds to a digest of the
+explicit config and backend identity; a changed config or backend fails closed.
+The lease layer is SQLite-qualified: PostgreSQL, config environment
+placeholders, and `CODEMEMORY_SQLITE_PATH` overrides fail closed so hidden
+runtime DSNs cannot bypass backend binding. Source authority is sampled at
+claim admission, not continuously asserted.
+
+One active lease may exist per task. Its identity is the exact tuple of task,
+session, owner, unique worker ID, lease ID, and fencing epoch. Repeating a
+claim from the same session, owner, and worker returns the existing lease while
+advancing the observed clock floor. A competing unexpired claim fails. Expiry uses `now >=
+expires_at`; heartbeat never revives an expired lease. Reclaim or a new claim
+after release increments the persisted per-task epoch, so a stale worker cannot
+check, heartbeat, release, or enter a guarded commit after replacement. Epochs
+and lease IDs are cooperative identifiers, not credentials or secrets.
+
+The default owner-only state is
+`~/.config/opencode/my_opencode/runtime/codememory_task_leases.json` and can be
+relocated with `MY_OPENCODE_TASK_LEASE_PATH`. Claims require
+`MY_OPENCODE_CODEMEMORY_CONFIG`; binary and default-scope overrides are
+`MY_OPENCODE_CODEMEMORY_BIN` and `MY_OPENCODE_CODEMEMORY_SCOPE`. The durability
+contract requires POSIX `flock`, no-follow opens, file fsync, atomic replace,
+and parent-directory fsync. A stable lock file serializes access while a
+separate atomically replaced journal records the previous and next state
+digests before replacement. Any uncertain state commit remains `committing`
+and blocks every operation rather than choosing an assumed generation.
+
+After stopping every lease worker and inspecting the current state, an operator
+may run `python3 scripts/task_lease_command.py doctor --recover-indeterminate
+--accept-current-state` to
+accept that generation and invalidate every active lease. A detected wall-clock
+rollback also fails closed; `python3 scripts/task_lease_command.py doctor
+--recover-clock --accept-current-state` likewise invalidates all active leases. Both paths
+preserve epoch high-water marks and are manual authority decisions. Successful
+status, check, and guarded-commit admission persist the latest observed wall
+time so a later rollback cannot revive a lease after that observed point.
+
+`guarded_local_commit()` in `scripts/task_lease_command.py` verifies the exact
+unexpired holder and keeps the lease lock through one short callback. It rejects
+same-thread reentry. This guard is valid only for cooperative, local, idempotent
+effects that use the same lock boundary. GitHub, Git, Codememory, network, and
+other external effects remain outside the local transaction and require native
+compare-and-swap or end-to-end idempotency before parallel dispatch is safe.
 
 ## Proposal Contract
 
@@ -294,6 +356,5 @@ audit metadata and is never exported by this hook.
 ## Deferred Work
 
 - Proposal-only planner and bounded research: `task_127`.
-- Fenced task leases and heartbeats: `task_128`.
 - Lease-backed background execution: `task_129`.
 - Scale qualification at 50, 250, and 1000 tasks: `task_130`.
