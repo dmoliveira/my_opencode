@@ -325,14 +325,39 @@ def is_pid_alive(pid: int) -> bool:
         return False
 
 
+def _linux_process_group_has_executable_members(pgid: int) -> bool | None:
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return None
+    try:
+        entries = os.scandir(proc_root)
+    except OSError:
+        return None
+    with entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+            try:
+                raw = Path(entry.path, "stat").read_text(encoding="utf-8")[:8192]
+                fields = raw[raw.rfind(")") + 2 :].split()
+                state = fields[0]
+                process_group = int(fields[2])
+            except (IndexError, OSError, ValueError):
+                continue
+            if process_group == pgid and state not in {"X", "Z"}:
+                return True
+    return False
+
+
 def is_process_group_alive(pgid: int) -> bool:
     if pgid <= 0 or not hasattr(os, "killpg"):
         return False
     try:
         os.killpg(pgid, 0)
-        return True
     except OSError:
         return False
+    linux_live = _linux_process_group_has_executable_members(pgid)
+    return True if linux_live is None else linux_live
 
 
 def process_start_fingerprint(pid: int) -> str | None:

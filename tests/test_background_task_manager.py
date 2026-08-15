@@ -210,13 +210,29 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             ),
             self.assertRaises(bg.BackgroundStoreError),
         ):
-                bg._run_lease_gate(
+            bg._run_lease_gate(
                     read_fd,
                     self.root / "gate.json",
                     "bg_test",
                     "attempt_test",
-                    "raise AssertionError('must not execute')",
-                )
+                "raise AssertionError('must not execute')",
+            )
+
+    def test_zombie_only_linux_group_is_not_executable_liveness(self) -> None:
+        with (
+            patch.object(bg.os, "killpg"),
+            patch.object(
+                bg, "_linux_process_group_has_executable_members", return_value=False
+            ),
+        ):
+            self.assertFalse(bg.is_process_group_alive(12345))
+        with (
+            patch.object(bg.os, "killpg"),
+            patch.object(
+                bg, "_linux_process_group_has_executable_members", return_value=True
+            ),
+        ):
+            self.assertTrue(bg.is_process_group_alive(12345))
 
     def test_concurrent_runners_execute_one_legacy_reservation(self) -> None:
         marker = self.root / "executions.txt"
