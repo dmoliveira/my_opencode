@@ -86,10 +86,12 @@ class FakeRunner:
         self,
         *,
         collision: bool = False,
+        saturated_find: bool = False,
         fail_apply: bool = False,
         apply_result: dict[str, Any] | None = None,
     ) -> None:
         self.collision = collision
+        self.saturated_find = saturated_find
         self.fail_apply = fail_apply
         self.apply_result = apply_result
         self.calls: list[tuple[list[str], str]] = []
@@ -100,6 +102,17 @@ class FakeRunner:
         if operation == "intent_codememory_doctor":
             return {"status": "ok", "runtime_ready": True, "backend": "sqlite"}
         if operation == "intent_codememory_find":
+            if self.saturated_find:
+                return {
+                    "items": [
+                        {
+                            "id": f"task_{index}",
+                            "display": f"related result {index}",
+                            "kind": "feature",
+                        }
+                        for index in range(intent.TITLE_LOOKUP_LIMIT)
+                    ]
+                }
             if self.collision:
                 return {
                     "items": [
@@ -336,6 +349,35 @@ class IntentCoordinatorTest(unittest.TestCase):
 
         self.assertEqual("intent_title_collision", context.exception.reason_code)
         self.assertEqual([], list(self.state_dir.glob("receipts/*/*.json")))
+
+    def test_saturated_title_lookup_aborts_without_receipt(self) -> None:
+        runner = FakeRunner(saturated_find=True)
+
+        with self.assertRaises(intent.CoordinatorError) as context:
+            intent.apply_proposal(
+                self.normalized,
+                runner,
+                state_dir=self.state_dir,
+                actor="test",
+            )
+
+        self.assertEqual("intent_title_lookup_saturated", context.exception.reason_code)
+        self.assertEqual([], list(self.state_dir.glob("receipts/*/*.json")))
+        self.assertFalse(
+            any(
+                operation == "intent_codememory_apply"
+                for _, operation in runner.calls
+            )
+        )
+        find_arguments = next(
+            arguments
+            for arguments, operation in runner.calls
+            if operation == "intent_codememory_find"
+        )
+        self.assertEqual(
+            str(intent.TITLE_LOOKUP_LIMIT),
+            find_arguments[find_arguments.index("--limit") + 1],
+        )
 
     def test_invalid_apply_results_leave_prepared_receipt(self) -> None:
         wrong_scope = batch_result()

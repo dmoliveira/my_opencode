@@ -33,6 +33,7 @@ FORMAT_VERSION = 1
 MAX_CHANGES = 10
 MAX_PROPOSAL_BYTES = 256 * 1024
 MAX_RECEIPT_BYTES = 1024 * 1024
+TITLE_LOOKUP_LIMIT = 100
 _configured_state_dir = os.environ.get(
     "MY_OPENCODE_INTENT_COORDINATOR_STATE_DIR", ""
 ).strip()
@@ -642,7 +643,7 @@ def _title_collisions(proposal: dict[str, Any], runner: Runner) -> list[dict[str
                 "--scope",
                 str(proposal["scope"]),
                 "--limit",
-                "100",
+                str(TITLE_LOOKUP_LIMIT),
                 "--format",
                 "json",
             ],
@@ -653,6 +654,18 @@ def _title_collisions(proposal: dict[str, Any], runner: Runner) -> list[dict[str
             raise CoordinatorError(
                 "intent_codememory_find_invalid",
                 "Codememory find returned invalid items",
+            )
+        if len(items) >= TITLE_LOOKUP_LIMIT:
+            raise CoordinatorError(
+                "intent_title_lookup_saturated",
+                "Codememory title lookup reached its result limit",
+                context={
+                    "key": str(record["key"]),
+                    "entity_type": str(record["entity_type"]),
+                    "title": str(record["title"]),
+                    "result_count": len(items),
+                    "limit": TITLE_LOOKUP_LIMIT,
+                },
             )
         for item in items:
             if not isinstance(item, dict):
