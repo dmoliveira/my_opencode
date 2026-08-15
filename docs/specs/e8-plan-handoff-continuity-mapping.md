@@ -29,13 +29,13 @@ Canonical surfaces to reuse:
 ## Acceptance Checks
 
 1. Compatibility remains thin mapping over existing `/autopilot`, `/task`, `/resume`, and `/checkpoint` runtime surfaces.
-2. No second runtime store is introduced; existing task graph + checkpoint/autopilot runtime remain sources of truth.
+2. No second runtime store is introduced; Codememory remains durable task authority, while the task graph and checkpoint/autopilot runtimes provide execution views and command-local state.
 3. Resume behavior remains deterministic and guardrail-aware (`todo`, budget, stop guards).
 4. Handoff evidence is available through existing report/digest/status commands.
 
 ## Shared Runtime Contract (E2-T2)
 
-- `task_graph.json` is the authoritative dependency graph store for canonical local flows.
+- `task_graph.json` is the shared execution view for canonical local flows. Codememory-managed nodes are one-way projections, while workflow-owned nodes remain local runtime state.
 - `/workflow` projects explicit step dependencies into the shared graph and returns `task_graph_path` in machine-readable output.
 - `/autoflow` and `/autopilot` keep their own runtime/checkpoint files for command-local lifecycle metadata only; they must reference the shared task graph via `task_graph_path` instead of creating a second dependency graph store.
 - `/task ready --json` remains the durable pending-work query surface across command families.

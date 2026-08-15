@@ -115,7 +115,7 @@ Default reason codes:
 
 Shared runtime authority:
 
-- `task_graph.json` is the authoritative dependency graph store for canonical local orchestration flows.
+- `task_graph.json` is the shared execution view for canonical local orchestration flows. Codememory-managed nodes are a one-way projection; workflow-owned nodes remain local runtime state.
 - `/autopilot` runtime files remain command-local lifecycle state and must reference the shared graph instead of introducing a second dependency graph runtime.
 
 All non-pass outcomes must emit at least one remediation hint.

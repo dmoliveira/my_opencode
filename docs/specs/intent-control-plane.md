@@ -15,7 +15,7 @@ Codememory graph without giving multiple agents direct write authority.
 | Codememory | Tasks, epics, dependencies, decisions, documents, sessions, and mutation history |
 | GitHub | Pull requests, checks, reviews, and merge state |
 | Intent proposal | Advisory input awaiting deterministic reconciliation |
-| `task_graph.json` | Existing execution state; migration to a Codememory projection is tracked by `task_125` |
+| `task_graph.json` | Derived execution view: Codememory-managed tasks are one-way projections; workflow-owned nodes remain local runtime state |
 | `/bg/jobs.json` | Existing process execution state; lease-backed adaptation is tracked by `task_129` |
 | OpenCode todos | Session-local presentation only; never durable task authority |
 
@@ -23,6 +23,51 @@ Only one coordinator may apply intent proposals for a repository scope.
 Planning and research agents return proposals and must not transition durable
 work directly. The MVP serializes coordinators with a local file lock; direct
 `oc` writers remain outside that lock and are a documented concurrency limit.
+
+## Task Graph Projection
+
+`/task project --scope <scope> --check|--apply --json` materializes one
+Codememory scope into the existing task graph without writing to Codememory.
+`--codememory-config <path>` selects an explicit Codememory config when normal
+config discovery is unavailable.
+
+The projector reads every task through complete unfiltered and per-status JSON
+listings. It reads authoritative detail for every listed link and repeats the
+complete task and link scan after collection. Truncation, unknown statuses,
+duplicate identities or dependencies, invalid dependency endpoints, and any
+change between scans fail closed.
+
+| Codememory status | Task graph status |
+| --- | --- |
+| `not-started` | `pending` |
+| `doing` | `in_progress` |
+| `blocked` | `blocked` |
+| `done` | `completed` |
+| `failed` | `failed` |
+| `canceled` | `canceled` |
+
+A Codememory `depends-on` link from task A to task B becomes `A.blockedBy =
+[B]`. Failed, blocked, and canceled prerequisites never satisfy dependents;
+workflow-owned `skipped` nodes retain their existing successful-terminal
+semantics.
+
+Projected tasks retain their exact Codememory IDs and carry
+`metadata.codememory.managed = true`, source scope, status, kind, and schema
+version. A canonical SHA-256 fingerprint over managed task semantics and the
+scope is stored as the projection revision. The revision is a content revision,
+not a Codememory database revision.
+
+Only one scope may own a graph projection. Apply preserves unmanaged local and
+workflow nodes, but fails on scope mismatches, ID collisions, malformed state,
+invalid local references, or local references to managed tasks that would be
+removed. It updates the destination under the task graph lock with a durable
+atomic replace. A current apply is byte-stable and does not rewrite the file.
+
+Ordinary task graph readers and writers validate projection metadata,
+fingerprint, count, and managed task identity before exposing scheduler state.
+They cannot mutate managed fields and fail closed on malformed or tampered
+state. `--check` reports source or destination drift without writing; `--apply`
+is the only task graph path that may repair managed state.
 
 ## Proposal Contract
 

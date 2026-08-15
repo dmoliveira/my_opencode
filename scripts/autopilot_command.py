@@ -17,10 +17,14 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from autopilot_integration import integrate_controls  # type: ignore
-from autopilot_runtime import execute_cycle, initialize_run, load_runtime, save_runtime  # type: ignore
+from autopilot_runtime import (  # type: ignore
+    execute_cycle,
+    initialize_run,
+    load_runtime,
+    save_runtime,
+)
 from config_layering import load_layered_config, resolve_write_path  # type: ignore
 from gateway_command import hook_diagnostics, plugin_dir, status_payload  # type: ignore
-from model_routing_command import resolve_for_entrypoint  # type: ignore
 from gateway_plugin_bridge import (  # type: ignore
     bridge_start_loop,
     bridge_stop_loop,
@@ -28,7 +32,9 @@ from gateway_plugin_bridge import (  # type: ignore
     gateway_loop_state_path,
 )
 from gateway_state_protocol import GatewayStateProtocolError  # type: ignore
-from task_graph_bridge import task_graph_runtime_path, task_graph_status_snapshot  # type: ignore
+from model_routing_command import resolve_for_entrypoint  # type: ignore
+from task_graph_bridge import task_graph_status_snapshot  # type: ignore
+from task_graph_runtime import TaskGraphStateError  # type: ignore
 
 
 def usage() -> int:
@@ -606,7 +612,6 @@ def command_go(args: list[str]) -> int:
             as_json=as_json,
         )
         return 1
-
     history: list[dict[str, Any]] = []
     current = runtime
     for _ in range(max_cycles):
@@ -1152,6 +1157,16 @@ def main(argv: list[str]) -> int:
                 "reason_code": error.reason_code,
                 "gateway_state_error": error.as_dict(),
                 "gateway_loop_state_path": str(gateway_loop_state_path(Path.cwd())),
+            },
+            as_json="--json" in argv,
+        )
+        return 1
+    except TaskGraphStateError as error:
+        emit(
+            {
+                "result": "FAIL",
+                "reason_code": "task_graph_state_invalid",
+                "detail": str(error),
             },
             as_json="--json" in argv,
         )
