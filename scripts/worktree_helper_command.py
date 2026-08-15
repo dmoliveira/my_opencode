@@ -306,15 +306,16 @@ def is_allowed_readonly_sqlite_command(command: str) -> bool:
     return False
 
 
-def direct_run_report(directory: Path, blocked_command: str) -> dict[str, object]:
+def direct_guidance_report(directory: Path, blocked_command: str) -> dict[str, object]:
     return {
-        "result": "PASS",
-        "mode": "direct_run",
+        "result": "NOT_EXECUTED",
+        "mode": "direct_guidance",
         "directory": str(directory),
         "blocked_command": blocked_command,
         "note": (
             "This command is already allowed directly on protected main. "
-            "Do not wrap it with the maintenance helper; run it directly instead."
+            "Do not wrap it with the maintenance helper; it did not execute the command. "
+            "Run it directly instead."
         ),
         "commands": [blocked_command],
     }
@@ -626,12 +627,12 @@ def command_maintenance(args: list[str]) -> int:
 
     if execute:
         if direct_allowed:
-            report = direct_run_report(directory, blocked_command)
+            report = direct_guidance_report(directory, blocked_command)
             if json_output:
                 print(json.dumps(report, indent=2))
             else:
                 print(report["note"])
-            return 0
+            return 3
         try:
             env, argv = parse_execute_command(blocked_command)
             timeout_seconds = execute_timeout_seconds()
@@ -693,7 +694,7 @@ def command_maintenance(args: list[str]) -> int:
         return result.returncode
 
     if direct_allowed:
-        report = direct_run_report(directory, blocked_command)
+        report = direct_guidance_report(directory, blocked_command)
     else:
         repo_name = directory.name or "repo"
         blocked_slug = slugify(blocked_command or "maintenance")
@@ -738,10 +739,10 @@ def command_maintenance(args: list[str]) -> int:
         }
     if json_output:
         print(json.dumps(report, indent=2))
-        return 0 if report.get("mode") == "direct_run" else 3
+        return 3
 
     print(f"directory: {report['directory']}")
-    if report.get("mode") == "direct_run":
+    if report.get("mode") == "direct_guidance":
         print(f"note: {report['note']}")
     else:
         print(f"suggested_worktree: {report['suggested_worktree']}")
@@ -752,7 +753,7 @@ def command_maintenance(args: list[str]) -> int:
     print("commands:")
     for command in report["commands"]:
         print(f"- {command}")
-    return 0 if report.get("mode") == "direct_run" else 3
+    return 3
 
 
 def main(argv: list[str]) -> int:
