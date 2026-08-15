@@ -5,12 +5,12 @@ PYTHON_MIN_VERSION := 3.11
 OPENCODE_BIN ?= opencode
 OPENCODE_RESUME_E2E_VERSION := 1.18.5
 
-.PHONY: python-check help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test install-test-full release-check release
+.PHONY: python-check help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status install-test install-test-full release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-PYTHON_TARGETS := validate build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test install-test-full release-check release
+PYTHON_TARGETS := validate build-agents build-agents-check release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test install-test-full release-check release
 
 $(PYTHON_TARGETS): python-check
 
@@ -21,6 +21,7 @@ validate: ## Validate scripts and JSON config
 	$(PYTHON) -m py_compile scripts/*.py
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
 	$(PYTHON) -m json.tool opencode.json >/dev/null
+	$(PYTHON) -m json.tool tui.json >/dev/null
 	$(PYTHON) scripts/hygiene_drift_check.py
 	$(PYTHON) scripts/command_doc_check.py
 	$(PYTHON) scripts/readme_layout_check.py
@@ -105,6 +106,10 @@ gateway-resume-redaction-e2e: ## Build and gate large-session resume redaction o
 gateway-resume-redaction-e2e-prebuilt: ## Gate resume redaction using the existing gateway build
 	$(PYTHON) scripts/gateway_resume_redaction_e2e.py --repo-root "$(CURDIR)" --opencode-bin "$(OPENCODE_BIN)" --json
 
+gateway-execution-status-live-smoke: ## Verify gateway execution status through a real local OpenCode server
+	npm --prefix plugin/gateway-core run build
+	$(PYTHON) scripts/gateway_execution_status_live_smoke.py --opencode-bin "$(OPENCODE_BIN)" --without-bun --output json
+
 gateway-turn-watch: ## Stream long-turn alerts from gateway audit
 	$(PYTHON) scripts/gateway_turn_watch.py --follow --json
 
@@ -154,8 +159,11 @@ install-test: ## Run installer smoke test in temp HOME
 	trap 'rm -rf "$$TMP_HOME"' EXIT HUP INT TERM; \
 	SOURCE_REPO="$(PWD)"; \
 	SOURCE_REF="$$(git rev-parse --abbrev-ref HEAD)"; \
+	mkdir -p "$$TMP_HOME/.config/opencode"; \
+	printf '%s\n' '{"theme":"preserved","plugin":[["npm:existing-plugin",{}]]}' > "$$TMP_HOME/.config/opencode/tui.json"; \
 	HOME="$$TMP_HOME" REPO_URL="$$SOURCE_REPO" REPO_REF="$$SOURCE_REF" ./install.sh --self-check-profile core; \
 	cd "$$TMP_HOME/.config/opencode/my_opencode"; \
+	HOME="$$TMP_HOME" $(PYTHON) -c 'import json; from pathlib import Path; root = Path.home() / ".config" / "opencode"; tui = json.loads((root / "tui.json").read_text()); config = json.loads((root / "opencode.json").read_text()); assert tui["theme"] == "preserved"; assert ["npm:existing-plugin", {}] in tui["plugin"]; assert any(isinstance(item, list) and item[0].endswith("/plugin/gateway-sidebar") for item in tui["plugin"]); assert config["plugin"] == ["file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"]'; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/mcp_command.py" status; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" profile lean; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/plugin_command.py" doctor --json; \

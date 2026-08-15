@@ -35,6 +35,7 @@ const DOMAIN_KEYS = {
         "startedAt",
     ]),
     conciseMode: new Set(["mode", "source", "sessionId", "activatedAt", "updatedAt"]),
+    executionStatus: new Set(["version", "sessions"]),
 };
 const ACTIVE_LOCKS = new Set();
 const SLEEP_ARRAY = new Int32Array(new SharedArrayBuffer(4));
@@ -904,7 +905,7 @@ function mergeDomain(domain, current, mutation) {
     return merged;
 }
 export function transactGatewayStateDomain(directory, domain, mutator, options = {}) {
-    if (domain !== "activeLoop" && domain !== "conciseMode") {
+    if (domain !== "activeLoop" && domain !== "conciseMode" && domain !== "executionStatus") {
         throw protocolError("gateway_state_invalid_domain_update", "gateway state transaction must select exactly one known domain", "mutate");
     }
     if (options.timeoutMs !== undefined && !Number.isFinite(options.timeoutMs)) {

@@ -6,5 +6,10 @@
     "hookModes": {
       "auto-slash-command": "disabled"
     }
+  },
+  "executionStatus": {
+    "enabled": true,
+    "maxSessions": 16,
+    "maxLabelChars": 80
   }
 }

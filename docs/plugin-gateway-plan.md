@@ -5,10 +5,10 @@
 ## Current architecture
 
 - plugin runtime: `plugin/gateway-core`
-- config entry: `file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core`
+- config entry: `file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js`
 - command bridge: Python command scripts in `scripts/`
 - hook orchestration: TypeScript hooks under `plugin/gateway-core/src/hooks/`
-- fallback mode when Bun is unavailable: `python_command_bridge`
+- direct built entry: OpenCode `1.18.18` loads it without a standalone Bun executable
 
 ## Locked decisions
 

@@ -1070,12 +1070,9 @@ def command_doctor(args: list[str]) -> int:
         report["warnings"].append(
             "gateway-core dist plugin is missing (run npm run build in plugin/gateway-core)"
         )
-    if (
-        report.get("gateway_bun_available") is True
-        and report.get("gateway_plugin_enabled") is not True
-    ):
+    if report.get("gateway_plugin_enabled") is not True:
         report["warnings"].append(
-            "gateway plugin runtime is available but disabled; run /gateway enable for plugin-first mode"
+            "gateway plugin is disabled; run /gateway enable for plugin-first mode"
         )
     required_gateway_flags = [
         "dist_exposes_tool_execute_before",

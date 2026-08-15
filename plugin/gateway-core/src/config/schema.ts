@@ -150,6 +150,13 @@ export interface ConciseModeConfig {
   defaultMode: "off" | "lite" | "full" | "ultra";
 }
 
+// Declares deterministic execution status settings for the TUI sidebar.
+export interface ExecutionStatusConfig {
+  enabled: boolean;
+  maxSessions: number;
+  maxLabelChars: number;
+}
+
 // Declares retry guidance settings for failed delegated task calls.
 export interface DelegateTaskRetryConfig {
   enabled: boolean;
@@ -658,6 +665,7 @@ export interface GatewayConfig {
   sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
   promptCache: PromptCacheConfig;
   conciseMode: ConciseModeConfig;
+  executionStatus: ExecutionStatusConfig;
   delegateTaskRetry: DelegateTaskRetryConfig;
   providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
   delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;
@@ -738,6 +746,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     order: [
       "codememory-milestone-bridge",
       "intent-ingress-outbox",
+      "execution-status",
       "autopilot-loop",
       "continuation",
       "semantic-output-summarizer",
@@ -959,6 +968,11 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
   conciseMode: {
     enabled: false,
     defaultMode: "off",
+  },
+  executionStatus: {
+    enabled: false,
+    maxSessions: 16,
+    maxLabelChars: 80,
   },
   delegateTaskRetry: {
     enabled: true,

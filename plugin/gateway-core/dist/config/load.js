@@ -357,6 +357,9 @@ export function loadGatewayConfig(raw) {
     const conciseModeSource = source.conciseMode && typeof source.conciseMode === "object"
         ? source.conciseMode
         : {};
+    const executionStatusSource = source.executionStatus && typeof source.executionStatus === "object"
+        ? source.executionStatus
+        : {};
     const delegateTaskRetrySource = source.delegateTaskRetry && typeof source.delegateTaskRetry === "object"
         ? source.delegateTaskRetry
         : {};
@@ -819,6 +822,13 @@ export function loadGatewayConfig(raw) {
                 conciseModeSource.defaultMode === "ultra"
                 ? conciseModeSource.defaultMode
                 : DEFAULT_GATEWAY_CONFIG.conciseMode.defaultMode,
+        },
+        executionStatus: {
+            enabled: typeof executionStatusSource.enabled === "boolean"
+                ? executionStatusSource.enabled
+                : DEFAULT_GATEWAY_CONFIG.executionStatus.enabled,
+            maxSessions: boundedInteger(executionStatusSource.maxSessions, 1, 64, DEFAULT_GATEWAY_CONFIG.executionStatus.maxSessions),
+            maxLabelChars: boundedInteger(executionStatusSource.maxLabelChars, 24, 160, DEFAULT_GATEWAY_CONFIG.executionStatus.maxLabelChars),
         },
         delegateTaskRetry: {
             enabled: typeof delegateTaskRetrySource.enabled === "boolean"

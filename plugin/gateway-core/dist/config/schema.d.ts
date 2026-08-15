@@ -116,6 +116,11 @@ export interface ConciseModeConfig {
     enabled: boolean;
     defaultMode: "off" | "lite" | "full" | "ultra";
 }
+export interface ExecutionStatusConfig {
+    enabled: boolean;
+    maxSessions: number;
+    maxLabelChars: number;
+}
 export interface DelegateTaskRetryConfig {
     enabled: boolean;
 }
@@ -495,6 +500,7 @@ export interface GatewayConfig {
     sessionRuntimeSystemContext: SessionRuntimeSystemContextConfig;
     promptCache: PromptCacheConfig;
     conciseMode: ConciseModeConfig;
+    executionStatus: ExecutionStatusConfig;
     delegateTaskRetry: DelegateTaskRetryConfig;
     providerModelBudgetEnforcer: ProviderModelBudgetEnforcerConfig;
     delegationConcurrencyGuard: DelegationConcurrencyGuardConfig;

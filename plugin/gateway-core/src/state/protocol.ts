@@ -54,6 +54,7 @@ const DOMAIN_KEYS = {
     "startedAt",
   ]),
   conciseMode: new Set(["mode", "source", "sessionId", "activatedAt", "updatedAt"]),
+  executionStatus: new Set(["version", "sessions"]),
 } as const
 const ACTIVE_LOCKS = new Set<string>()
 const SLEEP_ARRAY = new Int32Array(new SharedArrayBuffer(4))
@@ -1363,7 +1364,7 @@ export function transactGatewayStateDomain(
   mutator: (current: unknown, state: JsonRecord) => GatewayStateDomainMutation | null,
   options: GatewayStateTransactionOptions = {},
 ): GatewayStateTransactionResult {
-  if (domain !== "activeLoop" && domain !== "conciseMode") {
+  if (domain !== "activeLoop" && domain !== "conciseMode" && domain !== "executionStatus") {
     throw protocolError(
       "gateway_state_invalid_domain_update",
       "gateway state transaction must select exactly one known domain",

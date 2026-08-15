@@ -1,59 +1,33 @@
-# Local Gateway Plugin Loader Bug
+# Local Gateway Plugin Loader
 
-The release gate uses the documented local-plugin directory mechanism and a
-network-free config bootstrap:
+OpenCode `1.18.18` loads the local gateway reliably when configuration targets the built module directly:
 
-```bash
-python3 scripts/gateway_local_plugin_runtime_smoke.py --mode direct --output json
+```json
+{
+  "plugin": [
+    "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"
+  ]
+}
 ```
 
-This creates an isolated `.opencode/plugins/gateway-core.js` shim that imports
-the built `dist/index.js`, runs `opencode debug config`, and requires a
-`gateway_runtime_bootstrap` audit event. It does not copy host configuration,
-reuse host dependencies, or make a model request.
+Do not configure the package directory (`file:{env:HOME}/.../plugin/gateway-core`). OpenCode's directory-package resolver can install or cache that form without dispatching the plugin at runtime. The direct `dist/index.js` URI bypasses that resolver.
 
-The package path and tarball checks below remain optional compatibility probes.
-`make install-test` uses the direct bootstrap as its deterministic gateway gate;
-set `MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE=1` only when credentials are available
-for the separate model-backed relaunch integration.
+## Validation
 
-OpenCode `1.2.20` does not reliably load the repo-local gateway plugin when the plugin is configured with a local `file:` spec.
-
-## Reproduction
-
-Run:
+The deterministic loader contract stays network-free:
 
 ```bash
-python3 scripts/gateway_local_plugin_runtime_smoke.py --mode both --output json
+python3 scripts/gateway_local_plugin_runtime_smoke.py --mode contract --output json
 ```
 
-This exercises two local plugin forms against a wrapped `opencode serve` instance:
+For an actual server lifecycle check without a model request, run:
 
-- `path`: `file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core`
-- `tarball`: `file:/.../plugin/gateway-core/my_opencode-gateway-core-0.1.1.tgz`
+```bash
+make gateway-execution-status-live-smoke
+```
 
-## Observed failures
+The live smoke starts an isolated local server, creates one session through the local API, and requires the gateway to write a private `Session ready` entry. It does not reuse host configuration, send a prompt, or make a model request.
 
-- `path` mode installs successfully, then fails to resolve the plugin module from the cache path.
-- `tarball` mode fails during install because the runtime appends `@latest` to the tarball `file:` spec.
-- After the tarball install failure, the runtime falls back to the repo-level path plugin from `opencode.json`, which then reproduces the same path-resolution failure.
+## Migration
 
-## Evidence
-
-Run the smoke test and inspect the artifact directory printed in the JSON output under `.opencode/runtime-plugin-smoke/`.
-
-Key log lines to expect:
-
-- Path mode logs a `file:/.../plugin/gateway-core@latest` install, then `Cannot find module ...node_modules/file:/.../plugin/gateway-core`.
-- Tarball mode logs a `file:/...my_opencode-gateway-core-0.1.1.tgz@latest` install attempt and fails with exit code `1`.
-- Tarball mode then falls back to the repo path plugin and reproduces the same `Cannot find module` resolution failure.
-
-## Impact
-
-- Patched gateway runtime code in this repo cannot be validated end-to-end through `opencode serve` using local plugin specs.
-- Gateway audit evidence such as `gateway_runtime_bootstrap` is absent because the patched plugin never loads.
-
-## Expected behavior
-
-- Local `file:` directory plugins should load after install without resolving through an invalid `node_modules/file:/...` module path.
-- Local `file:` tarball plugins should install exactly as specified, without appending `@latest`.
+`/gateway enable` recognizes the old directory form, replaces it with one direct built-entrypoint spec, and preserves options from the first matching tuple. `/gateway disable` removes both forms. Older `gateway-core@latest` compatibility aliases can remain on disk; they are no longer used by the direct entrypoint.

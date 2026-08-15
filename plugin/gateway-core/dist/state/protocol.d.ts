@@ -17,6 +17,7 @@ export declare const LOCK_RECOVERY_GUIDANCE = "stop the gateway state owner, the
 declare const DOMAIN_KEYS: {
     readonly activeLoop: Set<string>;
     readonly conciseMode: Set<string>;
+    readonly executionStatus: Set<string>;
 };
 export type GatewayStateDomain = keyof typeof DOMAIN_KEYS;
 export type GatewayStateMutationMode = "replace" | "patch";

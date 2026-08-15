@@ -1,4 +1,4 @@
-import type { GatewayState } from "./types.js"
+import type { GatewayExecutionStatusEntry, GatewayState } from "./types.js"
 import {
   GatewayStateProtocolError,
   LOCK_DIRECTORY_NAME,
@@ -105,6 +105,61 @@ function isNonnegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0
 }
 
+function setOwn(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  })
+}
+
+function isExecutionStatusLabel(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= 160 &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  )
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value))
+}
+
+function parseExecutionStatus(value: unknown): GatewayState["executionStatus"] {
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.sessions)) {
+    return null
+  }
+  const sessions = Object.create(null) as Record<string, GatewayExecutionStatusEntry>
+  for (const [sessionId, entry] of Object.entries(value.sessions)) {
+    if (
+      !sessionId ||
+      sessionId.length > 160 ||
+      /[\u0000-\u001f\u007f]/.test(sessionId) ||
+      !isRecord(entry) ||
+      entry.sessionId !== sessionId ||
+      !isExecutionStatusLabel(entry.last) ||
+      !isExecutionStatusLabel(entry.next) ||
+      !isIsoTimestamp(entry.updatedAt)
+    ) {
+      continue
+    }
+    setOwn(sessions, sessionId, {
+      ...entry,
+      sessionId,
+      last: entry.last,
+      next: entry.next,
+      updatedAt: entry.updatedAt,
+    })
+  }
+  return {
+    ...value,
+    version: 1,
+    sessions,
+  }
+}
+
 function cloneActiveLoop(value: unknown): GatewayState["activeLoop"] {
   if (!isRecord(value)) {
     return null
@@ -158,6 +213,7 @@ function normalizeGatewayState(raw: Record<string, unknown>): GatewayState {
   const state: GatewayState = {
     activeLoop,
     conciseMode: parseConciseModeState(raw.conciseMode),
+    executionStatus: parseExecutionStatus(raw.executionStatus),
     lastUpdatedAt: String(raw.lastUpdatedAt ?? new Date().toISOString()),
     source: typeof raw.source === "string" ? raw.source : undefined,
   }

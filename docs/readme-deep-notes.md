@@ -427,9 +427,9 @@ Autopilot gateway telemetry fields (`--json`):
 | Field | Type | Meaning |
 |---|---|---|
 | `gateway_runtime_mode` | `string` | Active routing mode for autopilot controls: `plugin_gateway` when gateway plugin is enabled and hook-complete, otherwise `python_command_bridge`. |
-| `gateway_runtime_reason_code` | `string` | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_runtime_unavailable`, `gateway_plugin_not_ready`). |
+| `gateway_runtime_reason_code` | `string` | Routing decision reason (`gateway_plugin_ready`, `gateway_plugin_disabled`, `gateway_plugin_not_ready`). |
 | `gateway_plugin_enabled` | `boolean` | Whether gateway-core file plugin is currently enabled in layered config. |
-| `gateway_bun_available` | `boolean` | Whether `bun` is currently available for host-side file plugin runtime support. |
+| `gateway_bun_available` | `boolean` | Whether an optional standalone `bun` executable is currently available; direct built gateway entries do not require it. |
 | `gateway_missing_hook_capabilities` | `string[]` | Missing required dist hook capabilities when plugin mode cannot be selected. |
 | `gateway_loop_state` | `object|null` | Current loop state for the active runtime mode; bridge state is hidden when plugin mode is active. |
 | `gateway_loop_state_reason_code` | `string` | Loop state selection reason (`loop_state_available`, `bridge_state_ignored_in_plugin_mode`). |

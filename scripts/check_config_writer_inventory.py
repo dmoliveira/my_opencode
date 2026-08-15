@@ -51,6 +51,7 @@ TRANSACTIONAL_WRITERS = {
     "stack_profile_command.py",
     "telemetry_command.py",
     "tmux_command.py",
+    "tui_config.py",
 }
 TRANSACTION_APIS = {"edit_layered_config", "edit_config_batch"}
 
@@ -88,6 +89,7 @@ EXPECTED_TRANSACTION_CALLS = Counter(
         ("telemetry_command.py", "edit_state", "edit_layered_config", "lambda _config: None"): 1,
         ("telemetry_command.py", "edit_state", "edit_layered_config", "mutate_layered"): 1,
         ("tmux_command.py", "edit_state", "edit_layered_config", "mutate"): 1,
+        ("tui_config.py", "ensure_execution_sidebar", "edit_config_batch", "(ConfigFileParticipant(config_path.expanduser(), mutate),)"): 1,
     }
 )
 
@@ -112,6 +114,7 @@ EXPECTED_PARTICIPANTS = Counter(
         ("stack_profile_command.py", "apply_state", "notify_path"): 1,
         ("stack_profile_command.py", "apply_state", "STATE_PATH"): 1,
         ("telemetry_command.py", "edit_state", "CONFIG_PATH"): 1,
+        ("tui_config.py", "ensure_execution_sidebar", "config_path.expanduser()"): 1,
     }
 )
 
@@ -133,12 +136,6 @@ EXEMPT_PRIMITIVE_SINKS = Counter(
         ("gateway_command.py", "_write_gateway_smoke_cache", "path.unlink", "temporary_path"): 1,
         ("gateway_command.py", "_invalidate_gateway_smoke_cache", "path.unlink", "path"): 1,
         ("gateway_command.py", "gateway_mistake_ledger_summary", "os.open", "path"): 1,
-        ("gateway_command.py", "ensure_file_plugin_compat", "path.mkdir", "alias_path.parent"): 1,
-        ("gateway_command.py", "ensure_file_plugin_compat", "path.mkdir", "cache_plugin_path.parent"): 1,
-        ("gateway_command.py", "ensure_file_plugin_compat", "path.unlink", "alias_path"): 1,
-        ("gateway_command.py", "ensure_file_plugin_compat", "path.unlink", "cache_plugin_path"): 1,
-        ("gateway_command.py", "ensure_file_plugin_compat", "path.symlink_to", "alias_path"): 1,
-        ("gateway_command.py", "ensure_file_plugin_compat", "path.symlink_to", "cache_plugin_path"): 1,
         ("gateway_command.py", "command_recover_memory/save_pane_session_cache", "path.mkdir", "pane_session_cache_path.parent"): 1,
         ("gateway_command.py", "command_recover_memory/save_pane_session_cache", "path.write_text", "pane_session_cache_path"): 1,
         ("gateway_command.py", "command_recover_memory_watch/save_state", "path.mkdir", "runtime_dir"): 1,
@@ -158,7 +155,6 @@ EXPECTED_SHELL_SINKS = Counter(
         ("setup_dual_opencode.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-move --source "$OPENCODE_CONFIG_DIR/my_opencode/runtime/plan_execution.json" --target "$MY_OPENCODE_REPO/runtime/plan_execution.json"'): 1,
         ("setup_dual_opencode.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-link --link "$OPENCODE_CONFIG_DIR/my_opencode" --target "$MY_OPENCODE_REPO"'): 1,
         ("setup_dual_opencode.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-link --link "$OPENCODE_CONFIG_DIR/opencode.json" --target "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"'): 1,
-        ("setup_dual_opencode.sh", 'ln -sfn "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest"'): 1,
         ("setup_dual_opencode.sh", 'mkdir -p "$OHMY_CONFIG_HOME/opencode"'): 1,
         ("setup_dual_opencode.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-json --path "$OHMY_CONFIG_HOME/opencode/opencode.json" --content \'{"$schema":"https://opencode.ai/config.json","plugin":["oh-my-opencode@latest"]}\''): 1,
         ("setup_dual_opencode.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-json --path "$OHMY_CONFIG_HOME/opencode/oh-my-opencode.json" --source "$OPENCODE_CONFIG_DIR/oh-my-opencode.json"'): 1,
@@ -170,7 +166,6 @@ EXPECTED_SHELL_SINKS = Counter(
         ("setup_local_dev_symlinks.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-link --link "$OPENCODE_CONFIG_DIR/opencode.json" --target "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"'): 1,
         ("setup_local_dev_symlinks.sh", 'ln -sfn "$AGENTS_LINK_TARGET" "$MY_OPENCODE_REPO/AGENTS.md"'): 1,
         ("setup_local_dev_symlinks.sh", 'ln -sfn "$agent_file" "$OPENCODE_CONFIG_DIR/agent/$(basename "$agent_file")"'): 1,
-        ("setup_local_dev_symlinks.sh", 'ln -sfn "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest"'): 1,
     }
 )
 

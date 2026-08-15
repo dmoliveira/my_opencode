@@ -11,6 +11,7 @@ export const DEFAULT_GATEWAY_CONFIG = {
         order: [
             "codememory-milestone-bridge",
             "intent-ingress-outbox",
+            "execution-status",
             "autopilot-loop",
             "continuation",
             "semantic-output-summarizer",
@@ -232,6 +233,11 @@ export const DEFAULT_GATEWAY_CONFIG = {
     conciseMode: {
         enabled: false,
         defaultMode: "off",
+    },
+    executionStatus: {
+        enabled: false,
+        maxSessions: 16,
+        maxLabelChars: 80,
     },
     delegateTaskRetry: {
         enabled: true,

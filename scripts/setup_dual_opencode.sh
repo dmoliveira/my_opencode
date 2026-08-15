@@ -31,11 +31,6 @@ python3 "$SCRIPT_DIR/config_layering.py" provision-link \
   --link "$OPENCODE_CONFIG_DIR/opencode.json" \
   --target "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"
 
-# Fix Bun file plugin install by providing gateway-core@latest alias if plugin exists.
-if [[ -d "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" ]]; then
-  ln -sfn "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest"
-fi
-
 # Set up isolated oh-my-opencode config home.
 mkdir -p "$OHMY_CONFIG_HOME/opencode"
 python3 "$SCRIPT_DIR/config_layering.py" provision-json \

@@ -92,19 +92,34 @@ if [[ -d "$MY_OPENCODE_REPO/agent" ]]; then
 	done
 fi
 
-if [[ -d "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" ]]; then
-	ln -sfn \
-		"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core" \
-		"$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest"
+if [[ -d "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-sidebar" ]]; then
+	if [[ ! -f "$MY_OPENCODE_REPO/tui.json" || ! -f "$SCRIPT_DIR/tui_config.py" ]]; then
+		printf 'error: gateway-sidebar TUI configuration helper is missing\n' >&2
+		exit 1
+	fi
+	if [[ -z "$(command -v npm)" ]]; then
+		printf 'error: npm is required to build gateway-sidebar\n' >&2
+		exit 1
+	fi
+	(
+		cd "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-sidebar"
+		npm ci --yes --no-audit --no-fund --silent
+		npm run build --silent
+	) || {
+		printf 'error: gateway-sidebar plugin build failed\n' >&2
+		exit 1
+	}
+	python3 "$SCRIPT_DIR/tui_config.py" ensure-execution-sidebar \
+		--config "$OPENCODE_CONFIG_DIR/tui.json" \
+		--plugin-path "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-sidebar" || {
+		printf 'error: gateway-sidebar TUI configuration failed\n' >&2
+		exit 1
+	}
 fi
 
 printf 'Linked repo: %s -> %s\n' "$OPENCODE_CONFIG_DIR/my_opencode" "$MY_OPENCODE_REPO"
 printf 'Linked config: %s -> %s\n' "$OPENCODE_CONFIG_DIR/opencode.json" "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"
 printf 'Linked AGENTS: %s -> %s\n' "$MY_OPENCODE_REPO/AGENTS.md" "$AGENTS_LINK_TARGET"
 printf 'Linked agents dir: %s\n' "$OPENCODE_CONFIG_DIR/agent"
-
-if [[ -L "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest" ]]; then
-	printf 'Linked plugin alias: %s\n' "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-core@latest"
-fi
 
 printf 'Done. Restart OpenCode to pick up the updated config, plugin path, and AGENTS instructions.\n'

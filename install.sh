@@ -194,16 +194,37 @@ if [ -d "$INSTALL_DIR/plugin/gateway-core" ]; then
 		exit 1
 	fi
 	if [ -f "$INSTALL_DIR/scripts/gateway_command.py" ]; then
-		if command -v bun >/dev/null 2>&1; then
-			python3 "$INSTALL_DIR/scripts/gateway_command.py" enable --json >/dev/null 2>&1 || printf "warning: failed to enable gateway plugin mode; bridge fallback remains active\n"
-			log_info "gateway mode: plugin_gateway preferred"
-		else
-			python3 "$INSTALL_DIR/scripts/gateway_command.py" disable --json >/dev/null 2>&1 || true
-			log_info "gateway mode: python_command_bridge fallback (bun unavailable)"
-		fi
+		"$PYTHON_BIN" "$INSTALL_DIR/scripts/gateway_command.py" enable --json >/dev/null || {
+			printf "error: failed to enable direct gateway plugin mode\n" >&2
+			exit 1
+		}
+		log_info "gateway mode: direct plugin entry enabled"
 	fi
 fi
 
+if [ -d "$INSTALL_DIR/plugin/gateway-sidebar" ]; then
+	if command -v npm >/dev/null 2>&1; then
+		(
+			cd "$INSTALL_DIR/plugin/gateway-sidebar" && npm ci --yes --no-audit --no-fund --silent && npm run build --silent
+		) || {
+			printf "error: gateway-sidebar plugin build failed; installation aborted\n" >&2
+			exit 1
+		}
+	else
+		printf "error: npm not found; gateway-sidebar plugin build is required\n" >&2
+		exit 1
+	fi
+	if [ ! -f "$INSTALL_DIR/tui.json" ] || [ ! -f "$INSTALL_DIR/scripts/tui_config.py" ]; then
+		printf "error: gateway-sidebar TUI configuration helper is missing; installation aborted\n" >&2
+		exit 1
+	fi
+	"$PYTHON_BIN" "$INSTALL_DIR/scripts/tui_config.py" ensure-execution-sidebar \
+		--config "$CONFIG_DIR/tui.json" \
+		--plugin-path "$INSTALL_DIR/plugin/gateway-sidebar" || {
+		printf "error: gateway-sidebar TUI configuration failed; installation aborted\n" >&2
+		exit 1
+	}
+fi
 if [ "$RUN_WIZARD" = true ]; then
 	log_info ""
 	log_info "Running install wizard..."

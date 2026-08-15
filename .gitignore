@@ -6,6 +6,8 @@ __pycache__/
 plugin/gateway-core/node_modules/
 plugin/gateway-core/*.tgz
 plugin/gateway-core@latest
+plugin/gateway-sidebar/node_modules/
+plugin/gateway-sidebar/*.tgz
 runtime/
 bg/
 .codememory/*.sqlite3

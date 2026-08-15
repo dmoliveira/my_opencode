@@ -41,7 +41,9 @@ class ManagedRuntimePolicyTest(unittest.TestCase):
 
     def test_managed_plugin_inventory_is_local_gateway_only(self) -> None:
         self.assertEqual(
-            ["file:{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core"],
+            [
+                "file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"
+            ],
             self._config()["plugin"],
         )
 
