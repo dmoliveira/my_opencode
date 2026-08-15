@@ -858,6 +858,317 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             self.assertEqual("reconciling", current["status"])
             self.assertEqual("unknown", current["attempts"][0]["status"])
 
+    def test_heartbeat_projection_lock_timeout_marks_keeper_lost(self) -> None:
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease([sys.executable, "-c", "pass"])
+            identity, current = self.reserve_and_claim(job, config_path)
+            attempt = bg.current_attempt(current)
+            assert attempt is not None
+            with bg.locked_jobs(writeback=True) as data:
+                stored = bg.find_job(data, job["id"])
+                assert stored is not None
+                stored_attempt = bg.current_attempt(stored)
+                assert stored_attempt is not None
+                stored_attempt["status"] = "running"
+            keeper = bg._LeaseHeartbeatKeeper(
+                job["id"],
+                str(attempt["id"]),
+                identity,
+                ttl_seconds=1,
+                state_path=self.root / "leases.json",
+            )
+
+            def timeout_commit(*_args, **kwargs):
+                self.assertEqual(
+                    keeper.lock_timeout, kwargs.get("lock_timeout_seconds")
+                )
+                raise leases.TaskLeaseError(
+                    "task_lease_lock_timeout", "forced contention"
+                )
+
+            with patch.object(
+                bg, "guarded_local_commit", side_effect=timeout_commit
+            ):
+                keeper.start()
+                keeper.stop()
+            self.assertTrue(keeper.lease_lost)
+            self.assertFalse(keeper.superseded)
+            bg._best_effort_release(identity, self.root / "leases.json")
+
+    def test_settlement_heartbeats_until_terminal_projection(self) -> None:
+        receipt_entered = threading.Event()
+        release_receipt = threading.Event()
+        real_write_receipt = bg._write_terminal_receipt
+
+        def delayed_receipt(*args, **kwargs):
+            receipt_entered.set()
+            self.assertTrue(release_receipt.wait(timeout=5))
+            return real_write_receipt(*args, **kwargs)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [sys.executable, "-c", "pass"],
+                ttl_seconds=1,
+            )
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "_write_terminal_receipt",
+                    side_effect=delayed_receipt,
+                ),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(bg._run_lease_job, leased[0])
+                    self.assertTrue(receipt_entered.wait(timeout=5))
+                    time.sleep(1.2)
+                    lease_report = leases.lease_status(
+                        state_path=self.root / "leases.json"
+                    )
+                    self.assertEqual(1, lease_report["count"])
+                    self.assertFalse(lease_report["leases"][0]["expired"])
+                    release_receipt.set()
+                    self.assertEqual(("completed", 0), future.result(timeout=10))
+            self.assertEqual(
+                0,
+                leases.lease_status(state_path=self.root / "leases.json")["count"],
+            )
+
+    def test_settlement_heartbeats_through_terminal_receipt_validation(self) -> None:
+        validation_entered = threading.Event()
+        release_validation = threading.Event()
+        real_validate_receipt = bg._validate_terminal_receipt
+
+        def delayed_validation(*args, **kwargs):
+            validation_entered.set()
+            self.assertTrue(release_validation.wait(timeout=5))
+            return real_validate_receipt(*args, **kwargs)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [sys.executable, "-c", "pass"],
+                ttl_seconds=1,
+            )
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "_validate_terminal_receipt",
+                    side_effect=delayed_validation,
+                ),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(bg._run_lease_job, leased[0])
+                    self.assertTrue(validation_entered.wait(timeout=5))
+                    time.sleep(1.2)
+                    lease_report = leases.lease_status(
+                        state_path=self.root / "leases.json"
+                    )
+                    self.assertEqual(1, lease_report["count"])
+                    self.assertFalse(lease_report["leases"][0]["expired"])
+                    release_validation.set()
+                    self.assertEqual(("completed", 0), future.result(timeout=10))
+            self.assertEqual(
+                0,
+                leases.lease_status(state_path=self.root / "leases.json")["count"],
+            )
+
+    def test_heartbeat_loss_during_receipt_validation_blocks_projection(self) -> None:
+        validation_entered = threading.Event()
+        heartbeat_failed = threading.Event()
+        real_validate_receipt = bg._validate_terminal_receipt
+        real_heartbeat = bg.heartbeat_lease
+
+        def fail_during_validation(*args, **kwargs):
+            if validation_entered.is_set():
+                heartbeat_failed.set()
+                raise leases.TaskLeaseError("task_lease_holder_mismatch", "lost")
+            return real_heartbeat(*args, **kwargs)
+
+        def delayed_validation(*args, **kwargs):
+            validation_entered.set()
+            self.assertTrue(heartbeat_failed.wait(timeout=5))
+            return real_validate_receipt(*args, **kwargs)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [sys.executable, "-c", "pass"],
+                ttl_seconds=1,
+            )
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "heartbeat_lease",
+                    side_effect=fail_during_validation,
+                ),
+                patch.object(
+                    bg,
+                    "_validate_terminal_receipt",
+                    side_effect=delayed_validation,
+                ),
+                patch.object(
+                    bg,
+                    "_best_effort_release",
+                    wraps=bg._best_effort_release,
+                ) as release_spy,
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                status, _ = bg._run_lease_job(leased[0])
+            self.assertEqual("reconciling", status)
+            self.assertEqual(0, release_spy.call_count)
+            current = bg._snapshot_job(job["id"])
+            assert current is not None
+            self.assertEqual("reconciling", current["status"])
+            self.assertEqual("unknown", current["attempts"][0]["status"])
+
+    def test_cancellation_during_receipt_validation_wins_projection(self) -> None:
+        validation_entered = threading.Event()
+        release_validation = threading.Event()
+        real_validate_receipt = bg._validate_terminal_receipt
+
+        def delayed_first_validation(*args, **kwargs):
+            if not validation_entered.is_set():
+                validation_entered.set()
+                self.assertTrue(release_validation.wait(timeout=5))
+            return real_validate_receipt(*args, **kwargs)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease([sys.executable, "-c", "pass"])
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "_validate_terminal_receipt",
+                    side_effect=delayed_first_validation,
+                ),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(bg._run_lease_job, leased[0])
+                    self.assertTrue(validation_entered.wait(timeout=5))
+                    self.assertEqual(
+                        0,
+                        bg.command_cancel(argparse.Namespace(id=job["id"])),
+                    )
+                    during = bg._snapshot_job(job["id"])
+                    assert during is not None
+                    attempt = bg.current_attempt(during)
+                    assert attempt is not None
+                    self.assertEqual("cancelling", attempt["status"])
+                    release_validation.set()
+                    self.assertEqual("cancelled", future.result(timeout=10)[0])
+            final = bg._snapshot_job(job["id"])
+            assert final is not None
+            self.assertEqual("cancelled", final["status"])
+            self.assertEqual("user_cancelled", final["attempts"][0]["failure_class"])
+            receipt = json.loads(
+                Path(final["attempts"][0]["receipt_path"]).read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual("cancelled", receipt["attempt_status"])
+            self.assertTrue(receipt["cancelled"])
+
+    def test_settlement_heartbeat_loss_cannot_publish_success(self) -> None:
+        receipt_entered = threading.Event()
+        heartbeat_failed = threading.Event()
+        real_write_receipt = bg._write_terminal_receipt
+        real_heartbeat = bg.heartbeat_lease
+
+        def fail_during_receipt(*args, **kwargs):
+            if receipt_entered.is_set():
+                heartbeat_failed.set()
+                raise leases.TaskLeaseError("task_lease_holder_mismatch", "lost")
+            return real_heartbeat(*args, **kwargs)
+
+        def delayed_receipt(*args, **kwargs):
+            receipt_entered.set()
+            self.assertTrue(heartbeat_failed.wait(timeout=5))
+            return real_write_receipt(*args, **kwargs)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [sys.executable, "-c", "pass"],
+                ttl_seconds=1,
+            )
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "heartbeat_lease",
+                    side_effect=fail_during_receipt,
+                ),
+                patch.object(
+                    bg,
+                    "_write_terminal_receipt",
+                    side_effect=delayed_receipt,
+                ),
+                patch.object(
+                    bg,
+                    "_best_effort_release",
+                    wraps=bg._best_effort_release,
+                ) as release_spy,
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                status, _ = bg._run_lease_job(leased[0])
+            self.assertEqual("reconciling", status)
+            self.assertEqual(0, release_spy.call_count)
+            current = bg._snapshot_job(job["id"])
+            assert current is not None
+            self.assertEqual("reconciling", current["status"])
+            self.assertEqual("unknown", current["attempts"][0]["status"])
+
     def test_reconcile_gate_aborted_proves_no_effect(self) -> None:
         with (
             self.patched_store(),
@@ -1047,6 +1358,13 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             bg._best_effort_release(identity, self.root / "leases.json")
 
     def test_lease_cancellation_wins_terminal_race(self) -> None:
+        release_threads: list[str] = []
+        real_release = bg._best_effort_release
+
+        def tracked_release(*args, **kwargs):
+            release_threads.append(threading.current_thread().name)
+            return real_release(*args, **kwargs)
+
         with (
             self.patched_store(),
             patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
@@ -1054,10 +1372,17 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             job, config_path = self.enqueue_lease(
                 [sys.executable, "-c", "import time; time.sleep(5)"],
             )
-            with patch.object(
-                bg,
-                "make_oc_runner",
-                return_value=self.source_runner(config_path),
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "_best_effort_release",
+                    side_effect=tracked_release,
+                ) as release_spy,
             ):
                 _, leased, _ = bg._reserve_jobs(
                     job_id=job["id"], max_jobs=1, lease_max_concurrency=1
@@ -1071,14 +1396,24 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                         time.sleep(0.03)
                     else:
                         self.fail("lease worker did not publish a PID")
+                    attempt = bg.current_attempt(current)
+                    assert attempt is not None
+                    gate_path = Path(attempt["gate_path"])
+                    for _ in range(100):
+                        if gate_path.is_file():
+                            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+                            if gate.get("state") == "effect_possible":
+                                break
+                        time.sleep(0.03)
+                    else:
+                        self.fail("lease worker did not open its command gate")
                     self.assertEqual(
                         0,
                         bg.command_cancel(argparse.Namespace(id=job["id"])),
                     )
-                    self.assertIn(
-                        future.result(timeout=10)[0],
-                        {"cancelled", "reconciling"},
-                    )
+                    self.assertEqual("cancelled", future.result(timeout=10)[0])
+                    self.assertEqual(1, release_spy.call_count)
+                    self.assertNotIn(threading.current_thread().name, release_threads)
             cancelled = bg._snapshot_job(job["id"])
             assert cancelled is not None
             self.assertEqual("cancelled", cancelled["status"])
@@ -1347,6 +1682,230 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             current = bg._snapshot_job(job["id"])
             assert current is not None
             self.assertEqual("reconciling", current["status"])
+
+    def test_worker_exception_does_not_touch_successor_attempt(self) -> None:
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, _ = self.enqueue_lease([sys.executable, "-c", "pass"])
+            _, leased, _ = bg._reserve_jobs(
+                job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+            )
+            predecessor_id = str(leased[0]["current_attempt_id"])
+            with bg.locked_jobs(writeback=True) as data:
+                stored = bg.find_job(data, job["id"])
+                assert stored is not None
+                predecessor = bg.current_attempt(stored)
+                assert predecessor is not None
+                predecessor["status"] = "unknown"
+                predecessor["ended_at"] = bg.to_iso(bg.now_utc())
+                successor = bg._new_attempt(stored, "successor-worker")
+                successor.update(
+                    {
+                        "status": "running",
+                        "pid": 12345,
+                        "pgid": 12345,
+                        "process_start_fingerprint": "successor-process",
+                    }
+                )
+                stored["attempts"].append(successor)
+                stored["current_attempt_id"] = successor["id"]
+                stored["status"] = "running"
+                stored["pid"] = successor["pid"]
+                stored["pgid"] = successor["pgid"]
+            with (
+                patch.object(bg, "terminate_process") as terminate_mock,
+                patch.object(bg, "_best_effort_release") as release_mock,
+            ):
+                status = bg._handle_lease_worker_exception(
+                    leased[0], predecessor_id, RuntimeError("predecessor failed")
+                )
+            self.assertEqual("running", status)
+            terminate_mock.assert_not_called()
+            release_mock.assert_not_called()
+            current = bg._snapshot_job(job["id"])
+            assert current is not None
+            attempt = bg.current_attempt(current)
+            assert attempt is not None
+            self.assertEqual(successor["id"], attempt["id"])
+            self.assertEqual("running", attempt["status"])
+
+    def test_spawned_worker_setup_failure_reaps_before_release(self) -> None:
+        spawned: list[subprocess.Popen[bytes]] = []
+        real_fingerprint = bg.process_start_fingerprint
+        real_popen = bg.subprocess.Popen
+        real_release = bg._best_effort_release
+
+        def fail_child_fingerprint(pid: int):
+            if pid != os.getpid():
+                raise RuntimeError("forced process fingerprint failure")
+            return real_fingerprint(pid)
+
+        def capture_process(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            command = args[0] if args else kwargs.get("args")
+            if isinstance(command, list) and "__lease_gate__" in command:
+                spawned.append(process)
+            return process
+
+        def release_after_reap(*args, **kwargs):
+            self.assertEqual(1, len(spawned))
+            self.assertIsNotNone(spawned[0].poll())
+            return real_release(*args, **kwargs)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease([sys.executable, "-c", "pass"])
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "process_start_fingerprint",
+                    side_effect=fail_child_fingerprint,
+                ),
+                patch.object(bg.subprocess, "Popen", side_effect=capture_process),
+                patch.object(
+                    bg,
+                    "_best_effort_release",
+                    side_effect=release_after_reap,
+                ) as release_mock,
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                status, exit_code = bg._run_lease_job(leased[0])
+            self.assertEqual(("failed", None), (status, exit_code))
+            release_mock.assert_called_once()
+            self.assertEqual(1, len(spawned))
+            self.assertIsNotNone(spawned[0].poll())
+            self.assertEqual(
+                0,
+                leases.lease_status(state_path=self.root / "leases.json")["count"],
+            )
+
+    def test_worker_exception_requires_fingerprint_containment_before_release(
+        self,
+    ) -> None:
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease([sys.executable, "-c", "pass"])
+            identity, current = self.reserve_and_claim(job, config_path)
+            attempt = bg.current_attempt(current)
+            assert attempt is not None
+            attempt_id = str(attempt["id"])
+            with bg.locked_jobs(writeback=True) as data:
+                stored = bg.find_job(data, job["id"])
+                assert stored is not None
+                stored_attempt = bg.current_attempt(stored)
+                assert stored_attempt is not None
+                stored_attempt.update(
+                    {
+                        "status": "running",
+                        "pid": 12345,
+                        "pgid": 12345,
+                        "process_start_fingerprint": "expected-process",
+                    }
+                )
+                stored["pid"] = 12345
+                stored["pgid"] = 12345
+            with (
+                patch.object(
+                    bg, "terminate_process", return_value="identity-mismatch"
+                ) as terminate_mock,
+                patch.object(bg, "_best_effort_release") as release_mock,
+            ):
+                status = bg._handle_lease_worker_exception(
+                    job, attempt_id, RuntimeError("worker failed")
+                )
+            self.assertEqual("reconciling", status)
+            self.assertEqual(
+                "expected-process",
+                terminate_mock.call_args.kwargs["expected_start_fingerprint"],
+            )
+            release_mock.assert_not_called()
+            quarantined = bg._snapshot_job(job["id"])
+            assert quarantined is not None
+            self.assertEqual("reconciling", quarantined["status"])
+            self.assertEqual("unknown", quarantined["attempts"][0]["status"])
+            bg._best_effort_release(identity, self.root / "leases.json")
+
+    def test_worker_exception_stops_keeper_before_containment_and_release(self) -> None:
+        keeper_stopped = threading.Event()
+        spawned: list[subprocess.Popen[bytes]] = []
+        real_stop = bg._LeaseHeartbeatKeeper.stop
+        real_release = bg._best_effort_release
+        real_popen = bg.subprocess.Popen
+
+        def observed_stop(keeper):
+            real_stop(keeper)
+            keeper_stopped.set()
+
+        def release_after_stop(*args, **kwargs):
+            self.assertTrue(keeper_stopped.is_set())
+            return real_release(*args, **kwargs)
+
+        def capture_process(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            command = args[0] if args else kwargs.get("args")
+            if isinstance(command, list) and "__lease_gate__" in command:
+                spawned.append(process)
+            return process
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [sys.executable, "-c", "import time; time.sleep(30)"]
+            )
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg,
+                    "_lease_attempt_is_active",
+                    side_effect=RuntimeError("forced worker failure"),
+                ),
+                patch.object(bg.subprocess, "Popen", side_effect=capture_process),
+                patch.object(bg._LeaseHeartbeatKeeper, "stop", new=observed_stop),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                attempt_id = str(leased[0]["current_attempt_id"])
+                with self.assertRaisesRegex(RuntimeError, "forced worker failure"):
+                    bg._run_lease_job(leased[0])
+            self.assertTrue(keeper_stopped.is_set())
+            self.assertEqual(1, len(spawned))
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                reaped = executor.submit(spawned[0].wait)
+                with patch.object(
+                    bg,
+                    "_best_effort_release",
+                    side_effect=release_after_stop,
+                ) as release_mock:
+                    status = bg._handle_lease_worker_exception(
+                        leased[0], attempt_id, RuntimeError("forced worker failure")
+                    )
+                reaped.result(timeout=5)
+            self.assertEqual("reconciling", status)
+            release_mock.assert_called_once()
+            self.assertEqual(
+                0,
+                leases.lease_status(state_path=self.root / "leases.json")["count"],
+            )
 
     def test_stale_fence_cannot_requeue_prestart_attempt(self) -> None:
         with (

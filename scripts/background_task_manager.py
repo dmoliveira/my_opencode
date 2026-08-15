@@ -15,6 +15,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -75,6 +76,7 @@ DEFAULT_MAX_TERMINAL = 200
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 LEASE_NONTERMINAL_STATUSES = {"queued", "running", "reconciling"}
 LEASE_ACTIVE_ATTEMPT_STATUSES = {"acquiring", "starting", "running"}
+LEASE_HEARTBEAT_ATTEMPT_STATUSES = {"running", "cancelling"}
 LEASE_TERMINAL_ATTEMPT_STATUSES = {"succeeded", "failed", "cancelled", "unknown"}
 CONTAINMENT_PROVEN_ACTIONS = frozenset(
     {"already-stopped", "not-found", "terminated", "killed"}
@@ -95,6 +97,10 @@ class BackgroundStoreError(RuntimeError):
 
 
 class AttemptSuperseded(RuntimeError):
+    pass
+
+
+class AttemptCancellationWon(RuntimeError):
     pass
 
 
@@ -1097,7 +1103,9 @@ def _finish_prestart_attempt(
         with locked_jobs(writeback=True) as data:
             job = find_job(data, job_id)
             if job is None or not _attempt_matches(
-                job, attempt_id, LEASE_ACTIVE_ATTEMPT_STATUSES
+                job,
+                attempt_id,
+                LEASE_ACTIVE_ATTEMPT_STATUSES | {"cancelling"},
             ):
                 if job is not None:
                     result = str(job.get("status") or "superseded")
@@ -1105,6 +1113,23 @@ def _finish_prestart_attempt(
             attempt = current_attempt(job)
             assert attempt is not None
             ended_at = to_iso(now_utc())
+            if attempt.get("status") == "cancelling" or job.get(
+                "cancel_requested_at"
+            ):
+                attempt["status"] = "cancelled"
+                attempt["ended_at"] = ended_at
+                attempt["failure_class"] = "user_cancelled"
+                attempt["outcome_confidence"] = "known_no_effect"
+                attempt["pid"] = None
+                attempt["pgid"] = None
+                job["status"] = "cancelled"
+                job["current_attempt_id"] = None
+                job["pid"] = None
+                job["pgid"] = None
+                job["ended_at"] = ended_at
+                job["summary"] = "cancelled before command effects became possible"
+                result = "cancelled"
+                return
             attempt["status"] = "failed"
             attempt["ended_at"] = ended_at
             attempt["failure_class"] = failure_class
@@ -1633,6 +1658,26 @@ def _lease_attempt_is_active(job_id: str, attempt_id: str) -> bool:
         )
 
 
+def _lease_attempt_heartbeat_state(job_id: str, attempt_id: str) -> str:
+    with locked_jobs(writeback=False) as data:
+        job = find_job(data, job_id)
+        attempt = current_attempt(job) if job is not None else None
+        if (
+            job is None
+            or not isinstance(attempt, dict)
+            or attempt.get("id") != attempt_id
+        ):
+            return "superseded"
+        if attempt.get("status") in LEASE_HEARTBEAT_ATTEMPT_STATUSES:
+            return "current"
+        if (
+            attempt.get("status") in LEASE_TERMINAL_ATTEMPT_STATUSES
+            or job.get("status") in TERMINAL_STATUSES
+        ):
+            return "superseded"
+        return "invalid"
+
+
 def _record_attempt_heartbeat(
     job_id: str,
     attempt_id: str,
@@ -1640,11 +1685,14 @@ def _record_attempt_heartbeat(
     lease_payload: dict[str, Any],
     *,
     state_path: Path,
+    lock_timeout_seconds: float,
 ) -> None:
     def commit() -> None:
         with locked_jobs(writeback=True) as data:
             job = find_job(data, job_id)
-            if job is None or not _attempt_matches(job, attempt_id, {"running"}):
+            if job is None or not _attempt_matches(
+                job, attempt_id, LEASE_HEARTBEAT_ATTEMPT_STATUSES
+            ):
                 raise AttemptSuperseded("attempt changed during heartbeat")
             attempt = current_attempt(job)
             assert attempt is not None
@@ -1652,7 +1700,97 @@ def _record_attempt_heartbeat(
                 lease_payload.get("heartbeat_at") or to_iso(now_utc())
             )
 
-    guarded_local_commit(identity, commit, state_path=state_path)
+    guarded_local_commit(
+        identity,
+        commit,
+        state_path=state_path,
+        lock_timeout_seconds=lock_timeout_seconds,
+    )
+
+
+class _LeaseHeartbeatKeeper:
+    def __init__(
+        self,
+        job_id: str,
+        attempt_id: str,
+        identity: LeaseIdentity,
+        *,
+        ttl_seconds: int,
+        state_path: Path,
+    ) -> None:
+        self.job_id = job_id
+        self.attempt_id = attempt_id
+        self.identity = identity
+        self.ttl_seconds = ttl_seconds
+        self.state_path = state_path
+        self.interval = max(0.25, ttl_seconds / 3)
+        self.lock_timeout = min(0.5, self.interval)
+        self._stop = threading.Event()
+        self._lease_lost = threading.Event()
+        self._superseded = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    @property
+    def lease_lost(self) -> bool:
+        return self._lease_lost.is_set()
+
+    @property
+    def superseded(self) -> bool:
+        return self._superseded.is_set()
+
+    def _classify_failure(self) -> None:
+        state = _lease_attempt_heartbeat_state(self.job_id, self.attempt_id)
+        if state == "superseded":
+            self._superseded.set()
+        else:
+            self._lease_lost.set()
+
+    def _heartbeat_once(self) -> bool:
+        try:
+            heartbeat = heartbeat_lease(
+                self.identity,
+                ttl_seconds=self.ttl_seconds,
+                state_path=self.state_path,
+                lock_timeout_seconds=self.lock_timeout,
+            )
+            lease_payload = heartbeat.get("lease")
+            if not isinstance(lease_payload, dict):
+                raise TaskLeaseError(
+                    "task_lease_response_invalid",
+                    "heartbeat returned no lease identity",
+                )
+            _record_attempt_heartbeat(
+                self.job_id,
+                self.attempt_id,
+                self.identity,
+                lease_payload,
+                state_path=self.state_path,
+                lock_timeout_seconds=self.lock_timeout,
+            )
+        except (AttemptSuperseded, TaskLeaseError, BackgroundStoreError):
+            self._classify_failure()
+            return False
+        return True
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval):
+            if not self._heartbeat_once():
+                return
+
+    def start(self) -> None:
+        if not self._heartbeat_once():
+            return
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"bg-heartbeat-{self.attempt_id}",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join()
 
 
 def _persist_running_attempt(
@@ -1719,7 +1857,7 @@ def _grant_lease_gate(
 
     try:
         guarded_local_commit(identity, commit, state_path=state_path)
-    except (AttemptSuperseded, BackgroundStoreError, OSError, TaskLeaseError) as exc:
+    except Exception as exc:
         raise GateAdmissionError(
             "lease gate admission failed",
             grant_delivered=grant_delivered,
@@ -1793,6 +1931,76 @@ def _settle_unadmitted_lease_gate(
     )
 
 
+def _settle_spawned_lease_exception(
+    job_id: str,
+    attempt_id: str,
+    identity: LeaseIdentity,
+    process: subprocess.Popen[bytes],
+    process_start: str | None,
+    drain_thread: threading.Thread | None,
+    write_fd: int,
+    *,
+    state_path: Path,
+    exc: Exception,
+) -> str:
+    try:
+        os.close(write_fd)
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        pass
+    action = terminate_process(
+        process.pid,
+        process.pid,
+        expected_start_fingerprint=process_start,
+    )
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        pass
+    if process.returncode is not None and not termination_proves_containment(action):
+        action = terminate_process(
+            process.pid,
+            process.pid,
+            expected_start_fingerprint=process_start,
+        )
+    if drain_thread is not None and drain_thread.ident is not None:
+        drain_thread.join(timeout=5)
+    elif process.stdout is not None:
+        process.stdout.close()
+    containment_proven = bool(
+        process.returncode is not None
+        and (
+            drain_thread is None
+            or drain_thread.ident is None
+            or not drain_thread.is_alive()
+        )
+        and termination_proves_containment(action)
+    )
+    if containment_proven:
+        result = _finish_prestart_attempt(
+            job_id,
+            attempt_id,
+            failure_class="worker_initialization_exception",
+            summary=(
+                "lease worker failed before command admission: "
+                f"{type(exc).__name__}"
+            ),
+            identity=identity,
+            state_path=state_path,
+        )
+        _best_effort_release(identity, state_path)
+        return result
+    return _mark_attempt_reconciling(
+        job_id,
+        attempt_id,
+        reason="lease worker initialization failed without proven containment",
+        failure_class="worker_initialization_exception",
+    )
+
+
 def _project_terminal_receipt(
     job_id: str,
     attempt_id: str,
@@ -1801,6 +2009,7 @@ def _project_terminal_receipt(
     receipt_sha256: str,
     *,
     state_path: Path,
+    before_commit: Callable[[], None] | None = None,
 ) -> tuple[str, dict | None]:
     validation_job = _snapshot_job(job_id)
     validation_attempt = (
@@ -1813,6 +2022,8 @@ def _project_terminal_receipt(
     ):
         raise AttemptSuperseded("attempt changed before receipt validation")
     _validate_terminal_receipt(validation_job, validation_attempt, identity, receipt)
+    if before_commit is not None:
+        before_commit()
 
     result = "superseded"
     snapshot: dict | None = None
@@ -1824,7 +2035,9 @@ def _project_terminal_receipt(
             if job is None:
                 result = "missing"
                 return
-            if not _attempt_matches(job, attempt_id, {"running"}):
+            if not _attempt_matches(
+                job, attempt_id, LEASE_HEARTBEAT_ATTEMPT_STATUSES
+            ):
                 result = str(job.get("status") or "superseded")
                 snapshot = dict(job)
                 return
@@ -1833,6 +2046,16 @@ def _project_terminal_receipt(
             attempt_status = str(receipt.get("attempt_status") or "unknown")
             if attempt_status not in LEASE_TERMINAL_ATTEMPT_STATUSES:
                 raise ValueError("terminal receipt has an invalid attempt status")
+            if (
+                attempt_status != "cancelled"
+                and (
+                    attempt.get("status") == "cancelling"
+                    or job.get("cancel_requested_at")
+                )
+            ):
+                raise AttemptCancellationWon(
+                    "cancellation won before terminal receipt projection"
+                )
             ended_at = str(receipt.get("ended_at") or to_iso(now_utc()))
             attempt.update(
                 {
@@ -1842,6 +2065,8 @@ def _project_terminal_receipt(
                     "failure_class": (
                         "lease_lost"
                         if receipt.get("lease_lost")
+                        else "user_cancelled"
+                        if receipt.get("cancelled")
                         else "timeout"
                         if receipt.get("timed_out")
                         else "process_exit"
@@ -1969,22 +2194,40 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
         )
         _best_effort_release(identity, state_path)
         return result, None
-    os.close(read_fd)
-    assert process.stdout is not None
-    drain_thread = threading.Thread(
-        target=_drain_bounded_output,
-        args=(
-            process.stdout,
-            Path(str(attempt["log_path"])),
-            int(snapshot.get("max_log_bytes") or DEFAULT_MAX_LOG_BYTES),
-            log_result,
-        ),
-        name=f"bg-log-{attempt_id}",
-        daemon=True,
-    )
-    drain_thread.start()
-
-    process_start = process_start_fingerprint(process.pid)
+    process_start: str | None = None
+    try:
+        os.close(read_fd)
+        assert process.stdout is not None
+        drain_thread = threading.Thread(
+            target=_drain_bounded_output,
+            args=(
+                process.stdout,
+                Path(str(attempt["log_path"])),
+                int(snapshot.get("max_log_bytes") or DEFAULT_MAX_LOG_BYTES),
+                log_result,
+            ),
+            name=f"bg-log-{attempt_id}",
+            daemon=True,
+        )
+        drain_thread.start()
+        process_start = process_start_fingerprint(process.pid)
+    except Exception as exc:  # noqa: BLE001 - contain the unpublished gate child
+        try:
+            os.close(read_fd)
+        except OSError:
+            pass
+        result = _settle_spawned_lease_exception(
+            job_id,
+            attempt_id,
+            identity,
+            process,
+            process_start,
+            drain_thread,
+            write_fd,
+            state_path=state_path,
+            exc=exc,
+        )
+        return result, None
     if process_start is None:
         os.close(write_fd)
         terminate_process(process.pid, process.pid)
@@ -2072,53 +2315,23 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
     receipt["pgid"] = process.pid
     request = snapshot["lease_request"]
     ttl_seconds = int(request["ttl_seconds"])
-    heartbeat_interval = max(0.25, ttl_seconds / 3)
-    next_heartbeat = time.monotonic() + heartbeat_interval
+    keeper = _LeaseHeartbeatKeeper(
+        job_id,
+        attempt_id,
+        identity,
+        ttl_seconds=ttl_seconds,
+        state_path=state_path,
+    )
     deadline = time.monotonic() + int(
         snapshot.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS
     )
     timed_out = False
     cancelled = False
     lease_lost = False
-    while process.poll() is None:
-        if not _lease_attempt_is_active(job_id, attempt_id):
-            cancelled = True
-            terminate_process(
-                process.pid,
-                process.pid,
-                expected_start_fingerprint=process_start,
-            )
-            break
-        now = time.monotonic()
-        if now >= deadline:
-            timed_out = True
-            terminate_process(
-                process.pid,
-                process.pid,
-                expected_start_fingerprint=process_start,
-            )
-            break
-        if now >= next_heartbeat:
-            try:
-                heartbeat = heartbeat_lease(
-                    identity,
-                    ttl_seconds=ttl_seconds,
-                    state_path=state_path,
-                )
-                lease_payload = heartbeat.get("lease")
-                if not isinstance(lease_payload, dict):
-                    raise TaskLeaseError(
-                        "task_lease_response_invalid",
-                        "heartbeat returned no lease identity",
-                    )
-                _record_attempt_heartbeat(
-                    job_id,
-                    attempt_id,
-                    identity,
-                    lease_payload,
-                    state_path=state_path,
-                )
-            except (AttemptSuperseded, TaskLeaseError, BackgroundStoreError):
+    try:
+        keeper.start()
+        while process.poll() is None:
+            if keeper.lease_lost:
                 lease_lost = True
                 terminate_process(
                     process.pid,
@@ -2126,146 +2339,225 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
                     expected_start_fingerprint=process_start,
                 )
                 break
-            next_heartbeat = now + heartbeat_interval
-        time.sleep(0.05)
-    try:
-        process.wait(timeout=3)
-    except subprocess.TimeoutExpired:
-        terminate_process(
-            process.pid,
-            process.pid,
-            grace_seconds=0.1,
-            expected_start_fingerprint=process_start,
-        )
+            if not _lease_attempt_is_active(job_id, attempt_id):
+                cancelled = True
+                terminate_process(
+                    process.pid,
+                    process.pid,
+                    expected_start_fingerprint=process_start,
+                )
+                break
+            now = time.monotonic()
+            if now >= deadline:
+                timed_out = True
+                terminate_process(
+                    process.pid,
+                    process.pid,
+                    expected_start_fingerprint=process_start,
+                )
+                break
+            time.sleep(0.05)
         try:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            pass
-    containment_action = terminate_process(
-        process.pid,
-        process.pid,
-        grace_seconds=0.2,
-        expected_start_fingerprint=process_start,
-    )
-    drain_thread.join(timeout=5)
-    exit_code = process.returncode
-    latest = _snapshot_job(job_id)
-    latest_attempt = current_attempt(latest) if latest is not None else None
-    evidence_attempt = latest_attempt if isinstance(latest_attempt, dict) else attempt
-    observed_gate_state = _gate_state(job_id, evidence_attempt)
-    if (
-        process.returncode is None
-        or drain_thread.is_alive()
-        or log_result.get("error")
-        or not termination_proves_containment(containment_action)
-    ):
-        result = _mark_attempt_reconciling(
-            job_id,
-            attempt_id,
-            reason="process group or bounded log drain did not settle",
-            failure_class="execution_containment_incomplete",
+            terminate_process(
+                process.pid,
+                process.pid,
+                grace_seconds=0.1,
+                expected_start_fingerprint=process_start,
+            )
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
+        containment_action = terminate_process(
+            process.pid,
+            process.pid,
+            grace_seconds=0.2,
+            expected_start_fingerprint=process_start,
         )
-        _best_effort_release(identity, state_path)
-        return result, exit_code
-    if observed_gate_state != "effect_possible":
-        result = _mark_attempt_reconciling(
-            job_id,
-            attempt_id,
-            reason="durable command gate evidence is missing or invalid",
-            failure_class="gate_evidence_invalid",
+        containment_proven = termination_proves_containment(containment_action)
+        drain_thread.join(timeout=5)
+        exit_code = process.returncode
+        latest = _snapshot_job(job_id)
+        latest_attempt = current_attempt(latest) if latest is not None else None
+        if (
+            isinstance(latest_attempt, dict)
+            and latest_attempt.get("id") == attempt_id
+            and (
+                latest_attempt.get("status") == "cancelling"
+                or latest.get("cancel_requested_at")
+            )
+        ):
+            cancelled = True
+        evidence_attempt = (
+            latest_attempt
+            if isinstance(latest_attempt, dict)
+            and latest_attempt.get("id") == attempt_id
+            else gate_attempt
         )
-        _best_effort_release(identity, state_path)
-        return result, exit_code
-    if cancelled:
-        attempt_status = "cancelled"
-        outcome_confidence = (
-            "effect_possible"
-            if observed_gate_state == "effect_possible"
-            else "known_no_effect"
-        )
-    elif lease_lost:
-        attempt_status = "unknown"
-        outcome_confidence = "unknown"
-    elif timed_out or exit_code != 0:
-        attempt_status = "failed"
-        outcome_confidence = "known_process_outcome"
-    else:
-        attempt_status = "succeeded"
-        outcome_confidence = "known_process_outcome"
-    try:
-        terminal_receipt, receipt_sha256 = _write_terminal_receipt(
-            receipt,
-            attempt_status=attempt_status,
-            outcome_confidence=outcome_confidence,
-            process=process,
-            exit_code=exit_code,
-            timed_out=timed_out,
-            cancelled=cancelled,
-            lease_lost=lease_lost,
-            gate_state=observed_gate_state,
-            log_result=log_result,
-        )
-    except BackgroundStoreError as exc:
-        result = _mark_attempt_reconciling(
-            job_id,
-            attempt_id,
-            reason="terminal receipt durability is indeterminate",
-            failure_class=exc.reason_code,
-        )
-        _best_effort_release(identity, state_path)
-        return result, exit_code
-
-    if lease_lost:
-        result = _mark_attempt_reconciling(
-            job_id,
-            attempt_id,
-            reason="task lease was lost after command effects became possible",
-            failure_class="task_lease_lost",
-        )
-        return result, exit_code
-    try:
-        result, terminal_snapshot = _project_terminal_receipt(
-            job_id,
-            attempt_id,
-            identity,
-            terminal_receipt,
-            receipt_sha256,
-            state_path=state_path,
-        )
-    except (
-        AttemptSuperseded,
-        TaskLeaseError,
-        BackgroundStoreError,
-        TypeError,
-        ValueError,
-    ):
-        current = _snapshot_job(job_id)
-        if current is not None and current.get("status") in TERMINAL_STATUSES:
-            result = str(current["status"])
-            terminal_snapshot = current
-        else:
+        observed_gate_state = _gate_state(job_id, evidence_attempt)
+        if (
+            process.returncode is None
+            or drain_thread.is_alive()
+            or log_result.get("error")
+            or not containment_proven
+        ):
+            keeper.stop()
             result = _mark_attempt_reconciling(
                 job_id,
                 attempt_id,
-                reason="terminal receipt could not be committed under the exact lease",
-                failure_class="terminal_commit_fenced",
+                reason="process group or bounded log drain did not settle",
+                failure_class="execution_containment_incomplete",
             )
-            terminal_snapshot = None
-    _best_effort_release(identity, state_path)
-    if terminal_snapshot is not None and result in TERMINAL_STATUSES:
-        _write_meta(
-            terminal_snapshot,
-            timed_out=timed_out,
-            duration_seconds=max(
-                0.0,
-                (
-                    now_utc()
-                    - (parse_iso(attempt.get("created_at")) or now_utc())
-                ).total_seconds(),
-            ),
-        )
-        emit_terminal_notification(terminal_snapshot)
-    return result, exit_code
+            if containment_proven:
+                _best_effort_release(identity, state_path)
+            return result, exit_code
+        if observed_gate_state != "effect_possible":
+            keeper.stop()
+            result = _mark_attempt_reconciling(
+                job_id,
+                attempt_id,
+                reason="durable command gate evidence is missing or invalid",
+                failure_class="gate_evidence_invalid",
+            )
+            _best_effort_release(identity, state_path)
+            return result, exit_code
+        lease_lost = lease_lost or keeper.lease_lost
+        if cancelled:
+            attempt_status = "cancelled"
+            outcome_confidence = "effect_possible"
+        elif lease_lost:
+            attempt_status = "unknown"
+            outcome_confidence = "unknown"
+        elif timed_out or exit_code != 0:
+            attempt_status = "failed"
+            outcome_confidence = "known_process_outcome"
+        else:
+            attempt_status = "succeeded"
+            outcome_confidence = "known_process_outcome"
+        try:
+            terminal_receipt, receipt_sha256 = _write_terminal_receipt(
+                receipt,
+                attempt_status=attempt_status,
+                outcome_confidence=outcome_confidence,
+                process=process,
+                exit_code=exit_code,
+                timed_out=timed_out,
+                cancelled=cancelled,
+                lease_lost=lease_lost,
+                gate_state=observed_gate_state,
+                log_result=log_result,
+            )
+        except BackgroundStoreError as exc:
+            keeper.stop()
+            result = _mark_attempt_reconciling(
+                job_id,
+                attempt_id,
+                reason="terminal receipt durability is indeterminate",
+                failure_class=exc.reason_code,
+            )
+            _best_effort_release(identity, state_path)
+            return result, exit_code
+
+        lease_lost = lease_lost or keeper.lease_lost
+        if lease_lost:
+            keeper.stop()
+            result = _mark_attempt_reconciling(
+                job_id,
+                attempt_id,
+                reason="task lease was lost after command effects became possible",
+                failure_class="task_lease_lost",
+            )
+            return result, exit_code
+
+        def stop_keeper_before_terminal_commit() -> None:
+            keeper.stop()
+            if keeper.lease_lost:
+                raise TaskLeaseError(
+                    "task_lease_heartbeat_lost",
+                    "task lease heartbeat failed before terminal projection",
+                )
+
+        try:
+            try:
+                result, terminal_snapshot = _project_terminal_receipt(
+                    job_id,
+                    attempt_id,
+                    identity,
+                    terminal_receipt,
+                    receipt_sha256,
+                    state_path=state_path,
+                    before_commit=stop_keeper_before_terminal_commit,
+                )
+            except AttemptCancellationWon:
+                cancelled = True
+                terminal_receipt, receipt_sha256 = _write_terminal_receipt(
+                    receipt,
+                    attempt_status="cancelled",
+                    outcome_confidence="effect_possible",
+                    process=process,
+                    exit_code=exit_code,
+                    timed_out=timed_out,
+                    cancelled=True,
+                    lease_lost=False,
+                    gate_state=observed_gate_state,
+                    log_result=log_result,
+                )
+                result, terminal_snapshot = _project_terminal_receipt(
+                    job_id,
+                    attempt_id,
+                    identity,
+                    terminal_receipt,
+                    receipt_sha256,
+                    state_path=state_path,
+                )
+        except (
+            AttemptSuperseded,
+            TaskLeaseError,
+            BackgroundStoreError,
+            TypeError,
+            ValueError,
+        ):
+            keeper.stop()
+            current = _snapshot_job(job_id)
+            if keeper.lease_lost:
+                result = _mark_attempt_reconciling(
+                    job_id,
+                    attempt_id,
+                    reason="task lease was lost before terminal projection",
+                    failure_class="task_lease_lost",
+                )
+                terminal_snapshot = None
+            elif current is not None and current.get("status") in TERMINAL_STATUSES:
+                result = str(current["status"])
+                terminal_snapshot = current
+            else:
+                result = _mark_attempt_reconciling(
+                    job_id,
+                    attempt_id,
+                    reason="terminal receipt could not be committed under the exact lease",
+                    failure_class="terminal_commit_fenced",
+                )
+                terminal_snapshot = None
+        if not keeper.lease_lost:
+            _best_effort_release(identity, state_path)
+        if terminal_snapshot is not None and result in TERMINAL_STATUSES:
+            _write_meta(
+                terminal_snapshot,
+                timed_out=timed_out,
+                duration_seconds=max(
+                    0.0,
+                    (
+                        now_utc()
+                        - (parse_iso(attempt.get("created_at")) or now_utc())
+                    ).total_seconds(),
+                ),
+            )
+            emit_terminal_notification(terminal_snapshot)
+        return result, exit_code
+    finally:
+        keeper.stop()
 
 
 def _run_single_job(job: dict) -> tuple[str, int | None]:
@@ -2617,6 +2909,68 @@ def command_reconcile(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_lease_worker_exception(
+    job: dict, attempt_id: str, exc: Exception
+) -> str:
+    job_id = str(job.get("id"))
+    identity: LeaseIdentity | None = None
+    state_path: Path | None = None
+    pid = 0
+    pgid = 0
+    process_start: str | None = None
+    with locked_jobs(writeback=True) as data:
+        current = find_job(data, job_id)
+        attempt = current_attempt(current) if current is not None else None
+        if (
+            current is None
+            or not isinstance(attempt, dict)
+            or attempt.get("id") != attempt_id
+        ):
+            return str(current.get("status") if current is not None else "superseded")
+        identity = _attempt_identity(attempt)
+        try:
+            state_path = _lease_state_path(current)
+        except (KeyError, TypeError, ValueError):
+            state_path = None
+        pid = int(attempt.get("pid") or 0)
+        pgid = int(attempt.get("pgid") or 0)
+        process_start = str(attempt.get("process_start_fingerprint") or "") or None
+        ended_at = to_iso(now_utc())
+        attempt["status"] = "unknown"
+        attempt["ended_at"] = ended_at
+        attempt["failure_class"] = "worker_exception"
+        attempt["outcome_confidence"] = "unknown"
+        current["status"] = "reconciling"
+        current["reconcile_reason"] = (
+            f"lease worker raised before a safe outcome: {type(exc).__name__}"
+        )
+        current["summary"] = current["reconcile_reason"]
+
+    action = "process-unpublished"
+    if pid and process_start:
+        action = terminate_process(
+            pid,
+            pgid or None,
+            expected_start_fingerprint=process_start,
+        )
+    containment_proven = termination_proves_containment(action)
+    with locked_jobs(writeback=True) as data:
+        current = find_job(data, job_id)
+        attempt = current_attempt(current) if current is not None else None
+        if (
+            current is not None
+            and isinstance(attempt, dict)
+            and attempt.get("id") == attempt_id
+            and current.get("status") == "reconciling"
+        ):
+            current["summary"] = (
+                f"{current['reconcile_reason']} (pid_action={action})"
+            )
+    if containment_proven and identity is not None and state_path is not None:
+        _best_effort_release(identity, state_path)
+    return "reconciling"
+
+
 def command_run(args: argparse.Namespace) -> int:
     if args.lease_max_concurrency < 1:
         print("error: --lease-max-concurrency must be greater than zero")
@@ -2634,14 +2988,18 @@ def command_run(args: argparse.Namespace) -> int:
     completed = 0
     failed = 0
     total_ran = 0
-    lease_futures: dict[Any, dict] = {}
+    lease_futures: dict[Any, tuple[dict, str]] = {}
     executor: ThreadPoolExecutor | None = None
     if lease_jobs:
         executor = ThreadPoolExecutor(
             max_workers=len(lease_jobs), thread_name_prefix="bg-lease"
         )
         lease_futures = {
-            executor.submit(_run_lease_job, job): job for job in lease_jobs
+            executor.submit(_run_lease_job, job): (
+                job,
+                str(job.get("current_attempt_id") or ""),
+            )
+            for job in lease_jobs
         }
     for job in jobs_to_run:
         status, exit_code = _run_single_job(job)
@@ -2655,27 +3013,12 @@ def command_run(args: argparse.Namespace) -> int:
             line += f" (exit_code={exit_code})"
         print(line)
     for future in as_completed(lease_futures):
-        job = lease_futures[future]
+        job, attempt_id = lease_futures[future]
         try:
             status, exit_code = future.result()
         except Exception as exc:  # noqa: BLE001 - fence unexpected worker failures
-            status, exit_code = "reconciling", None
-            current = _snapshot_job(str(job.get("id"))) or job
-            attempt = current_attempt(current)
-            if isinstance(attempt, dict):
-                pid = int(attempt.get("pid") or 0)
-                pgid = int(attempt.get("pgid") or 0)
-                if pid:
-                    terminate_process(pid, pgid or None)
-                identity = _attempt_identity(attempt)
-                _mark_attempt_reconciling(
-                    str(job.get("id")),
-                    str(attempt.get("id")),
-                    reason=f"lease worker raised before a safe outcome: {type(exc).__name__}",
-                    failure_class="worker_exception",
-                )
-                if identity is not None:
-                    _best_effort_release(identity, _lease_state_path(current))
+            status = _handle_lease_worker_exception(job, attempt_id, exc)
+            exit_code = None
         total_ran += 1
         if status == "completed":
             completed += 1
@@ -2778,7 +3121,9 @@ def command_cancel(args: argparse.Namespace) -> int:
     lease_state_path: Path | None = None
     attempt_id: str | None = None
     immediate = False
+    awaiting_worker = False
     pidless_uncertain = False
+    worker_owns_release = False
     with locked_jobs(writeback=True) as data:
         cleanup_jobs(data)
         job = find_job(data, args.id)
@@ -2807,10 +3152,14 @@ def command_cancel(args: argparse.Namespace) -> int:
                 attempt_id = str(attempt.get("id"))
                 lease_identity = _attempt_identity(attempt)
                 lease_state_path = _lease_state_path(job)
+                worker_owns_release = bool(
+                    lease_identity is not None
+                    and attempt.get("status") in {"starting", "running", "cancelling"}
+                )
                 process_start = str(
                     attempt.get("process_start_fingerprint") or ""
                 ) or None
-                if pid and attempt.get("status") in LEASE_ACTIVE_ATTEMPT_STATUSES:
+                if worker_owns_release:
                     attempt["status"] = "cancelling"
                     attempt["failure_class"] = "user_cancel_requested"
                 elif attempt.get("status") not in LEASE_TERMINAL_ATTEMPT_STATUSES:
@@ -2818,7 +3167,10 @@ def command_cancel(args: argparse.Namespace) -> int:
                     attempt["ended_at"] = requested_at
                     attempt["failure_class"] = "user_cancelled"
                     attempt["outcome_confidence"] = "known_no_effect"
-        if not pid and (status == "queued" or is_lease_job(job)):
+        if not pid and worker_owns_release:
+            awaiting_worker = True
+            job["summary"] = "cancellation requested; awaiting worker settlement"
+        elif not pid and (status == "queued" or is_lease_job(job)):
             immediate = True
             job["status"] = "cancelled"
             job["ended_at"] = requested_at
@@ -2840,6 +3192,10 @@ def command_cancel(args: argparse.Namespace) -> int:
         print(f"id: {args.id}")
         print("status: cancelled")
         return 0
+    if awaiting_worker:
+        print(f"id: {args.id}")
+        print("status: cancelling")
+        return 0
     if pidless_uncertain:
         print(f"id: {args.id}")
         print("status: reconciling")
@@ -2851,10 +3207,18 @@ def command_cancel(args: argparse.Namespace) -> int:
         expected_start_fingerprint=process_start,
     )
     containment_failed = not termination_proves_containment(action)
-    final_status = "reconciling" if containment_failed else "cancelled"
+    final_status = (
+        "reconciling"
+        if containment_failed
+        else "cancelling"
+        if worker_owns_release
+        else "cancelled"
+    )
     with locked_jobs(writeback=True) as data:
         job = find_job(data, args.id)
-        if job is not None and job.get("status") not in TERMINAL_STATUSES:
+        if job is not None and job.get("status") in TERMINAL_STATUSES:
+            final_status = str(job.get("status"))
+        elif job is not None:
             attempt = current_attempt(job)
             if (
                 is_lease_job(job)
@@ -2862,30 +3226,49 @@ def command_cancel(args: argparse.Namespace) -> int:
                 and attempt.get("id") == attempt_id
                 and attempt.get("status") not in LEASE_TERMINAL_ATTEMPT_STATUSES
             ):
-                attempt["status"] = "unknown" if containment_failed else "cancelled"
-                attempt["ended_at"] = to_iso(now_utc())
-                attempt["failure_class"] = (
-                    "cancel_containment_incomplete"
-                    if containment_failed
-                    else "user_cancelled"
+                if containment_failed:
+                    attempt["status"] = "unknown"
+                    attempt["ended_at"] = to_iso(now_utc())
+                    attempt["failure_class"] = "cancel_containment_incomplete"
+                    attempt["outcome_confidence"] = "unknown"
+                elif worker_owns_release:
+                    attempt["status"] = "cancelling"
+                    attempt["failure_class"] = "user_cancel_requested"
+                else:
+                    attempt["status"] = "cancelled"
+                    attempt["ended_at"] = to_iso(now_utc())
+                    attempt["failure_class"] = "user_cancelled"
+                    attempt["outcome_confidence"] = "effect_possible"
+            if containment_failed:
+                job["status"] = "reconciling"
+                job["ended_at"] = None
+                job["summary"] = (
+                    f"cancellation containment incomplete (pid_action={action})"
                 )
-                attempt["outcome_confidence"] = (
-                    "unknown" if containment_failed else "effect_possible"
-                )
-            job["status"] = final_status
-            job["ended_at"] = None if containment_failed else to_iso(now_utc())
-            job["summary"] = (
-                f"cancellation containment incomplete (pid_action={action})"
-                if containment_failed
-                else f"cancelled by user (pid_action={action})"
-            )
-            if not containment_failed:
+            elif worker_owns_release:
+                if (
+                    job.get("status") == "running"
+                    and isinstance(attempt, dict)
+                    and attempt.get("id") == attempt_id
+                    and attempt.get("status") == "cancelling"
+                ):
+                    job["summary"] = (
+                        f"cancellation contained (pid_action={action}); "
+                        "awaiting worker settlement"
+                    )
+                else:
+                    final_status = str(job.get("status") or "reconciling")
+            else:
+                job["status"] = "cancelled"
+                job["ended_at"] = to_iso(now_utc())
+                job["summary"] = f"cancelled by user (pid_action={action})"
                 job["pid"] = None
                 job["pgid"] = None
                 job["current_attempt_id"] = None
 
     if (
         not containment_failed
+        and not worker_owns_release
         and lease_identity is not None
         and lease_state_path is not None
     ):
@@ -2893,7 +3276,7 @@ def command_cancel(args: argparse.Namespace) -> int:
 
     print(f"id: {args.id}")
     print(f"status: {final_status}")
-    return 0 if final_status == "cancelled" else 1
+    return 0 if final_status in {"cancelled", "cancelling"} else 1
 
 
 def command_cleanup(args: argparse.Namespace) -> int:

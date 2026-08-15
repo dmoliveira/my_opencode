@@ -7,6 +7,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -284,6 +285,88 @@ class TaskLeaseCommandTest(unittest.TestCase):
                     state_path.with_name("leases.json.journal").stat().st_mode
                 ),
             )
+
+    def test_heartbeat_lock_wait_is_bounded(self) -> None:
+        if "spawn" not in multiprocessing.get_all_start_methods():
+            self.skipTest("spawn process context unavailable")
+        with tempfile.TemporaryDirectory(prefix="task-lease-heartbeat-lock-") as raw:
+            root = Path(raw)
+            state_path, config_path = self.paths(root)
+            identity = identity_from_report(
+                claim_for_test(state_path, config_path, root)
+            )
+            context = multiprocessing.get_context("spawn")
+            acquired = context.Event()
+            release = context.Event()
+            released = context.Event()
+            holder = context.Process(
+                target=process_hold_store_lock,
+                args=(acquired, release, released, str(state_path)),
+            )
+            holder.start()
+            self.assertTrue(acquired.wait(timeout=10))
+            started = time.monotonic()
+            try:
+                with self.assertRaises(leases.TaskLeaseError) as raised:
+                    leases.heartbeat_lease(
+                        identity,
+                        ttl_seconds=10,
+                        state_path=state_path,
+                        lock_timeout_seconds=0.05,
+                    )
+            finally:
+                release.set()
+                holder.join(timeout=10)
+                if holder.is_alive():
+                    holder.terminate()
+                    holder.join(timeout=10)
+            self.assertLess(time.monotonic() - started, 1.0)
+            self.assertEqual(
+                "task_lease_lock_timeout", raised.exception.reason_code
+            )
+            self.assertFalse(holder.is_alive())
+            self.assertEqual(0, holder.exitcode)
+
+    def test_guarded_commit_lock_wait_is_bounded(self) -> None:
+        if "spawn" not in multiprocessing.get_all_start_methods():
+            self.skipTest("spawn process context unavailable")
+        with tempfile.TemporaryDirectory(prefix="task-lease-commit-lock-") as raw:
+            root = Path(raw)
+            state_path, config_path = self.paths(root)
+            identity = identity_from_report(
+                claim_for_test(state_path, config_path, root)
+            )
+            context = multiprocessing.get_context("spawn")
+            acquired = context.Event()
+            release = context.Event()
+            released = context.Event()
+            holder = context.Process(
+                target=process_hold_store_lock,
+                args=(acquired, release, released, str(state_path)),
+            )
+            holder.start()
+            self.assertTrue(acquired.wait(timeout=10))
+            started = time.monotonic()
+            try:
+                with self.assertRaises(leases.TaskLeaseError) as raised:
+                    leases.guarded_local_commit(
+                        identity,
+                        lambda: None,
+                        state_path=state_path,
+                        lock_timeout_seconds=0.05,
+                    )
+            finally:
+                release.set()
+                holder.join(timeout=10)
+                if holder.is_alive():
+                    holder.terminate()
+                    holder.join(timeout=10)
+            self.assertLess(time.monotonic() - started, 1.0)
+            self.assertEqual(
+                "task_lease_lock_timeout", raised.exception.reason_code
+            )
+            self.assertFalse(holder.is_alive())
+            self.assertEqual(0, holder.exitcode)
 
     def test_expiry_equality_reclaims_and_rejects_stale_worker(self) -> None:
         with tempfile.TemporaryDirectory(prefix="task-lease-expiry-") as raw:
