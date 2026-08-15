@@ -325,7 +325,36 @@ def is_pid_alive(pid: int) -> bool:
         return False
 
 
+def _parse_linux_process_stat(raw: str) -> tuple[str, int] | None:
+    closing = raw.rfind(")")
+    if closing < 0:
+        return None
+    fields = raw[closing + 2 :].split()
+    if len(fields) < 3:
+        return None
+    try:
+        return fields[0], int(fields[2])
+    except ValueError:
+        return None
+
+
+def _classify_linux_process_group(
+    pgid: int,
+    members: list[tuple[str, int]],
+    *,
+    uncertain: bool,
+) -> bool | None:
+    matching_states = [state for state, process_group in members if process_group == pgid]
+    if any(state not in {"X", "Z"} for state in matching_states):
+        return True
+    if uncertain or not matching_states:
+        return None
+    return False
+
+
 def _linux_process_group_has_executable_members(pgid: int) -> bool | None:
+    if not sys.platform.startswith("linux"):
+        return None
     proc_root = Path("/proc")
     if not proc_root.is_dir():
         return None
@@ -333,20 +362,25 @@ def _linux_process_group_has_executable_members(pgid: int) -> bool | None:
         entries = os.scandir(proc_root)
     except OSError:
         return None
+    members: list[tuple[str, int]] = []
+    uncertain = False
     with entries:
         for entry in entries:
             if not entry.name.isdigit():
                 continue
             try:
                 raw = Path(entry.path, "stat").read_text(encoding="utf-8")[:8192]
-                fields = raw[raw.rfind(")") + 2 :].split()
-                state = fields[0]
-                process_group = int(fields[2])
-            except (IndexError, OSError, ValueError):
+            except FileNotFoundError:
                 continue
-            if process_group == pgid and state not in {"X", "Z"}:
-                return True
-    return False
+            except OSError:
+                uncertain = True
+                continue
+            parsed = _parse_linux_process_stat(raw)
+            if parsed is None:
+                uncertain = True
+                continue
+            members.append(parsed)
+    return _classify_linux_process_group(pgid, members, uncertain=uncertain)
 
 
 def is_process_group_alive(pgid: int) -> bool:

@@ -234,6 +234,25 @@ class BackgroundTaskManagerTest(unittest.TestCase):
         ):
             self.assertTrue(bg.is_process_group_alive(12345))
 
+    def test_linux_group_classifier_requires_positive_complete_evidence(self) -> None:
+        parsed = bg._parse_linux_process_stat(
+            "123 (worker with spaces) Z 1 123 123 0 0 0"
+        )
+        self.assertEqual(("Z", 123), parsed)
+        self.assertIsNone(bg._parse_linux_process_stat("malformed"))
+        self.assertFalse(
+            bg._classify_linux_process_group(123, [("Z", 123)], uncertain=False)
+        )
+        self.assertTrue(
+            bg._classify_linux_process_group(123, [("S", 123)], uncertain=False)
+        )
+        self.assertIsNone(
+            bg._classify_linux_process_group(123, [("Z", 123)], uncertain=True)
+        )
+        self.assertIsNone(
+            bg._classify_linux_process_group(123, [("Z", 999)], uncertain=False)
+        )
+
     def test_concurrent_runners_execute_one_legacy_reservation(self) -> None:
         marker = self.root / "executions.txt"
         job_id = self.enqueue(
