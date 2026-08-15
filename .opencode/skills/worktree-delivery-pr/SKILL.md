@@ -8,13 +8,14 @@ Run the smallest safe worktree-to-PR delivery flow with clear validation and cle
 
 ## Use When
 - the user wants end-to-end delivery
+- the user asks to implement, fix, or improve something without an explicit `local-only`, `no-push`, or `no-PR` boundary
 - a new task needs a dedicated worktree branch
 - the task includes push, PR, checks, merge, or cleanup work
 - branch freshness or PR guardrails are part of the work
 
 ## Do Not Use When
 - the task is planning-only
-- a narrow file edit is all that is needed and delivery is out of scope
+- the request explicitly selects `local-only`, `no-push`, or `no-PR`
 - protected `main` inspection alone answers the question
 
 ## First Steps
@@ -25,6 +26,7 @@ Run the smallest safe worktree-to-PR delivery flow with clear validation and cle
 
 ## Working Rules
 - Keep `main` as sync/merge only; do implementation in the task worktree.
+- Treat clear implementation, fix, and improvement requests as Delivery by default; explicit local-only boundaries select the Implementation lane.
 - Validate the current diff before commit, then keep commit and push separate.
 - Re-check branch freshness before PR create or merge.
 - Prefer automation-safe `gh` usage and structured status output.
