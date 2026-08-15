@@ -298,6 +298,12 @@ def load_source_snapshot(runner: Runner, scope: str) -> SourceSnapshot:
     task_ids = {task.id for task in before.tasks}
     dependencies: set[tuple[str, str]] = set()
     for link in before.links:
+        if link.edge_type == "blocked-by" and link.from_id in task_ids:
+            raise ProjectionError(
+                "task_projection_source_unsupported_edge",
+                "Codememory link "
+                f"{link.id} uses blocked-by from projected task {link.from_id}",
+            )
         if link.edge_type != "depends-on":
             continue
         if (
