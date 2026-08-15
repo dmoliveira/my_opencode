@@ -14,12 +14,12 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-import autopilot_command  # noqa: E402
-import codememory_task_graph_projection as projection  # noqa: E402
-import start_work_command  # noqa: E402
-import task_graph_command  # noqa: E402
-import task_graph_runtime  # noqa: E402
-import workflow_command  # noqa: E402
+import autopilot_command
+import codememory_task_graph_projection as projection
+import start_work_command
+import task_graph_command
+import task_graph_runtime
+import workflow_command
 
 
 class FakeCodememoryRunner:
@@ -28,6 +28,7 @@ class FakeCodememoryRunner:
         tasks: list[dict[str, str]],
         dependencies: list[tuple[str, str]] | None = None,
         *,
+        explicit_links: list[tuple[str, str, str]] | None = None,
         scope: str = "example/repo",
         unstable: bool = False,
         unstable_link: bool = False,
@@ -42,15 +43,20 @@ class FakeCodememoryRunner:
         self.task_scans = 0
         self.link_gets: dict[str, int] = {}
         self.calls: list[tuple[list[str], str]] = []
+        source_links = [
+            ("depends-on", source, target)
+            for source, target in (dependencies or [])
+        ]
+        source_links.extend(explicit_links or [])
         self.link_details = {
             f"link_{index}": {
                 "id": f"link_{index}",
                 "type": "link",
                 "from_id": source,
-                "edge_type": "depends-on",
+                "edge_type": edge_type,
                 "to_id": target,
             }
-            for index, (source, target) in enumerate(self.dependencies, start=1)
+            for index, (edge_type, source, target) in enumerate(source_links, start=1)
         }
 
     def __call__(self, arguments: list[str], operation: str) -> dict[str, object]:
@@ -209,6 +215,23 @@ class TaskGraphProjectionTests(unittest.TestCase):
             all(operation.endswith(("_list", "_get")) for _, operation in runner.calls)
         )
         self.assertEqual({"link_1": 2}, runner.link_gets)
+
+    def test_source_blocked_by_links_fail_closed(self) -> None:
+        tasks = [source_task("task_1"), source_task("task_2")]
+        for target_id in ("task_1", "memory_1"):
+            with self.subTest(target_id=target_id):
+                runner = FakeCodememoryRunner(
+                    tasks,
+                    explicit_links=[("blocked-by", "task_2", target_id)],
+                )
+                with self.assertRaises(projection.ProjectionError) as raised:
+                    projection.load_source_snapshot(runner, "example/repo")
+                self.assertEqual(
+                    "task_projection_source_unsupported_edge",
+                    raised.exception.reason_code,
+                )
+                self.assertIn("link_1", raised.exception.detail)
+                self.assertIn("task_2", raised.exception.detail)
 
     def test_source_scan_fails_closed_on_change_unknown_status_and_limit(self) -> None:
         unstable = FakeCodememoryRunner([source_task("task_1")], unstable=True)
@@ -534,6 +557,42 @@ class TaskGraphProjectionTests(unittest.TestCase):
                 "task_managed_by_codememory",
                 json.loads(output.getvalue())["reason_code"],
             )
+
+    def test_cli_apply_preserves_destination_for_unsupported_blocked_by(self) -> None:
+        runner = FakeCodememoryRunner(
+            [source_task("task_1")],
+            explicit_links=[("blocked-by", "task_1", "memory_1")],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = write_raw_state(root, [local_task("existing")])
+            before = path.read_bytes()
+            output = io.StringIO()
+            build_projection = Mock(
+                side_effect=AssertionError("unsupported source must not project")
+            )
+            with (
+                patch.object(task_graph_command, "make_oc_runner", return_value=runner),
+                patch.object(
+                    task_graph_command, "build_projection", build_projection
+                ),
+                patch.object(
+                    task_graph_command, "_write_path", return_value=write_path(root)
+                ),
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(
+                    1,
+                    task_graph_command.main(
+                        ["project", "--scope", "example/repo", "--apply", "--json"]
+                    ),
+                )
+            build_projection.assert_not_called()
+            payload = json.loads(output.getvalue())
+            self.assertEqual(
+                "task_projection_source_unsupported_edge", payload["reason_code"]
+            )
+            self.assertEqual(before, path.read_bytes())
 
     def test_workflow_preflight_blocks_execution_and_commands_return_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
