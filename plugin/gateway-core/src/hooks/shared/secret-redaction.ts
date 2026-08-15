@@ -506,6 +506,61 @@ export function createSecretRedactor(options: {
       : null
   }
 
+  function qualifiedDirectUserFileMime(options: {
+    messageRoot: unknown
+    parent: Record<string, unknown> | unknown[] | null
+    key: string | number | null
+    path: PropertyPath
+    value: string
+  }): string | null {
+    const { messageRoot, parent, key, path, value } = options
+    if (
+      key !== "url" ||
+      path.length !== 3 ||
+      path[0] !== "parts" ||
+      !Number.isInteger(path[1]) ||
+      path[2] !== "url"
+    ) {
+      return null
+    }
+
+    const info = ownDataRecord(messageRoot, "info")
+    const parts = ownDataValue(messageRoot, "parts")
+    const partIndex = path[1] as number
+    if (
+      !info ||
+      ownDataValue(info, "role") !== "user" ||
+      !Array.isArray(parts) ||
+      partIndex < 0 ||
+      partIndex >= parts.length
+    ) {
+      return null
+    }
+
+    const messageId = ownDataValue(info, "id")
+    const sessionId = ownDataValue(info, "sessionID")
+    const part = ownDataValue(parts, partIndex)
+    const mime = ownDataValue(part, "mime")
+    return typeof messageId === "string" &&
+      messageId.length > 0 &&
+      typeof sessionId === "string" &&
+      sessionId.length > 0 &&
+      Boolean(part) &&
+      typeof part === "object" &&
+      !Array.isArray(part) &&
+      parent === part &&
+      ownDataValue(part, "type") === "file" &&
+      typeof ownDataValue(part, "id") === "string" &&
+      Boolean(ownDataValue(part, "id")) &&
+      ownDataValue(part, "messageID") === messageId &&
+      ownDataValue(part, "sessionID") === sessionId &&
+      typeof mime === "string" &&
+      mime.length > 0 &&
+      ownDataValue(part, "url") === value
+      ? mime
+      : null
+  }
+
   function isOmittableOpaqueAttachmentPattern(pattern: CompiledPattern): boolean {
     return (
       pattern.index === omittableOpaqueAttachmentPatternIndex &&
@@ -821,7 +876,9 @@ export function createSecretRedactor(options: {
         return
       }
       if (messageRoot !== undefined) {
-        const mime = qualifiedOpenAIAttachmentMime({ messageRoot, parent, key, path, value })
+        const mime =
+          qualifiedDirectUserFileMime({ messageRoot, parent, key, path, value }) ??
+          qualifiedOpenAIAttachmentMime({ messageRoot, parent, key, path, value })
         if (mime && canChargeChars(value, state.budget, localBudget)) {
           const omittedCollisionCount = opaqueAttachmentCollisionCount(value)
           const envelope =

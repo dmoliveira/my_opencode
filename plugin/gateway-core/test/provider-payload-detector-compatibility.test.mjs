@@ -138,6 +138,29 @@ function attachmentMessage(fixture) {
   }
 }
 
+function directUserFileMessage(fixture) {
+  const sessionID = "ses_detector_compatibility"
+  const messageID = `msg_detector_direct_${fixture.id}`
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "user",
+    },
+    parts: [
+      {
+        id: `prt_detector_direct_${fixture.id}`,
+        sessionID,
+        messageID,
+        type: "file",
+        filename: `fixture.${fixture.id}`,
+        mime: fixture.mime,
+        url: fixture.url,
+      },
+    ],
+  }
+}
+
 function toolPathMessage(path) {
   const sessionID = "ses_detector_compatibility"
   const messageID = "msg_detector_tool_path"
@@ -327,6 +350,23 @@ test("pinned tool attachment corpus tolerates Base64 transport collisions", asyn
   }
 })
 
+test("pinned direct user-file corpus tolerates Base64 transport collisions", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-detector-direct-files-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false, order: [], disabled: [] } },
+    })
+    for (const fixture of ATTACHMENT_CASES) {
+      const message = directUserFileMessage(fixture)
+      await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
+      assert.equal(message.parts[0].url, fixture.url)
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 
 test("attachment collision matches are confined to the canonical payload", () => {
   const googlePattern = compilePattern(DEFAULT_DETECTOR_MANIFEST[3].source)
@@ -391,6 +431,98 @@ test("unsupported, mismatched, and parameterized attachment envelopes remain blo
   }
 })
 
+test("direct user-file collisions fail closed outside the exact envelope", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-detector-direct-file-negative-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false, order: [], disabled: [] } },
+    })
+    const png = ATTACHMENT_CASES.find((fixture) => fixture.mime === "image/png")
+    assert.ok(png)
+    const variants = []
+    const addVariant = (mutate) => {
+      const message = directUserFileMessage(png)
+      mutate(message)
+      variants.push(message)
+    }
+    addVariant((message) => {
+      message.info.role = "assistant"
+    })
+    addVariant((message) => {
+      delete message.info.id
+    })
+    addVariant((message) => {
+      delete message.info.sessionID
+    })
+    addVariant((message) => {
+      message.parts[0].type = "text"
+    })
+    addVariant((message) => {
+      delete message.parts[0].id
+    })
+    addVariant((message) => {
+      message.parts[0].messageID = "msg_detector_other"
+    })
+    addVariant((message) => {
+      message.parts[0].sessionID = "ses_detector_other"
+    })
+    addVariant((message) => {
+      message.parts[0].mime = "image/jpg"
+      message.parts[0].url = message.parts[0].url.replace("image/png", "image/jpg")
+    })
+    addVariant((message) => {
+      message.parts[0].url = message.parts[0].url.replace(
+        "image/png;base64",
+        "image/png;charset=utf-8;base64",
+      )
+    })
+    addVariant((message) => {
+      message.parts[0].url = `${message.parts[0].url}AAAA`
+    })
+    addVariant((message) => {
+      message.parts[0].url = message.parts[0].url.replace(
+        "data:image/png;base64,",
+        `data:image/png;${GOOGLE_KEY_COLLISION};base64,`,
+      )
+    })
+    for (const message of variants) {
+      await assert.rejects(
+        plugin["experimental.chat.messages.transform"]({}, { messages: [message] }),
+        (error) =>
+          error.code === "immutable_match" &&
+          error.patternIndex === 3 &&
+          error.locationCode === "immutable_protocol_field",
+      )
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("direct user-file collisions remain blocked by explicit detector overrides", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-detector-direct-file-override-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: { enabled: false, order: [], disabled: [] },
+        secretLeakGuard: { patterns: ["AIza[0-9A-Za-z\\-_]{20,}"] },
+      },
+    })
+    const png = ATTACHMENT_CASES.find((fixture) => fixture.mime === "image/png")
+    assert.ok(png)
+    await assert.rejects(
+      plugin["experimental.chat.messages.transform"]({}, {
+        messages: [directUserFileMessage(png)],
+      }),
+      (error) => error.code === "immutable_match" && error.patternIndex === 0,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("multiple attachment collisions are omitted and counted", () => {
   const prefix = Buffer.from("%PDF-1.7\n", "ascii")
   const separator = Buffer.from([0xfb, 0x00, 0x00])
@@ -414,6 +546,12 @@ test("multiple attachment collisions are omitted and counted", () => {
   ])
   assert.equal(stats.omittedOpaqueAttachmentMatches, 2)
   assert.equal(stats.matches, 0)
+
+  const directStats = defaultAttachmentRedactor().redactProviderMessages([
+    directUserFileMessage(fixture),
+  ])
+  assert.equal(directStats.omittedOpaqueAttachmentMatches, 2)
+  assert.equal(directStats.matches, 0)
 })
 
 

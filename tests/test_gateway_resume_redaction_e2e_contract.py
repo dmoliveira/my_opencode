@@ -36,7 +36,7 @@ def native_wire_payload(module) -> dict[str, Any]:
         f"{module.REDACTION_TOKEN}"
     )
     return {
-        "model": "mock",
+        "model": "gpt-4o",
         "input": [
             {
                 "type": "reasoning",
@@ -47,7 +47,16 @@ def native_wire_payload(module) -> dict[str, Any]:
             },
             {
                 "role": "user",
-                "content": [{"type": "input_text", "text": expected_history}],
+                "content": [
+                    {"type": "input_text", "text": expected_history},
+                    {"type": "input_image", "image_url": module.PNG_ATTACHMENT_DATA_URL},
+                    {"type": "input_image", "image_url": module.JPEG_ATTACHMENT_DATA_URL},
+                    {
+                        "type": "input_file",
+                        "filename": "direct.pdf",
+                        "file_data": module.PDF_ATTACHMENT_DATA_URL,
+                    },
+                ],
             },
             {
                 "type": "function_call",
@@ -86,7 +95,7 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
         )
         self.assertIsNotNone(match)
         version = match.group(1) if match else ""
-        self.assertEqual(version, "1.18.5")
+        self.assertEqual(version, "1.18.18")
         self.assertIn('"autoupdate": False', script)
         self.assertIn('"postflight_opencode_version"', script)
 
@@ -131,6 +140,9 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
             "png_attachment_preserved_on_wire",
             "jpeg_attachment_preserved_on_wire",
             "pdf_attachment_preserved_on_wire",
+            "direct_user_png_attachment_preserved_on_wire",
+            "direct_user_jpeg_attachment_preserved_on_wire",
+            "direct_user_pdf_attachment_preserved_on_wire",
             "reasoning_without_item_id_on_wire",
             "prompt_cache_key_stable",
         ):
@@ -149,6 +161,9 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
             payload["input"][3]["output"][2]["image_url"] = (
                 module.PNG_ATTACHMENT_DATA_URL
             )
+
+        def missing_direct_file(payload: dict[str, Any]) -> None:
+            payload["input"][1]["content"][3] = {"type": "future_attachment"}
 
         for name, mutate, reason in (
             (
@@ -170,6 +185,11 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
                 "remapped-image",
                 remapped_image,
                 "native_function_output_image_invalid",
+            ),
+            (
+                "missing-direct-file",
+                missing_direct_file,
+                "native_direct_user_file_invalid",
             ),
         ):
             with self.subTest(name=name):
@@ -280,10 +300,10 @@ class GatewayResumeRedactionE2EContractTests(unittest.TestCase):
 
     def test_security_spec_pins_reviewed_converter_and_future_gate(self) -> None:
         spec = SPEC.read_text(encoding="utf-8")
-        self.assertIn("OpenCode `1.18.5` conversion contract", spec)
-        self.assertIn("e5cc278dec9294a627a7b05f47ce6a564408c1a2", spec)
-        self.assertIn("1bea9f52c3ec6afec280e176a930c747c72091b7", spec)
-        self.assertIn("eb116f6b960f6da4115ffb262695af6162ac2045", spec)
+        self.assertIn("OpenCode `1.18.18` conversion contract", spec)
+        self.assertIn("31406ccc51b4bd2a4e1e086b2bcaa5f7f804f26d", spec)
+        self.assertIn("9b3f2c46f40578128001957004c67633a18da23a", spec)
+        self.assertIn("22b1d7d99a2aa22211b5dae59385fa8a8a1d311d", spec)
         self.assertIn("@ai-sdk/openai` `3.0.84", spec)
         self.assertIn("da385f747e8277411d8b49c65e8a22c3bf158f4c", spec)
         self.assertIn("ai` `6.0.168", spec)
