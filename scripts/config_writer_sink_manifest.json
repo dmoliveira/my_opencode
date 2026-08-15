@@ -2935,6 +2935,96 @@
   },
   {
     "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_atomic_write_file",
+    "kind": "os.replace",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_atomic_write_file",
+    "kind": "path.unlink",
+    "destination": "temporary_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_atomic_write_file",
+    "kind": "tempfile.mkstemp",
+    "destination": "path.parent",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_config_sha256",
+    "kind": "os.open",
+    "destination": "path.expanduser().absolute()",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_ensure_private_directory",
+    "kind": "os.chmod",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_ensure_private_directory",
+    "kind": "path.mkdir",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_fsync_directory",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_open_lock",
+    "kind": "os.open",
+    "destination": "lock_path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_open_regular_file",
+    "kind": "os.open",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "task_lease_command.py",
+    "function": "_remove_fault_marker",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
     "file": "update_docs_automation_summary.py",
     "function": "main",
     "kind": "path.write_text",
