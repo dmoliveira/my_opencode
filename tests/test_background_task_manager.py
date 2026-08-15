@@ -236,10 +236,16 @@ class BackgroundTaskManagerTest(unittest.TestCase):
 
     def test_linux_group_classifier_requires_positive_complete_evidence(self) -> None:
         parsed = bg._parse_linux_process_stat(
-            "123 (worker with spaces) Z 1 123 123 0 0 0"
+            b"123 (worker with spaces) Z 1 123 123 0 0 0"
         )
         self.assertEqual(("Z", 123), parsed)
-        self.assertIsNone(bg._parse_linux_process_stat("malformed"))
+        self.assertEqual(
+            ("Z", 123),
+            bg._parse_linux_process_stat(
+                b"123 (worker-\xff-name) Z 1 123 123 0 0 0"
+            ),
+        )
+        self.assertIsNone(bg._parse_linux_process_stat(b"malformed"))
         self.assertFalse(
             bg._classify_linux_process_group(123, [("Z", 123)], uncertain=False)
         )

@@ -325,16 +325,16 @@ def is_pid_alive(pid: int) -> bool:
         return False
 
 
-def _parse_linux_process_stat(raw: str) -> tuple[str, int] | None:
-    closing = raw.rfind(")")
+def _parse_linux_process_stat(raw: bytes) -> tuple[str, int] | None:
+    closing = raw.rfind(b")")
     if closing < 0:
         return None
     fields = raw[closing + 2 :].split()
     if len(fields) < 3:
         return None
     try:
-        return fields[0], int(fields[2])
-    except ValueError:
+        return fields[0].decode("ascii"), int(fields[2])
+    except (UnicodeDecodeError, ValueError):
         return None
 
 
@@ -369,7 +369,7 @@ def _linux_process_group_has_executable_members(pgid: int) -> bool | None:
             if not entry.name.isdigit():
                 continue
             try:
-                raw = Path(entry.path, "stat").read_text(encoding="utf-8")[:8192]
+                raw = Path(entry.path, "stat").read_bytes()[:8192]
             except FileNotFoundError:
                 continue
             except OSError:
@@ -400,10 +400,10 @@ def process_start_fingerprint(pid: int) -> str | None:
     proc_stat = Path(f"/proc/{pid}/stat")
     if proc_stat.is_file():
         try:
-            raw = proc_stat.read_text(encoding="utf-8")[:8192]
-            fields = raw[raw.rfind(")") + 2 :].split()
+            raw = proc_stat.read_bytes()[:8192]
+            fields = raw[raw.rfind(b")") + 2 :].split()
             if len(fields) > 19:
-                return _sha256_text(f"{pid}:proc:{fields[19]}")
+                return _sha256_bytes(f"{pid}:proc:".encode("ascii") + fields[19])
         except OSError:
             return None
     try:
