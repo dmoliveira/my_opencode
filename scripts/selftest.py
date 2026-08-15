@@ -124,7 +124,11 @@ from playwright_defaults import (  # type: ignore
     PLAYWRIGHT_MCP_COMMAND,
     PLAYWRIGHT_MCP_PACKAGE_SPEC,
 )
-from tasker_e2e_sandbox import prepare_tasker_runtime, snapshot_tree  # type: ignore
+from tasker_e2e_sandbox import (  # type: ignore
+    configure_tasker_runtime_launchers,
+    prepare_tasker_runtime,
+    snapshot_tree,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -814,7 +818,8 @@ exit 0
             and '"result": "PASS"' in agent_catalog_doctor.stdout,
             f"agent-catalog doctor should pass: {agent_catalog_doctor.stderr}",
         )
-        if shutil.which("oc") is None:
+        real_oc = shutil.which("oc")
+        if real_oc is None:
             print(
                 "selftest: skipping tasker Codememory sandbox because 'oc' is unavailable"
             )
@@ -822,6 +827,9 @@ exit 0
             sandbox_scope = f"selftest-tasker-sandbox-{sha256(str(tmp).encode('utf-8')).hexdigest()[:12]}"
             repository_codememory_before = snapshot_tree(REPO_ROOT / ".codememory")
             tasker_runtime_env = prepare_tasker_runtime(tmp / "tasker-codememory")
+            configure_tasker_runtime_launchers(
+                tasker_runtime_env, real_oc=real_oc
+            )
             tasker_database = Path(
                 tasker_runtime_env["TASKER_E2E_CODEMEMORY_DATABASE"]
             )

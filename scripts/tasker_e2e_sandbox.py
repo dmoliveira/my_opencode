@@ -109,7 +109,7 @@ def render_tasker_oc_wrapper(
     allowed_scope: str | None,
 ) -> str:
     """Render a per-run OC gateway that cannot select a host-backed store."""
-    template = """#!/usr/bin/env python3
+    template = """#!__PYTHON_EXECUTABLE__
 from __future__ import annotations
 
 import json
@@ -489,7 +489,8 @@ if __name__ == "__main__":
     raise SystemExit(main())
 """
     return (
-        template.replace("__REAL_OC__", repr(real_oc))
+        template.replace("__PYTHON_EXECUTABLE__", str(Path(sys.executable).resolve()))
+        .replace("__REAL_OC__", repr(real_oc))
         .replace("__CONFIG_PATH__", repr(str(codememory_config)))
         .replace("__RECOVERY_TOKENS__", repr(str(recovery_tokens)))
         .replace("__RECORD_INSPECTIONS__", repr(str(record_inspections)))
@@ -509,9 +510,69 @@ def render_sandbox_research_agent(source: Path) -> str:
     return rendered
 
 
+def require_tasker_launcher(name: str) -> str:
+    """Resolve a launcher needed by the live Tasker sandbox."""
+    launcher = shutil.which(name)
+    if launcher is None:
+        raise RuntimeError(f"tasker e2e sandbox requires an installed {name} launcher")
+    return str(Path(launcher).resolve())
+
+
+def resolve_tasker_launchers(*, require_opencode: bool) -> tuple[str, str | None]:
+    """Resolve live-sandbox launchers before creating scenarios or runtime state."""
+    real_oc = require_tasker_launcher("oc")
+    real_opencode = require_tasker_launcher("opencode") if require_opencode else None
+    return real_oc, real_opencode
+
+
+def tasker_runtime_path(wrapper_dir: Path) -> str:
+    """Expose only the sandbox wrappers to Tasker's shell commands."""
+    return str(wrapper_dir)
+
+
+def configure_tasker_runtime_launchers(
+    runtime_env: dict[str, str], *, real_oc: str, real_opencode: str | None = None
+) -> None:
+    """Install launcher-dependent runtime state after explicit preflight."""
+    wrapper = Path(runtime_env["TASKER_E2E_OC_WRAPPER"])
+    rg_wrapper = Path(runtime_env["TASKER_E2E_RG_WRAPPER"])
+    wrapper.write_text(
+        render_tasker_oc_wrapper(
+            str(Path(real_oc).resolve()),
+            Path(runtime_env["TASKER_E2E_CODEMEMORY_CONFIG"]),
+            Path(runtime_env["TASKER_E2E_RECOVERY_APPROVALS"]),
+            Path(runtime_env["TASKER_E2E_RECORD_INSPECTIONS"]),
+            Path(runtime_env["TASKER_E2E_PLANNING_LINKS"]),
+            runtime_env["TASKER_E2E_ALLOWED_SCOPE"] or None,
+        ),
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o700)
+    real_rg = shutil.which("rg")
+    if real_rg is not None:
+        resolved_rg = Path(real_rg).resolve()
+        if rg_wrapper.exists() or rg_wrapper.is_symlink():
+            if not rg_wrapper.is_symlink() or rg_wrapper.resolve() != resolved_rg:
+                raise RuntimeError("tasker e2e sandbox refuses a changed rg wrapper")
+        else:
+            rg_wrapper.symlink_to(resolved_rg)
+    runtime_env["PATH"] = tasker_runtime_path(wrapper.parent)
+    runtime_env["TASKER_E2E_REAL_OC"] = str(Path(real_oc).resolve())
+    if real_opencode is not None:
+        runtime_env["TASKER_E2E_OPENCODE_BIN"] = str(
+            Path(real_opencode).resolve()
+        )
+
+
 def prepare_tasker_runtime(
     config_home: Path, *, allowed_scope: str | None = None
 ) -> dict[str, str]:
+    wrapper = config_home / "bin" / "oc"
+    rg_wrapper = wrapper.with_name("rg")
+    if wrapper.parent.is_symlink() or any(
+        path.exists() or path.is_symlink() for path in (wrapper, rg_wrapper)
+    ):
+        raise RuntimeError("tasker e2e sandbox refuses a pre-existing tool wrapper")
     config_root = config_home / "opencode"
     agent_dir = config_root / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
@@ -584,12 +645,6 @@ def prepare_tasker_runtime(
         + "\n",
         encoding="utf-8",
     )
-    real_oc = shutil.which("oc")
-    if real_oc is None:
-        raise RuntimeError("tasker e2e sandbox requires an installed oc launcher")
-    real_opencode = shutil.which("opencode")
-    if real_opencode is None:
-        raise RuntimeError("tasker e2e sandbox requires an installed opencode launcher")
     codememory_home = config_home / "codememory"
     codememory_home.mkdir(parents=True, exist_ok=True)
     codememory_config = config_home / "codememory.sqlite.yaml"
@@ -629,24 +684,11 @@ def prepare_tasker_runtime(
     (workspace_codememory / "config.sqlite.yaml").write_text(
         codememory_config.read_text(encoding="utf-8"), encoding="utf-8"
     )
-    wrapper_dir = config_home / "bin"
+    wrapper_dir = wrapper.parent
     wrapper_dir.mkdir(parents=True, exist_ok=True)
-    wrapper = wrapper_dir / "oc"
     recovery_tokens = config_home / "recovery-approvals.json"
     record_inspections = config_home / "record-inspections.json"
     planning_links = config_home / "planning-links.json"
-    wrapper.write_text(
-        render_tasker_oc_wrapper(
-            real_oc,
-            codememory_config,
-            recovery_tokens,
-            record_inspections,
-            planning_links,
-            allowed_scope,
-        ),
-        encoding="utf-8",
-    )
-    wrapper.chmod(0o700)
     runtime_paths = {
         "home": config_home / "home",
         "cache": config_home / "cache",
@@ -676,17 +718,16 @@ def prepare_tasker_runtime(
             "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
             "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
             "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "1",
-            "PATH": f"{wrapper_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+            "PATH": str(wrapper_dir),
             "TASKER_E2E_CODEMEMORY_CONFIG": str(codememory_config),
             "TASKER_E2E_CODEMEMORY_DATABASE": str(codememory_database),
             "TASKER_E2E_RECOVERY_APPROVALS": str(recovery_tokens),
             "TASKER_E2E_RECORD_INSPECTIONS": str(record_inspections),
             "TASKER_E2E_PLANNING_LINKS": str(planning_links),
             "TASKER_E2E_OC_WRAPPER": str(wrapper),
+            "TASKER_E2E_RG_WRAPPER": str(rg_wrapper),
             "TASKER_E2E_WORKSPACE": str(workspace),
             "TASKER_E2E_ALLOWED_SCOPE": allowed_scope or "",
-            "TASKER_E2E_REAL_OC": str(Path(real_oc).resolve()),
-            "TASKER_E2E_OPENCODE_BIN": str(Path(real_opencode).resolve()),
         }
     )
     return runtime_env
@@ -1010,25 +1051,28 @@ def validate_tasker_research_delegations(delegations: list[dict[str, Any]]) -> N
             raise AssertionError(f"Tasker delegated to unsupported agent: {agent}")
         lowered = prompt.lower()
         required_packet_sections = {
-            "objective": ("objective",),
+            "objective": ("objective", "your only job"),
             "scope": ("scope", "workspace root", "inspect exactly"),
             "ownership": (
-                "ownership",
+                "scoped ownership",
                 "read-only explore agent",
+                "read-only explorer",
+                "read-only exploration",
+                "read-only research",
                 "read-only librarian",
-                "explore agent",
-                "librarian",
+                "librarian agent",
             ),
             "acceptance": (
                 "acceptance",
                 "return in your final message",
-                "return a ",
-                "return an ",
             ),
             "required checks": (
                 "required checks",
                 "hard constraints",
                 "questions to answer",
+                "constrained questions",
+                "constrained actions",
+                "questions the findings must answer",
                 "only job",
             ),
             "evidence": ("evidence", "quote", "line number"),
@@ -1043,28 +1087,68 @@ def validate_tasker_research_delegations(delegations: list[dict[str, Any]]) -> N
             "implementation": (
                 ("implement", "write", "edit"),
                 ("implement", "write", "edit"),
+                (r"\b(?:implement|write|edit)\b",),
             ),
-            "tests": (("run tests",), ("run tests",)),
-            "git": (("run git",), ("git",)),
+            "tests": (("run tests",), ("run tests",), (r"\brun tests?\b",)),
+            "git": (
+                ("run git",),
+                ("git",),
+                (r"\b(?:run|execute|invoke)\s+git\b",),
+            ),
             "Codememory": (
                 ("create codememory", "oc add", "oc link", "oc set"),
                 ("oc", "codememory"),
+                (
+                    r"\b(?:run|execute|invoke|use|perform|call)\s+[`'\"]?oc\b",
+                    r"^\s*(?:please\s+)?oc\s+(?:add|link|set|db|init|cancel|archive|restore)\b",
+                    r"\bcreate\s+codememory\b",
+                ),
             ),
-            "delegation": (("delegate",), ("delegat",)),
-            "validation": (("validate",), ("validat",)),
+            "delegation": (("delegate",), ("delegat",), (r"\bdelegate\b",)),
+            "validation": (("validate",), ("validat",), (r"\bvalidate\b",)),
         }
-        for action, (references, denial_terms) in prohibited_actions.items():
-            if not any(reference in lowered for reference in references):
-                continue
-            explicitly_denied = any(
-                re.search(r"\b(?:do not|don't|never)\b", sentence)
-                and any(term in sentence for term in denial_terms)
-                for sentence in sentences
-            )
-            if not explicitly_denied:
-                raise AssertionError(
-                    f"Tasker research delegation permits prohibited {action} work: {prompt}"
+        for action, (references, denial_terms, positive_patterns) in prohibited_actions.items():
+            if any(reference in lowered for reference in references):
+                explicitly_denied = any(
+                    re.search(r"\b(?:do not|don't|never)\b", sentence)
+                    and any(term in sentence for term in denial_terms)
+                    for sentence in sentences
                 )
+                if not explicitly_denied:
+                    raise AssertionError(
+                        f"Tasker research delegation permits prohibited {action} work: {prompt}"
+                    )
+            for sentence in sentences:
+                for clause in re.split(r";|\bbut\b|\bhowever\b|,\s*then\b", sentence):
+                    for pattern in positive_patterns:
+                        for match in re.finditer(pattern, clause):
+                            denials = list(
+                                re.finditer(r"\b(?:do not|don't|never)\b", clause)
+                            )
+                            denial = next(
+                                (
+                                    candidate
+                                    for candidate in reversed(denials)
+                                    if candidate.start() < match.start()
+                                ),
+                                None,
+                            )
+                            inverted = (
+                                denial is not None
+                                and re.search(
+                                    r"\b(?:not|refuse|avoid|decline|fail)\b",
+                                    clause[denial.end() : match.start()],
+                                )
+                                is not None
+                            )
+                            if (
+                                denial is None
+                                or match.start() < denial.end()
+                                or inverted
+                            ):
+                                raise AssertionError(
+                                    f"Tasker research delegation permits prohibited {action} work: {prompt}"
+                                )
 
 
 def validate_research_precedes_persistence(
@@ -1596,6 +1680,8 @@ def snapshot_tree(path: Path) -> dict[str, str]:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    real_oc, real_opencode = resolve_tasker_launchers(require_opencode=True)
+    assert real_opencode is not None
     started = time.time()
     scenarios = build_scenarios(args.runs)
     passed: list[dict[str, Any]] = []
@@ -1607,6 +1693,9 @@ def main(argv: list[str]) -> int:
         with tempfile.TemporaryDirectory(prefix="tasker-e2e-config-") as config_home:
             runtime_env = prepare_tasker_runtime(
                 Path(config_home), allowed_scope=scenario.scope or None
+            )
+            configure_tasker_runtime_launchers(
+                runtime_env, real_oc=real_oc, real_opencode=real_opencode
             )
             try:
                 passed.append(
