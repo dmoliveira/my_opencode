@@ -2974,7 +2974,7 @@
     "file": "task_lease_command.py",
     "function": "_ensure_private_directory",
     "kind": "os.chmod",
-    "destination": "path",
+    "destination": "directory",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
@@ -2983,7 +2983,7 @@
     "file": "task_lease_command.py",
     "function": "_ensure_private_directory",
     "kind": "path.mkdir",
-    "destination": "path",
+    "destination": "directory",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
