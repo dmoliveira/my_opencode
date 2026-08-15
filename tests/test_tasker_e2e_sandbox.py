@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -299,6 +301,175 @@ class TaskerShellBoundaryTest(unittest.TestCase):
                 }
             ]
         )
+        live_style_packet = {
+            "agent": "explore",
+            "prompt": (
+                "You are a read-only exploration scout. Scope: workspace docs. "
+                "Objective: inspect Codememory guidance. Constrained questions: "
+                "identify task, memory, and link rules. Acceptance criteria: cite "
+                "the governing rules. Evidence: quote each source with a line number. "
+                "Do not write, edit, implement, run tests, run git, run oc/codememory "
+                "commands, delegate, or validate."
+            ),
+        }
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [live_style_packet]
+        )
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "Objective: inspect Codememory guidance. Constrained questions:",
+                        "Your only job is to inspect Codememory guidance. Questions "
+                        "the findings must answer:",
+                    ),
+                }
+            ]
+        )
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "read-only exploration scout", "read-only explorer"
+                    ),
+                }
+            ]
+        )
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "read-only exploration scout", "read-only research task"
+                    ),
+                }
+            ]
+        )
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "read-only exploration scout", "read-only exploration agent"
+                    ),
+                }
+            ]
+        )
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "Constrained questions", "Constrained actions"
+                    ),
+                }
+            ]
+        )
+        tasker_e2e_sandbox.validate_tasker_research_delegations(
+            [
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "Do not write, edit, implement, run tests, run git, run oc/codememory "
+                        "commands, delegate, or validate.",
+                        "Do not write or edit files. Do not run tests, run git, or run "
+                        "oc/codememory commands. Do not delegate, validate, or implement.",
+                    ),
+                }
+            ]
+        )
+        for invalid_packet, expected_error in (
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "Constrained questions", "Questions"
+                    ),
+                },
+                "missing required checks",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "read-only exploration scout", "read-only scout"
+                    ),
+                },
+                "missing ownership",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "read-only exploration scout", "librarian"
+                    ),
+                },
+                "missing ownership",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace(
+                        "Acceptance criteria", "Return a summary"
+                    ),
+                },
+                "missing acceptance",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"].replace("run git, ", "")
+                    + " Run git status.",
+                },
+                "permits prohibited git work",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"]
+                    + " Do not run oc commands. Use `oc db migrate` now.",
+                },
+                "permits prohibited Codememory work",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"]
+                    + " Do not run git, then run git status.",
+                },
+                "permits prohibited git work",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"] + " Run tests now.",
+                },
+                "permits prohibited tests work",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"]
+                    + " Do not run git; run git status.",
+                },
+                "permits prohibited git work",
+            ),
+            (
+                {
+                    **live_style_packet,
+                    "prompt": live_style_packet["prompt"]
+                    + " Do not refuse to run git status.",
+                },
+                "permits prohibited git work",
+            ),
+        ):
+            with self.subTest(invalid_packet=invalid_packet):
+                with self.assertRaisesRegex(AssertionError, expected_error):
+                    tasker_e2e_sandbox.validate_tasker_research_delegations(
+                        [invalid_packet]
+                    )
         for invalid in (
             [*allowed, allowed[0]],
             [{"agent": "verifier", "prompt": allowed[0]["prompt"]}],
@@ -405,12 +576,31 @@ class TaskerShellBoundaryTest(unittest.TestCase):
 
 
 class TaskerSandboxRuntimeTest(unittest.TestCase):
+    @staticmethod
+    def prepare_configured_runtime(
+        config_home: Path, *, allowed_scope: str | None = None
+    ) -> dict[str, str]:
+        real_oc = shutil.which("oc")
+        if real_oc is None:
+            raise AssertionError("configured runtime requires an installed oc launcher")
+        runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(
+            config_home, allowed_scope=allowed_scope
+        )
+        tasker_e2e_sandbox.configure_tasker_runtime_launchers(
+            runtime_env, real_oc=real_oc
+        )
+        return runtime_env
+
     def test_prepare_runtime_isolates_opencode_and_codememory(self) -> None:
-        if shutil.which("oc") is None:
-            self.skipTest("oc is unavailable")
         with tempfile.TemporaryDirectory() as tmp:
             config_home = Path(tmp)
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(config_home)
+            with patch.object(
+                tasker_e2e_sandbox.shutil,
+                "which",
+                side_effect=AssertionError("pure runtime setup must not resolve launchers"),
+            ) as launcher_lookup:
+                runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(config_home)
+            launcher_lookup.assert_not_called()
             tasker_path = config_home / "opencode" / "agent" / "tasker.md"
             explore_path = config_home / "opencode" / "agent" / "explore.md"
             librarian_path = config_home / "opencode" / "agent" / "librarian.md"
@@ -448,7 +638,7 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
             self.assertEqual("allow", config["permission"]["task"])
             self.assertEqual("deny", config["permission"]["edit"])
             self.assertEqual("allow", config["permission"]["webfetch"])
-            self.assertTrue(wrapper.is_file())
+            self.assertFalse(wrapper.exists())
             self.assertTrue(codememory_config.is_file())
             self.assertFalse(database.exists())
             self.assertTrue((workspace / "docs").is_symlink())
@@ -460,24 +650,108 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
                 codememory_config.read_text(encoding="utf-8"),
                 workspace_config.read_text(encoding="utf-8"),
             )
-            self.assertIn(str(wrapper.parent), runtime_env["PATH"].split(":"))
             self.assertIn(str(database), codememory_config.read_text(encoding="utf-8"))
-            wrapper_text = wrapper.read_text(encoding="utf-8")
-            self.assertIn("rejected unsafe Codememory command", wrapper_text)
-            self.assertIn("safe_environment", wrapper_text)
-            self.assertIn("RECOVERY_TOKENS", wrapper_text)
-            self.assertIn('{"task", "epic", "memory", "doc"}', wrapper_text)
             self.assertEqual("1", runtime_env["TASKER_E2E_ISOLATED_ENV"])
-            self.assertTrue(Path(runtime_env["TASKER_E2E_OPENCODE_BIN"]).is_file())
+            self.assertEqual(str(wrapper.parent), runtime_env["PATH"])
+            self.assertNotIn("TASKER_E2E_REAL_OC", runtime_env)
+            self.assertNotIn("TASKER_E2E_OPENCODE_BIN", runtime_env)
+            with self.assertRaises(FileNotFoundError):
+                tasker_e2e_sandbox.run_process(
+                    ["oc", "--help"],
+                    cwd=REPO_ROOT,
+                    timeout_ms=120000,
+                    env_overrides=runtime_env,
+                )
+
+    def test_prepare_runtime_rejects_existing_tool_wrapper(self) -> None:
+        for tool_name in ("oc", "rg"):
+            with self.subTest(tool_name=tool_name), tempfile.TemporaryDirectory() as tmp:
+                config_home = Path(tmp)
+                wrapper = config_home / "bin" / tool_name
+                wrapper.parent.mkdir()
+                wrapper.write_text("stale wrapper", encoding="utf-8")
+
+                with self.assertRaisesRegex(RuntimeError, "pre-existing tool wrapper"):
+                    tasker_e2e_sandbox.prepare_tasker_runtime(config_home)
+
+                self.assertFalse((config_home / "opencode").exists())
+
+    def test_configure_runtime_launchers_installs_wrapper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as host:
+            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
+            wrapper = Path(runtime_env["TASKER_E2E_OC_WRAPPER"])
+            host_bin = Path(host) / "host-bin"
+            safe_bin = Path(host) / "safe-bin"
+            host_bin.mkdir()
+            safe_bin.mkdir()
+            host_oc = host_bin / "oc"
+            host_oc.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            host_oc.chmod(0o700)
+            host_rg = host_bin / "rg"
+            host_rg.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            host_rg.chmod(0o700)
+
+            with patch.dict(
+                tasker_e2e_sandbox.os.environ,
+                {"PATH": f"{host_bin}{os.pathsep}{safe_bin}"},
+            ):
+                tasker_e2e_sandbox.configure_tasker_runtime_launchers(
+                    runtime_env, real_oc=sys.executable
+                )
+
+                self.assertTrue(wrapper.is_file())
+                rg_wrapper = Path(runtime_env["TASKER_E2E_RG_WRAPPER"])
+                self.assertTrue(rg_wrapper.is_symlink())
+                self.assertEqual(host_rg.resolve(), rg_wrapper.resolve())
+                self.assertEqual(
+                    str(wrapper.parent), runtime_env["PATH"]
+                )
+                self.assertEqual(
+                    str(Path(sys.executable).resolve()),
+                    runtime_env["TASKER_E2E_REAL_OC"],
+                )
+                self.assertNotIn("TASKER_E2E_OPENCODE_BIN", runtime_env)
+                tasker_e2e_sandbox.configure_tasker_runtime_launchers(
+                    runtime_env, real_oc=sys.executable, real_opencode=sys.executable
+                )
+                self.assertEqual(
+                    str(Path(sys.executable).resolve()),
+                    runtime_env["TASKER_E2E_OPENCODE_BIN"],
+                )
+                wrapper_text = wrapper.read_text(encoding="utf-8")
+                self.assertTrue(
+                    wrapper_text.startswith(f"#!{Path(sys.executable).resolve()}\n")
+                )
+                self.assertIn("rejected unsafe Codememory command", wrapper_text)
+                self.assertIn("safe_environment", wrapper_text)
+                self.assertIn("RECOVERY_TOKENS", wrapper_text)
+                self.assertIn('{"task", "epic", "memory", "doc"}', wrapper_text)
+                if os.name != "nt":
+                    sentinel = Path(tmp) / "host-tail-created"
+                    tail = tasker_e2e_sandbox.run_process(
+                        [
+                            "/bin/sh",
+                            "-c",
+                            f"oc --help; touch {shlex.quote(str(sentinel))}",
+                        ],
+                        cwd=REPO_ROOT,
+                        timeout_ms=120000,
+                        env_overrides=runtime_env,
+                    )
+                    self.assertNotEqual(0, tail.returncode)
+                    self.assertFalse(sentinel.exists())
+                wrapper.unlink()
+                with self.assertRaises(FileNotFoundError):
+                    tasker_e2e_sandbox.run_process(
+                        ["oc", "--help"],
+                        cwd=REPO_ROOT,
+                        timeout_ms=120000,
+                        env_overrides=runtime_env,
+                    )
 
     def test_runtime_environment_strips_host_config_overrides(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            # This test only exercises the isolated subprocess environment.  The
-            # live sandbox still requires real launchers before it can run.
-            with patch.object(
-                tasker_e2e_sandbox.shutil, "which", return_value=sys.executable
-            ):
-                runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
+            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
             observed = tasker_e2e_sandbox.run_process(
                 [
                     sys.executable,
@@ -501,7 +775,7 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
             self.skipTest("oc is unavailable")
         with tempfile.TemporaryDirectory() as tmp:
             config_home = Path(tmp)
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(config_home)
+            runtime_env = self.prepare_configured_runtime(config_home)
             database = Path(runtime_env["TASKER_E2E_CODEMEMORY_DATABASE"])
             escaped_database = config_home / "escaped.sqlite3"
             migrated = tasker_e2e_sandbox.run_process(
@@ -554,7 +828,7 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
         if shutil.which("oc") is None:
             self.skipTest("oc is unavailable")
         with tempfile.TemporaryDirectory() as tmp:
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(
+            runtime_env = self.prepare_configured_runtime(
                 Path(tmp), allowed_scope="approved-scope"
             )
             workspace = Path(runtime_env["TASKER_E2E_WORKSPACE"])
@@ -614,7 +888,7 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
         if shutil.which("oc") is None:
             self.skipTest("oc is unavailable")
         with tempfile.TemporaryDirectory() as tmp:
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
+            runtime_env = self.prepare_configured_runtime(Path(tmp))
 
             def run(*args: str) -> object:
                 result = tasker_e2e_sandbox.run_process(
@@ -761,7 +1035,7 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
         if shutil.which("oc") is None:
             self.skipTest("oc is unavailable")
         with tempfile.TemporaryDirectory() as tmp:
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
+            runtime_env = self.prepare_configured_runtime(Path(tmp))
             approvals = Path(runtime_env["TASKER_E2E_RECOVERY_APPROVALS"])
             migrated = tasker_e2e_sandbox.run_process(
                 ["oc", "db", "migrate", "--format", "json"],
@@ -907,7 +1181,7 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
         if shutil.which("oc") is None:
             self.skipTest("oc is unavailable")
         with tempfile.TemporaryDirectory() as tmp:
-            runtime_env = tasker_e2e_sandbox.prepare_tasker_runtime(Path(tmp))
+            runtime_env = self.prepare_configured_runtime(Path(tmp))
             real_oc = runtime_env["TASKER_E2E_REAL_OC"]
             for command, required_text in (
                 (["history", "--help"], "Usage: codememory history"),
@@ -921,10 +1195,44 @@ class TaskerSandboxRuntimeTest(unittest.TestCase):
                         [real_oc, *command],
                         cwd=REPO_ROOT,
                         timeout_ms=120000,
-                        env_overrides=runtime_env,
+                        env_overrides={**runtime_env, "PATH": os.defpath},
                     )
                     self.assertEqual(0, result.returncode, result.stderr)
                     self.assertIn(required_text, result.stdout)
+
+
+class TaskerSandboxPreflightTest(unittest.TestCase):
+    def assert_missing_launcher_stops_before_setup(
+        self, launcher_lookup: object, expected_error: str
+    ) -> None:
+        with (
+            patch.object(
+                tasker_e2e_sandbox.shutil, "which", side_effect=launcher_lookup
+            ),
+            patch.object(tasker_e2e_sandbox, "build_scenarios") as build_scenarios,
+            patch.object(
+                tasker_e2e_sandbox, "prepare_tasker_runtime"
+            ) as prepare_runtime,
+            patch.object(tasker_e2e_sandbox, "run_scenario") as run_scenario,
+            self.assertRaisesRegex(RuntimeError, expected_error),
+        ):
+            tasker_e2e_sandbox.main(["--runs", "1", "--json"])
+
+        build_scenarios.assert_not_called()
+        prepare_runtime.assert_not_called()
+        run_scenario.assert_not_called()
+
+    def test_missing_oc_stops_before_scenario_construction(self) -> None:
+        self.assert_missing_launcher_stops_before_setup(
+            lambda name: None if name == "oc" else self.fail(f"unexpected launcher: {name}"),
+            "requires an installed oc launcher",
+        )
+
+    def test_missing_opencode_stops_before_scenario_construction(self) -> None:
+        self.assert_missing_launcher_stops_before_setup(
+            lambda name: sys.executable if name == "oc" else None,
+            "requires an installed opencode launcher",
+        )
 
 
 class TaskerScenarioRunTest(unittest.TestCase):

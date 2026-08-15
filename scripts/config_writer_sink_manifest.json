@@ -3283,7 +3283,7 @@
   {
     "language": "python",
     "file": "tasker_e2e_sandbox.py",
-    "function": "prepare_tasker_runtime",
+    "function": "configure_tasker_runtime_launchers",
     "kind": "path.write_text",
     "destination": "wrapper",
     "count": 1,
@@ -3292,7 +3292,16 @@
   {
     "language": "python",
     "file": "tasker_e2e_sandbox.py",
-    "function": "prepare_tasker_runtime",
+    "function": "configure_tasker_runtime_launchers",
+    "kind": "path.symlink_to",
+    "destination": "rg_wrapper",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "configure_tasker_runtime_launchers",
     "kind": "path.chmod",
     "destination": "wrapper",
     "count": 1,
