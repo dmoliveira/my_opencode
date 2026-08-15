@@ -131,6 +131,45 @@ effects that use the same lock boundary. GitHub, Git, Codememory, network, and
 other external effects remain outside the local transaction and require native
 compare-and-swap or end-to-end idempotency before parallel dispatch is safe.
 
+## Lease-Backed Background Execution
+
+`scripts/background_task_manager.py` adapts opt-in `/bg` jobs to the fenced
+lease API without changing unleased job admission. Lease-backed jobs carry an
+explicit Codememory task/session identity and use a separate capacity pool,
+defaulting to two active attempts. Reservation under `jobs.lock` creates a
+stable attempt and worker ID. Claim happens after that lock is released, and
+the returned lease identity is persisted through `guarded_local_commit()`. The
+only nested lock order is therefore lease lock followed by jobs lock.
+
+Attempts are append-only and become `succeeded`, `failed`, `cancelled`, or
+`unknown`. A failed attempt can requeue its job only when the caller selected a
+bounded `max_attempts` value and explicitly declared the command retry-safe.
+The default is one attempt. This is bounded at-least-once execution for commands
+with their own idempotency contract, not exactly-once external effects.
+
+Before execution, the worker syncs a prepared receipt and starts a process-group
+wrapper behind a pipe gate. The wrapper syncs `gate_aborted` when the parent
+exits before granting execution, or `effect_possible` immediately before shell
+exec. PID publication and terminal projection are guarded by the exact attempt
+and lease identity. Heartbeat loss terminates the process group and quarantines
+an effect-possible attempt as `unknown` instead of replaying it.
+
+Worker and command PIDs are paired with process-start fingerprints. A worker is
+live only while its fingerprint, exact lease, and projected heartbeat all
+remain current. Reconciliation contains the recorded command group even after
+lease expiry, then validates terminal receipt hashes, process and gate evidence,
+terminal semantics, and the complete lease identity before adoption.
+
+Cancellation fences the current attempt before signalling its process group.
+It becomes terminal only after group settlement; failed containment remains
+`reconciling` with process identity evidence intact.
+
+`/bg reconcile` recovers known pre-effect interruptions and adopts a durable
+terminal receipt only under the still-current exact lease. Missing or ambiguous
+post-gate evidence remains `reconciling` for operator disposition. Codememory
+continues to own task lifecycle; `/bg/jobs.json` owns only process attempts and
+their local evidence.
+
 ## Proposal Contract
 
 The MVP accepts UTF-8 JSON with this top-level shape:
@@ -356,5 +395,4 @@ audit metadata and is never exported by this hook.
 ## Deferred Work
 
 - Proposal-only planner and bounded research: `task_127`.
-- Lease-backed background execution: `task_129`.
 - Scale qualification at 50, 250, and 1000 tasks: `task_130`.

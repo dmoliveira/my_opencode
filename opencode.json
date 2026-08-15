@@ -258,7 +258,7 @@
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before config --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "bg": {
-      "description": "Manage background jobs (start|status|list|read|cancel|cleanup|doctor)",
+      "description": "Manage background jobs (start|status|list|read|cancel|reconcile|cleanup|doctor)",
       "template": "!`python3 \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --script \"$HOME/.config/opencode/my_opencode/scripts/slash_command_wrapper.py\" --fixed-before bg --raw-args \"$ARGUMENTS\"`\nShow only the command output."
     },
     "refactor-lite": {
