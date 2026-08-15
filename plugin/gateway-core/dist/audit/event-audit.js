@@ -1205,12 +1205,11 @@ export function flushGatewayLocalAggregateAuditForTest() {
 export function gatewayLocalAggregateAuditQueueSizeForTest() {
     return localAggregateAuditQueuedRecords;
 }
-// Appends one bounded, sanitized gateway event audit entry without surfacing sink failures.
-export function writeGatewayEventAudit(directory, entry) {
+function writeGatewayAudit(directory, entry, exportOtel) {
     try {
         const auditState = resolveAuditEnvState();
         const fileAuditEnabled = auditState.auditEnabled;
-        const otelSink = resolveOtelSink(directory);
+        const otelSink = exportOtel ? resolveOtelSink(directory) : null;
         if (!fileAuditEnabled && !otelSink) {
             return;
         }
@@ -1246,4 +1245,12 @@ export function writeGatewayEventAudit(directory, entry) {
     catch {
         // Audit and telemetry are isolation boundaries, never hook failure sources.
     }
+}
+// Appends one bounded, sanitized local audit entry without OTLP export.
+export function writeGatewayLocalEventAudit(directory, entry) {
+    writeGatewayAudit(directory, entry, false);
+}
+// Appends one bounded, sanitized gateway event audit entry without surfacing sink failures.
+export function writeGatewayEventAudit(directory, entry) {
+    writeGatewayAudit(directory, entry, true);
 }

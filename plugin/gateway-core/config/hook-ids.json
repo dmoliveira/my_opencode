@@ -2,6 +2,7 @@
   "version": 1,
   "hook_ids": [
     "codememory-milestone-bridge",
+    "intent-ingress-outbox",
     "autopilot-loop",
     "continuation",
     "semantic-output-summarizer",

@@ -37,6 +37,30 @@ For a reusable external delivery-policy reference, search your local `agents.md`
 
 Gateway runtime tuning is layered: `~/.config/opencode/my_opencode/gateway-core.config.json` provides global defaults, the active project `.opencode/gateway-core.config.json` overrides them, and explicit plugin options apply last. `MY_OPENCODE_GATEWAY_CONFIG_PATH` deliberately replaces the automatic sidecar layers. Arrays replace lower-layer values, nested objects merge, and a malformed layer clears itself and lower-precedence sidecar state before any later valid override is applied. The opt-in `codememoryMilestoneBridge` records compact delegation, validation, PR, and merge milestones through `oc event noted`; it never creates tasks/sessions or changes task status, and it fails open when Codememory is unavailable.
 
+### Durable intent ingress
+
+`intentIngressOutbox` is disabled by default. Enable metadata-only capture in a
+gateway sidecar, then restart OpenCode:
+
+```json
+{
+  "intentIngressOutbox": {
+    "enabled": true,
+    "captureContent": false
+  }
+}
+```
+
+The default state directory is
+`~/.config/opencode/my_opencode/runtime/intent-coordinator`. Metadata mode
+stores source IDs, project and content digests, character count, and timestamp,
+but not the raw prompt. Set `captureContent` only when a bounded, configured
+secret-redacted preview is needed. Defaults are 65,536 input characters, 1,000
+preview characters, 16 KiB per envelope, and 1,000 pending entries. Capacity is
+soft and global to the state directory: new identities are dropped when full,
+while duplicate identities can still be recognized. Disabling the hook stops
+new capture but does not delete existing pending envelopes.
+
 ## Flow 1: Claim -> Deliver -> Close
 
 ```text

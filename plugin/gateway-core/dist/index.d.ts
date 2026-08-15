@@ -115,6 +115,7 @@ interface ToolAfterOutput {
 }
 interface ChatMessageInput {
     sessionID?: string;
+    messageID?: string;
     prompt?: string;
     text?: string;
     message?: string;
@@ -124,7 +125,11 @@ interface ChatMessageInput {
     }>;
 }
 interface ChatMessageOutput {
-    message?: unknown;
+    message?: {
+        id?: string;
+        sessionID?: string;
+        role?: string;
+    };
     parts?: Array<{
         type: string;
         text?: string;

@@ -311,6 +311,17 @@ export interface CodememoryMilestoneBridgeConfig {
   maxQueueEntries: number;
 }
 
+// Declares the opt-in durable chat intent spool.
+export interface IntentIngressOutboxConfig {
+  enabled: boolean;
+  captureContent: boolean;
+  stateDir: string;
+  maxInputChars: number;
+  maxContentChars: number;
+  maxEnvelopeBytes: number;
+  softMaxPendingEntries: number;
+}
+
 // Declares todo-driven continuation enforcer settings.
 export interface TodoContinuationEnforcerConfig {
   enabled: boolean;
@@ -676,6 +687,7 @@ export interface GatewayConfig {
   assistantMessageTimestamp: AssistantMessageTimestampConfig;
   taskResumeInfo: TaskResumeInfoConfig;
   codememoryMilestoneBridge: CodememoryMilestoneBridgeConfig;
+  intentIngressOutbox: IntentIngressOutboxConfig;
   todoContinuationEnforcer: TodoContinuationEnforcerConfig;
   compactionTodoPreserver: CompactionTodoPreserverConfig;
   emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
@@ -725,6 +737,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     disabled: [],
     order: [
       "codememory-milestone-bridge",
+      "intent-ingress-outbox",
       "autopilot-loop",
       "continuation",
       "semantic-output-summarizer",
@@ -1130,6 +1143,15 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     command: "oc",
     timeoutMs: 2000,
     maxQueueEntries: 32,
+  },
+  intentIngressOutbox: {
+    enabled: false,
+    captureContent: false,
+    stateDir: "~/.config/opencode/my_opencode/runtime/intent-coordinator",
+    maxInputChars: 65536,
+    maxContentChars: 1000,
+    maxEnvelopeBytes: 16384,
+    softMaxPendingEntries: 1000,
   },
   todoContinuationEnforcer: {
     enabled: true,
