@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "proposal_id": "isolated-smoke-v1",
+  "scope": "intent-coordinator/smoke",
+  "source": {
+    "kind": "system",
+    "id": "isolated-live-smoke",
+    "summary": "Validate isolated intent coordinator application"
+  },
+  "records": [
+    {
+      "key": "epic:smoke",
+      "entity_type": "epic",
+      "title": "Validate intent coordinator smoke",
+      "kind": "test",
+      "priority": "P2"
+    },
+    {
+      "key": "task:smoke",
+      "entity_type": "task",
+      "title": "Apply isolated intent proposal",
+      "kind": "test",
+      "priority": "P2",
+      "goal": "Prove transactional apply and stable replay.",
+      "labels": ["codememory", "smoke"]
+    }
+  ],
+  "links": [
+    {
+      "from": "epic:smoke",
+      "edge": "parent-of",
+      "to": "task:smoke"
+    }
+  ]
+}

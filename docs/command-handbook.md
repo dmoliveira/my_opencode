@@ -445,11 +445,18 @@ Use these directly in OpenCode:
 /governance profile strict --json
 /governance authorize workflow.execute --ttl-minutes 30 --json
 /governance status --json
+
+/intent schema --json
+/intent preview --file <proposal.json> --json
+/intent apply --file <proposal.json> --json
+/intent doctor --json
 ```
 
 
 `/claims claim --role <role>` auto-assigns the least-loaded active agent from `/agent-pool` for that role.
 `/workflow run` now supports dependency-aware step ordering (`depends_on`) and records per-step execution results (status, timestamps, failure reason codes). Use `--execute` to run guarded command steps.
+`/intent` is the explicit manual intake coordinator. The MVP accepts fresh add-only proposals with at most ten combined records and links, rejects title collisions, writes a private prepared receipt, and applies the deterministic graph fragment through one idempotent Codememory batch operation. It does not enable automatic chat hooks or task execution.
+Operator-only binary, config, state-directory, and actor overrides are environment variables documented in `docs/specs/intent-control-plane.md`; `/intent` does not accept executable or state-path overrides as command arguments.
 
 Background runtime triage split:
 
@@ -620,6 +627,7 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 - `/workflow` -> lower-level engine behind reusable workflow runs
 - `/autopilot` -> open-ended autonomous execution surface
 - `/autoflow` -> public deterministic plan-file execution surface
+- `/intent` -> manual typed user-intent to Codememory graph reconciliation
 - `/autopilot` and `/autoflow` share the same task-graph mental model; prefer `/autopilot` for open-ended objectives and `/autoflow` for plan-file-driven work
 - `/ox-*` provides a stable custom prompt-pack namespace for reusable automation expansions such as UX audits, review/improve loops, ship readiness, task bootstrap, and session wrap-up
 
@@ -700,6 +708,7 @@ This index is sourced from `opencode.json` and is used as the complete catalog r
 /hooks - Manage safety hooks (status|help|enable|disable|run)
 /hotfix - Run incident hotfix controls with strict close gating, followup linking, and followup-open previews (start|status|close|postmortem|remind|doctor)
 /init-deep - Initialize hierarchical AGENTS.md scaffolding for current repo
+/intent - Preview and apply bounded typed intent proposals (schema|preview|apply|doctor)
 /learn - Capture and manage reusable task knowledge (capture|review|publish|search|doctor)
 /mcp - Manage MCP usage (status|help|doctor|profile|enable|disable)
 /memory - Manage shared memory content (add|find|recall|pin|summarize|promote|doctor)

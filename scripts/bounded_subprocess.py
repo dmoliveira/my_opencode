@@ -33,6 +33,12 @@ COMMAND_CLASS_POLICIES: dict[str, CommandClassPolicy] = {
     "github_metadata": CommandClassPolicy(
         "MY_OPENCODE_GITHUB_METADATA_TIMEOUT_SECONDS", 30.0, 120.0
     ),
+    "codememory_probe": CommandClassPolicy(
+        "MY_OPENCODE_CODEMEMORY_PROBE_TIMEOUT_SECONDS", 10.0, 30.0
+    ),
+    "codememory_mutation": CommandClassPolicy(
+        "MY_OPENCODE_CODEMEMORY_MUTATION_TIMEOUT_SECONDS", 30.0, 120.0
+    ),
 }
 
 
@@ -69,6 +75,9 @@ OPERATION_CLASSES: dict[str, str] = {
     "pages_github_metadata": "github_metadata",
     "wave_github_pr_metadata": "github_metadata",
     "hygiene_github_merged_pr_metadata": "github_metadata",
+    "intent_codememory_doctor": "codememory_probe",
+    "intent_codememory_find": "codememory_probe",
+    "intent_codememory_apply": "codememory_mutation",
 }
 
 
