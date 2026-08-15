@@ -17,7 +17,7 @@ Codememory graph without giving multiple agents direct write authority.
 | Intent proposal | Advisory input awaiting deterministic reconciliation |
 | `task_graph.json` | Derived execution view: Codememory-managed tasks are one-way projections; workflow-owned nodes remain local runtime state |
 | `codememory_task_leases.json` | Cooperative single-host execution leases and per-task fencing high-water marks; never task lifecycle authority |
-| `/bg/jobs.json` | Existing process execution state; lease-backed adaptation is tracked by `task_129` |
+| `/bg/jobs.json` | Process attempts and local execution evidence, including lease-backed execution delivered by `task_129`; never task lifecycle authority |
 | OpenCode todos | Session-local presentation only; never durable task authority |
 
 Only one coordinator may apply intent proposals for a repository scope.
