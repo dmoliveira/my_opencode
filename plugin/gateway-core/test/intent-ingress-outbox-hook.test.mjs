@@ -330,6 +330,46 @@ test("persistence deduplicates retries and rejects changed content for one ident
   });
 });
 
+test("persistence rejects a malformed identity-matching existing envelope", async () => {
+  await withDirectory(async (directory) => {
+    const stateDir = join(directory, "state");
+    const options = {
+      stateDir,
+      maxEnvelopeBytes: 4096,
+      softMaxPendingEntries: 10,
+    };
+    const envelope = directEnvelope();
+    assert.equal(
+      (await persistIntentIngressEnvelope(envelope, options)).outcome,
+      "enqueued",
+    );
+    const [finalPath] = envelopePaths(stateDir);
+    const malformedRaw = JSON.stringify({
+      ...envelope,
+      content: {
+        ...envelope.content,
+        char_count: 0,
+      },
+    });
+    writeFileSync(finalPath, malformedRaw, "utf8");
+    chmodSync(finalPath, 0o600);
+    const stagePath = join(
+      pendingDirectory(stateDir),
+      `.intent-ingress-stage-${envelope.envelope_id}-invalid`,
+    );
+    linkSync(finalPath, stagePath);
+    assert.equal(lstatSync(finalPath).nlink, 2);
+
+    assert.deepEqual(await persistIntentIngressEnvelope(envelope, options), {
+      outcome: "conflict",
+    });
+    assert.equal(readFileSync(finalPath, "utf8"), malformedRaw);
+    assert.deepEqual(envelopePaths(stateDir), [finalPath]);
+    assert.equal(existsSync(stagePath), true);
+    assert.equal(lstatSync(finalPath).nlink, 2);
+  });
+});
+
 test("a recreated hook retains pending state and deduplicates the same message", async () => {
   await withDirectory(async (directory) => {
     const stateDir = join(directory, "state");
