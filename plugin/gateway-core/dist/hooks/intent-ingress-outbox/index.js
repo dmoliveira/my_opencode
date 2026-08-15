@@ -423,6 +423,7 @@ async function existingEnvelopeOutcome(path, envelope, maxEnvelopeBytes) {
             return "conflict";
         }
         const parsed = JSON.parse(raw);
+        assertPersistableEnvelope(parsed);
         if (!sameEnvelopeIdentity(parsed, envelope)) {
             return "conflict";
         }

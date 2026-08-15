@@ -606,6 +606,7 @@ async function existingEnvelopeOutcome(
       return "conflict";
     }
     const parsed = JSON.parse(raw) as unknown;
+    assertPersistableEnvelope(parsed as IntentIngressEnvelope);
     if (!sameEnvelopeIdentity(parsed, envelope)) {
       return "conflict";
     }
