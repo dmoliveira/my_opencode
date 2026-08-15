@@ -155,6 +155,64 @@ as `/intent` arguments.
   callers must not place secrets in them.
 - Keep command output free of database paths unless doctor mode is requested.
 
+## Intent Ingress Outbox
+
+The gateway can persist user-message intent before proposal planning. The hook
+is disabled by default and performs only bounded local filesystem work; it does
+not call an LLM, the network, a subprocess, or `oc`.
+
+`chat.message` identity is the project root, session ID, and message ID. The
+message ID uses `input.messageID` when present and otherwise
+`output.message.id`. Missing or malformed identity, an empty prompt, a known
+non-user role, and input beyond `maxInputChars` are skipped before content is
+hashed or the spool is created.
+
+Pending envelopes use this shape:
+
+```json
+{
+  "version": 1,
+  "envelope_id": "intent_ingress_<digest>",
+  "project_digest": "lowercase digest",
+  "observed_at": "RFC 3339 timestamp",
+  "source": {
+    "kind": "user",
+    "session_id": "OpenCode session ID",
+    "message_id": "OpenCode message ID"
+  },
+  "content": {
+    "mode": "metadata",
+    "char_count": 42,
+    "sha256": "lowercase SHA-256"
+  }
+}
+```
+
+Metadata mode persists no raw prompt. `captureContent=true` adds a
+whitespace-normalized preview only after configured secret redaction and caps
+it at `maxContentChars`; redaction failure falls back to metadata with an
+omission reason. The raw prompt SHA-256 supports integrity and conflict
+detection but is not a substitute for secret handling.
+
+The default spool is
+`~/.config/opencode/my_opencode/runtime/intent-coordinator/ingress/pending`.
+Directories are owner-only (`0700`), envelopes are owner-only (`0600`), and
+symlink, ownership, or unsafe writable-ancestor mismatches fail open without
+writing through the unsafe path. Each envelope is file-synced before publication
+and the pending directory is synced when supported. A published staging hard
+link left by interruption is recovered on retry. These ownership and no-follow
+guarantees require a POSIX runtime; unsupported platforms fail open without
+capturing an envelope.
+
+The spool is unordered storage. Consumers must sort by `observed_at`, then
+`envelope_id`. Repeating one identity with the same content SHA-256 is a no-op;
+reusing it with changed content is a conflict. `softMaxPendingEntries` applies
+globally to the configured pending directory and drops new identities when the
+soft limit is reached. Concurrent distinct writers may exceed that approximate
+limit briefly. The hook awaits persistence because returning before local sync
+would weaken the durability contract; latency is emitted only as bounded local
+audit metadata and is never exported by this hook.
+
 ## Failure Contract
 
 - Dry-run performs no Codememory mutation.
@@ -182,10 +240,14 @@ as `/intent` arguments.
 - Tests use an isolated fake or temporary Codememory store.
 - `oc plan doctor` remains healthy after a live isolated smoke run.
 - The MVP is single-host and SQLite-qualified; PostgreSQL parity is deferred.
+- Intent ingress is inert by default and persists no raw prompt in metadata
+  mode.
+- Intent ingress tests cover identity fallback, redaction, byte and entry
+  bounds, duplicate/conflict behavior, private paths, interruption recovery,
+  restart persistence, and deterministic replay order.
 
 ## Deferred Work
 
-- Opt-in `chat.message` ingress and durable outbox: `task_126`.
 - Proposal-only planner and bounded research: `task_127`.
 - Fenced task leases and heartbeats: `task_128`.
 - Lease-backed background execution: `task_129`.

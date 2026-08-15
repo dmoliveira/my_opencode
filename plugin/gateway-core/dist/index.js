@@ -76,6 +76,7 @@ import { createSubagentTelemetryTimelineHook } from "./hooks/subagent-telemetry-
 import { createTasksTodowriteDisablerHook } from "./hooks/tasks-todowrite-disabler/index.js";
 import { createTaskResumeInfoHook } from "./hooks/task-resume-info/index.js";
 import { createCodememoryMilestoneBridgeHook } from "./hooks/codememory-milestone-bridge/index.js";
+import { createIntentIngressOutboxHook } from "./hooks/intent-ingress-outbox/index.js";
 import { createTodoContinuationEnforcerHook } from "./hooks/todo-continuation-enforcer/index.js";
 import { createCompactionTodoPreserverHook } from "./hooks/compaction-todo-preserver/index.js";
 import { createSubagentLifecycleSupervisorHook } from "./hooks/subagent-lifecycle-supervisor/index.js";
@@ -853,6 +854,22 @@ function configuredHooks(ctx, runtime) {
             command: cfg.codememoryMilestoneBridge.command,
             timeoutMs: cfg.codememoryMilestoneBridge.timeoutMs,
             maxQueueEntries: cfg.codememoryMilestoneBridge.maxQueueEntries,
+        })),
+        safeHook("intent-ingress-outbox", () => createIntentIngressOutboxHook({
+            directory,
+            enabled: cfg.intentIngressOutbox.enabled,
+            captureContent: cfg.intentIngressOutbox.captureContent,
+            stateDir: cfg.intentIngressOutbox.stateDir,
+            maxInputChars: cfg.intentIngressOutbox.maxInputChars,
+            maxContentChars: cfg.intentIngressOutbox.maxContentChars,
+            maxEnvelopeBytes: cfg.intentIngressOutbox.maxEnvelopeBytes,
+            softMaxPendingEntries: cfg.intentIngressOutbox.softMaxPendingEntries,
+            redactionToken: cfg.secretLeakGuard.redactionToken,
+            secretPatterns: cfg.secretLeakGuard.patterns,
+            secretLimits: {
+                maxDepth: cfg.secretLeakGuard.maxDepth,
+                maxNodes: cfg.secretLeakGuard.maxNodes,
+            },
         })),
     ];
     return resolveHookOrder(hooks.filter((hook) => hook !== null), hookPlan.order, cfg.hooks.disabled);

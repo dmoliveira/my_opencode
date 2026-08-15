@@ -674,6 +674,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
     typeof source.codememoryMilestoneBridge === "object"
       ? (source.codememoryMilestoneBridge as Record<string, unknown>)
       : {};
+  const intentIngressOutboxSource =
+    source.intentIngressOutbox && typeof source.intentIngressOutbox === "object"
+      ? (source.intentIngressOutbox as Record<string, unknown>)
+      : {};
   const todoContinuationEnforcerSource =
     source.todoContinuationEnforcer &&
     typeof source.todoContinuationEnforcer === "object"
@@ -1704,6 +1708,45 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
       maxQueueEntries: positiveInt(
         codememoryMilestoneBridgeSource.maxQueueEntries,
         DEFAULT_GATEWAY_CONFIG.codememoryMilestoneBridge.maxQueueEntries,
+      ),
+    },
+    intentIngressOutbox: {
+      enabled:
+        typeof intentIngressOutboxSource.enabled === "boolean"
+          ? intentIngressOutboxSource.enabled
+          : DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.enabled,
+      captureContent:
+        typeof intentIngressOutboxSource.captureContent === "boolean"
+          ? intentIngressOutboxSource.captureContent
+          : DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.captureContent,
+      stateDir:
+        typeof intentIngressOutboxSource.stateDir === "string" &&
+        intentIngressOutboxSource.stateDir.trim()
+          ? intentIngressOutboxSource.stateDir.trim()
+          : DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.stateDir,
+      maxInputChars: boundedInteger(
+        intentIngressOutboxSource.maxInputChars,
+        1,
+        1_048_576,
+        DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.maxInputChars,
+      ),
+      maxContentChars: boundedInteger(
+        intentIngressOutboxSource.maxContentChars,
+        1,
+        65_536,
+        DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.maxContentChars,
+      ),
+      maxEnvelopeBytes: boundedInteger(
+        intentIngressOutboxSource.maxEnvelopeBytes,
+        512,
+        262_144,
+        DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.maxEnvelopeBytes,
+      ),
+      softMaxPendingEntries: boundedInteger(
+        intentIngressOutboxSource.softMaxPendingEntries,
+        1,
+        10_000,
+        DEFAULT_GATEWAY_CONFIG.intentIngressOutbox.softMaxPendingEntries,
       ),
     },
     todoContinuationEnforcer: {

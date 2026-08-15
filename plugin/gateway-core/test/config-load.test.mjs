@@ -76,6 +76,16 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.todoContinuationEnforcer.enabled, true)
   assert.equal(config.todoContinuationEnforcer.cooldownMs, 30000)
   assert.equal(config.todoContinuationEnforcer.maxConsecutiveFailures, 5)
+  assert.equal(config.intentIngressOutbox.enabled, false)
+  assert.equal(config.intentIngressOutbox.captureContent, false)
+  assert.equal(
+    config.intentIngressOutbox.stateDir,
+    "~/.config/opencode/my_opencode/runtime/intent-coordinator",
+  )
+  assert.equal(config.intentIngressOutbox.maxInputChars, 65536)
+  assert.equal(config.intentIngressOutbox.maxContentChars, 1000)
+  assert.equal(config.intentIngressOutbox.maxEnvelopeBytes, 16384)
+  assert.equal(config.intentIngressOutbox.softMaxPendingEntries, 1000)
   assert.equal(config.compactionTodoPreserver.enabled, true)
   assert.equal(config.compactionTodoPreserver.maxChars, 4000)
   assert.equal(config.editErrorRecovery.enabled, true)
@@ -336,6 +346,62 @@ test("loadGatewayConfig applies context injector and session runtime overrides",
   assert.equal(config.sessionRuntimeSystemContext.enabled, true)
   assert.equal(config.sessionRuntimeSystemContext.injectSessionIdContext, false)
   assert.equal(config.sessionRuntimeSystemContext.injectSessionIdWhenConciseModeOnly, true)
+})
+
+test("loadGatewayConfig applies bounded intent ingress overrides", () => {
+  const config = loadGatewayConfig({
+    intentIngressOutbox: {
+      enabled: true,
+      captureContent: true,
+      stateDir: "~/intent-test",
+      maxInputChars: 2000,
+      maxContentChars: 300,
+      maxEnvelopeBytes: 4096,
+      softMaxPendingEntries: 12,
+    },
+  })
+
+  assert.deepEqual(config.intentIngressOutbox, {
+    enabled: true,
+    captureContent: true,
+    stateDir: "~/intent-test",
+    maxInputChars: 2000,
+    maxContentChars: 300,
+    maxEnvelopeBytes: 4096,
+    softMaxPendingEntries: 12,
+  })
+  const defaults = {
+    enabled: false,
+    captureContent: false,
+    stateDir: "~/.config/opencode/my_opencode/runtime/intent-coordinator",
+    maxInputChars: 65536,
+    maxContentChars: 1000,
+    maxEnvelopeBytes: 16384,
+    softMaxPendingEntries: 1000,
+  }
+  assert.deepEqual(
+    loadGatewayConfig({
+      intentIngressOutbox: {
+        stateDir: "   ",
+        maxInputChars: 0,
+        maxContentChars: -1,
+        maxEnvelopeBytes: 0,
+        softMaxPendingEntries: 0,
+      },
+    }).intentIngressOutbox,
+    defaults,
+  )
+  assert.deepEqual(
+    loadGatewayConfig({
+      intentIngressOutbox: {
+        maxInputChars: 1_048_577,
+        maxContentChars: 65_537,
+        maxEnvelopeBytes: 262_145,
+        softMaxPendingEntries: 10_001,
+      },
+    }).intentIngressOutbox,
+    defaults,
+  )
 })
 
 test("loadGatewayConfig normalizes llmDecisionRuntime env to non-empty string pairs", () => {

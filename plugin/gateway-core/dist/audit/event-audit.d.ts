@@ -23,5 +23,6 @@ export declare function enqueueGatewayLocalAggregateAudit(directory: string, ent
 /** Flushes queued local aggregate audit records synchronously for tests only. */
 export declare function flushGatewayLocalAggregateAuditForTest(): void;
 export declare function gatewayLocalAggregateAuditQueueSizeForTest(): number;
+export declare function writeGatewayLocalEventAudit(directory: string, entry: Record<string, unknown>): void;
 export declare function writeGatewayEventAudit(directory: string, entry: Record<string, unknown>): void;
 export {};

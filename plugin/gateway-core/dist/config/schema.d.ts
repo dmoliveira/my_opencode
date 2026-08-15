@@ -234,6 +234,15 @@ export interface CodememoryMilestoneBridgeConfig {
     timeoutMs: number;
     maxQueueEntries: number;
 }
+export interface IntentIngressOutboxConfig {
+    enabled: boolean;
+    captureContent: boolean;
+    stateDir: string;
+    maxInputChars: number;
+    maxContentChars: number;
+    maxEnvelopeBytes: number;
+    softMaxPendingEntries: number;
+}
 export interface TodoContinuationEnforcerConfig {
     enabled: boolean;
     cooldownMs: number;
@@ -515,6 +524,7 @@ export interface GatewayConfig {
     assistantMessageTimestamp: AssistantMessageTimestampConfig;
     taskResumeInfo: TaskResumeInfoConfig;
     codememoryMilestoneBridge: CodememoryMilestoneBridgeConfig;
+    intentIngressOutbox: IntentIngressOutboxConfig;
     todoContinuationEnforcer: TodoContinuationEnforcerConfig;
     compactionTodoPreserver: CompactionTodoPreserverConfig;
     emptyTaskResponseDetector: EmptyTaskResponseDetectorConfig;
