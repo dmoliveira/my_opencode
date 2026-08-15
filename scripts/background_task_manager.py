@@ -2,6 +2,7 @@
 # ruff: noqa: EXE001
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -75,6 +76,9 @@ TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 LEASE_NONTERMINAL_STATUSES = {"queued", "running", "reconciling"}
 LEASE_ACTIVE_ATTEMPT_STATUSES = {"acquiring", "starting", "running"}
 LEASE_TERMINAL_ATTEMPT_STATUSES = {"succeeded", "failed", "cancelled", "unknown"}
+CONTAINMENT_PROVEN_ACTIONS = frozenset(
+    {"already-stopped", "not-found", "terminated", "killed"}
+)
 LEASE_EXECUTION_ENABLED = True
 RUNTIME_OWNER = {
     "model": "execution_backend",
@@ -321,8 +325,8 @@ def is_pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
-    except OSError:
-        return False
+    except OSError as exc:
+        return exc.errno != errno.ESRCH
 
 
 def _parse_linux_process_stat(raw: bytes) -> tuple[str, int] | None:
@@ -388,10 +392,14 @@ def is_process_group_alive(pgid: int) -> bool:
         return False
     try:
         os.killpg(pgid, 0)
-    except OSError:
-        return False
+    except OSError as exc:
+        return exc.errno != errno.ESRCH
     linux_live = _linux_process_group_has_executable_members(pgid)
     return True if linux_live is None else linux_live
+
+
+def termination_proves_containment(action: str) -> bool:
+    return action in CONTAINMENT_PROVEN_ACTIONS
 
 
 def process_start_fingerprint(pid: int) -> str | None:
@@ -473,8 +481,8 @@ def terminate_process(
             os.killpg(target, signal.SIGTERM)
         else:
             os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return "not-found"
+    except OSError as exc:
+        return "not-found" if exc.errno == errno.ESRCH else "signal-failed"
     deadline = time.time() + grace_seconds
     while time.time() < deadline:
         if not alive():
@@ -485,8 +493,8 @@ def terminate_process(
             os.killpg(target, signal.SIGKILL)
         else:
             os.kill(pid, signal.SIGKILL)
-    except OSError:
-        return "terminated"
+    except OSError as exc:
+        return "terminated" if exc.errno == errno.ESRCH else "signal-failed"
     kill_deadline = time.time() + max(0.1, grace_seconds)
     while time.time() < kill_deadline:
         if not alive():
@@ -649,8 +657,7 @@ def cleanup_jobs(
         )
         containment_failed = (
             not pid
-            or action in {"identity-mismatch", "kill-pending"}
-            or bool(pgid and is_process_group_alive(pgid))
+            or not termination_proves_containment(action)
         )
         job["status"] = "reconciling" if containment_failed else "cancelled"
         job["ended_at"] = None if containment_failed else to_iso(now)
@@ -1996,10 +2003,9 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
     observed_gate_state = _gate_state(job_id, evidence_attempt)
     if (
         process.returncode is None
-        or is_process_group_alive(process.pid)
         or drain_thread.is_alive()
         or log_result.get("error")
-        or containment_action in {"identity-mismatch", "kill-pending"}
+        or not termination_proves_containment(containment_action)
     ):
         result = _mark_attempt_reconciling(
             job_id,
@@ -2199,8 +2205,7 @@ def _run_single_job(job: dict) -> tuple[str, int | None]:
             expected_start_fingerprint=process_start,
         )
         containment_failed = (
-            containment_action in {"identity-mismatch", "kill-pending"}
-            or is_process_group_alive(process.pid)
+            not termination_proves_containment(containment_action)
         )
         gate_state = _legacy_gate_state(
             _snapshot_job(str(job.get("id"))) or job
@@ -2315,9 +2320,7 @@ def _contain_attempt_process(attempt: dict) -> bool:
             attempt.get("process_start_fingerprint") or ""
         ),
     )
-    return action not in {"identity-mismatch", "kill-pending"} and not (
-        is_process_group_alive(pgid)
-    )
+    return termination_proves_containment(action)
 
 
 def reconcile_lease_jobs() -> dict[str, int]:
@@ -2695,9 +2698,7 @@ def command_cancel(args: argparse.Namespace) -> int:
         pgid or None,
         expected_start_fingerprint=process_start,
     )
-    containment_failed = action in {"identity-mismatch", "kill-pending"} or bool(
-        pgid and is_process_group_alive(pgid)
-    )
+    containment_failed = not termination_proves_containment(action)
     final_status = "reconciling" if containment_failed else "cancelled"
     with locked_jobs(writeback=True) as data:
         job = find_job(data, args.id)

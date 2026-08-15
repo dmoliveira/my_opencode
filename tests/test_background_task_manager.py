@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -259,6 +260,104 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             bg._classify_linux_process_group(123, [("Z", 999)], uncertain=False)
         )
 
+    def test_liveness_checks_treat_only_esrch_as_absent(self) -> None:
+        for error_number, expected in (
+            (errno.ESRCH, False),
+            (errno.EPERM, True),
+            (errno.EIO, True),
+        ):
+            with self.subTest(check="pid", error_number=error_number), patch.object(
+                bg.os,
+                "kill",
+                side_effect=OSError(error_number, "test liveness"),
+            ):
+                self.assertEqual(expected, bg.is_pid_alive(12345))
+            with self.subTest(check="group", error_number=error_number):
+                with (
+                    patch.object(
+                        bg.os,
+                        "killpg",
+                        side_effect=OSError(error_number, "test liveness"),
+                    ),
+                    patch.object(
+                        bg,
+                        "_linux_process_group_has_executable_members",
+                    ) as classifier,
+                ):
+                    self.assertEqual(expected, bg.is_process_group_alive(12345))
+                classifier.assert_not_called()
+
+    def test_termination_proof_actions_are_explicit(self) -> None:
+        for action, expected in (
+            ("already-stopped", True),
+            ("not-found", True),
+            ("terminated", True),
+            ("killed", True),
+            ("identity-mismatch", False),
+            ("kill-pending", False),
+            ("signal-failed", False),
+            ("unknown-action", False),
+        ):
+            with self.subTest(action=action):
+                self.assertEqual(expected, bg.termination_proves_containment(action))
+
+    def test_terminate_process_only_confirms_esrch_signal_errors(self) -> None:
+        with (
+            patch.object(bg, "is_process_group_alive", return_value=True),
+            patch.object(
+                bg.os,
+                "killpg",
+                side_effect=OSError(errno.ESRCH, "missing process group"),
+            ),
+        ):
+            self.assertEqual("not-found", bg.terminate_process(12345, 12345))
+        for error_number in (errno.EPERM, errno.EIO):
+            with (
+                self.subTest(signal="SIGTERM", error_number=error_number),
+                patch.object(bg, "is_process_group_alive", return_value=True),
+                patch.object(
+                    bg.os,
+                    "killpg",
+                    side_effect=OSError(error_number, "signal failed"),
+                ),
+            ):
+                self.assertEqual(
+                    "signal-failed",
+                    bg.terminate_process(12345, 12345),
+                )
+        with (
+            patch.object(bg, "is_process_group_alive", return_value=True),
+            patch.object(
+                bg.os,
+                "killpg",
+                side_effect=[
+                    None,
+                    OSError(errno.ESRCH, "missing after SIGTERM"),
+                ],
+            ),
+        ):
+            self.assertEqual(
+                "terminated",
+                bg.terminate_process(12345, 12345, grace_seconds=0),
+            )
+        for error_number in (errno.EPERM, errno.EIO):
+            with (
+                self.subTest(signal="SIGKILL", error_number=error_number),
+                patch.object(bg, "is_process_group_alive", return_value=True),
+                patch.object(
+                    bg.os,
+                    "killpg",
+                    side_effect=[
+                        None,
+                        OSError(error_number, "signal failed after SIGTERM"),
+                    ],
+                ),
+            ):
+                self.assertEqual(
+                    "signal-failed",
+                    bg.terminate_process(12345, 12345, grace_seconds=0),
+                )
+
     def test_concurrent_runners_execute_one_legacy_reservation(self) -> None:
         marker = self.root / "executions.txt"
         job_id = self.enqueue(
@@ -392,8 +491,12 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                     }
                 )
             with (
-                patch.object(bg, "terminate_process", return_value="identity-mismatch"),
-                patch.object(bg, "is_process_group_alive", return_value=True),
+                patch.object(bg, "terminate_process", return_value="signal-failed"),
+                patch.object(
+                    bg,
+                    "is_process_group_alive",
+                    side_effect=AssertionError("must not re-probe containment"),
+                ),
             ):
                 self.assertEqual(
                     1,
@@ -402,6 +505,134 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             job = json.loads(jobs_path.read_text(encoding="utf-8"))["jobs"][0]
             self.assertEqual("reconciling", job["status"])
             self.assertEqual(12345, job["pgid"])
+
+    def test_cancel_accepts_proven_containment_without_recheck(self) -> None:
+        job_id = self.enqueue(sys.executable, "-c", "pass")
+        jobs_path = self.bg_root / "jobs.json"
+        with self.patched_store():
+            with bg.locked_jobs(writeback=True) as data:
+                job = bg.find_job(data, job_id)
+                assert job is not None
+                job.update(
+                    {
+                        "status": "running",
+                        "pid": 12345,
+                        "pgid": 12345,
+                        "process_start_fingerprint": "process-start",
+                        "run_token": "reserved",
+                    }
+                )
+            with (
+                patch.object(bg, "terminate_process", return_value="terminated"),
+                patch.object(
+                    bg,
+                    "is_process_group_alive",
+                    side_effect=AssertionError("must not re-probe containment"),
+                ),
+            ):
+                self.assertEqual(0, bg.command_cancel(argparse.Namespace(id=job_id)))
+            job = json.loads(jobs_path.read_text(encoding="utf-8"))["jobs"][0]
+            self.assertEqual("cancelled", job["status"])
+            self.assertIsNone(job["pid"])
+            self.assertIsNone(job["pgid"])
+
+    def test_cleanup_accepts_proven_containment_without_recheck(self) -> None:
+        job_id = self.enqueue(sys.executable, "-c", "pass")
+        with self.patched_store():
+            with bg.locked_jobs(writeback=True) as data:
+                job = bg.find_job(data, job_id)
+                assert job is not None
+                job.update(
+                    {
+                        "status": "running",
+                        "pid": 12345,
+                        "pgid": 12345,
+                        "started_at": "2000-01-01T00:00:00Z",
+                    }
+                )
+                with (
+                    patch.object(bg, "terminate_process", return_value="killed"),
+                    patch.object(
+                        bg,
+                        "is_process_group_alive",
+                        side_effect=AssertionError("must not re-probe containment"),
+                    ),
+                ):
+                    result = bg.cleanup_jobs(data)
+            self.assertEqual(1, result["stale_cancelled"])
+            current = bg._snapshot_job(job_id)
+            assert current is not None
+            self.assertEqual("cancelled", current["status"])
+
+    def test_attempt_containment_accepts_proven_action_without_recheck(self) -> None:
+        with (
+            patch.object(bg, "terminate_process", return_value="already-stopped"),
+            patch.object(
+                bg,
+                "is_process_group_alive",
+                side_effect=AssertionError("must not re-probe containment"),
+            ),
+        ):
+            self.assertTrue(
+                bg._contain_attempt_process(
+                    {
+                        "pid": 12345,
+                        "pgid": 12345,
+                        "process_start_fingerprint": "process-start",
+                    }
+                )
+            )
+
+    def test_legacy_settlement_accepts_proven_containment_without_recheck(self) -> None:
+        with self.patched_store():
+            job = bg.enqueue_job(
+                [sys.executable, "-c", "pass"],
+                cwd_value=str(ROOT),
+                labels=[],
+                timeout_seconds=5,
+                stale_after_seconds=10,
+            )
+            assert job is not None
+            legacy, _, _ = bg._reserve_jobs(
+                job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+            )
+            with (
+                patch.object(bg, "terminate_process", return_value="terminated"),
+                patch.object(
+                    bg,
+                    "is_process_group_alive",
+                    side_effect=AssertionError("must not re-probe containment"),
+                ),
+            ):
+                status, exit_code = bg._run_single_job(legacy[0])
+            self.assertEqual(("completed", 0), (status, exit_code))
+
+    def test_lease_settlement_accepts_proven_containment_without_recheck(self) -> None:
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease([sys.executable, "-c", "pass"])
+            with patch.object(
+                bg,
+                "make_oc_runner",
+                return_value=self.source_runner(config_path),
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                with (
+                    patch.object(
+                        bg, "terminate_process", return_value="terminated"
+                    ),
+                    patch.object(
+                        bg,
+                        "is_process_group_alive",
+                        side_effect=AssertionError("must not re-probe containment"),
+                    ),
+                ):
+                    status, exit_code = bg._run_lease_job(leased[0])
+            self.assertEqual(("completed", 0), (status, exit_code))
 
     def test_cancel_between_legacy_spawn_and_pid_publish_never_opens_gate(self) -> None:
         command_marker = self.root / "legacy-command-ran"
