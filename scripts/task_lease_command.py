@@ -33,6 +33,10 @@ MAX_JOURNAL_BYTES = 64 * 1024
 MAX_OC_OUTPUT_BYTES = 256 * 1024
 MAX_CONFIG_BYTES = 1024 * 1024
 SOURCE_DEADLINE_SECONDS = 8.0
+SOURCE_AUTHORITY_MAX_AGE_SECONDS = 1.0
+CLAIM_LOCK_WAIT_SECONDS = 0.5
+CLAIM_MAX_ATTEMPTS = 3
+LOCK_POLL_SECONDS = 0.01
 MIN_TTL_SECONDS = 1
 MAX_TTL_SECONDS = 24 * 60 * 60
 TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,255}$")
@@ -163,6 +167,26 @@ def _path_key(path: Path) -> str:
     return str(path.expanduser().resolve(strict=False))
 
 
+def _normalize_state_path(path: Path) -> Path:
+    expanded = path.expanduser()
+    if not expanded.is_absolute():
+        raise TaskLeaseError(
+            "task_lease_state_path_unsafe",
+            "task lease state path must be absolute",
+        )
+    try:
+        if expanded.is_symlink():
+            raise TaskLeaseError(
+                "task_lease_state_path_unsafe",
+                "task lease state path must not be a symlink",
+            )
+        return expanded.resolve(strict=False)
+    except TaskLeaseError:
+        raise
+    except (OSError, RuntimeError) as exc:
+        raise TaskLeaseError("task_lease_state_path_unsafe", str(exc)) from exc
+
+
 def _mark_process_faulted(path: Path) -> None:
     with _FAULTED_PATHS_LOCK:
         _FAULTED_PATHS.add(_path_key(path))
@@ -187,9 +211,8 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _ensure_private_directory(path: Path) -> None:
+def _inspect_private_directory(path: Path) -> os.stat_result:
     try:
-        path.mkdir(parents=True, exist_ok=True, mode=0o700)
         metadata = path.lstat()
     except OSError as exc:
         raise TaskLeaseError("task_lease_state_path_unsafe", str(exc)) from exc
@@ -203,8 +226,77 @@ def _ensure_private_directory(path: Path) -> None:
             "task_lease_state_path_unsafe",
             "task lease state directory must be owned by the current user",
         )
+    return metadata
+
+
+def _reject_symlink_directory_components(path: Path) -> None:
+    current = Path(path.anchor)
     try:
-        os.chmod(path, 0o700)
+        for component in path.parts[1:]:
+            current /= component
+            try:
+                metadata = current.lstat()
+            except FileNotFoundError:
+                return
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                raise TaskLeaseError(
+                    "task_lease_state_path_unsafe",
+                    "task lease state directory ancestry must contain real directories",
+                )
+    except TaskLeaseError:
+        raise
+    except OSError as exc:
+        raise TaskLeaseError("task_lease_state_path_unsafe", str(exc)) from exc
+
+
+def _fsync_directory_ancestry(path: Path) -> None:
+    current = path
+    while True:
+        _fsync_directory(current)
+        parent = current.parent
+        if parent == current:
+            return
+        current = parent
+
+
+def _ensure_private_directory(path: Path, *, synchronize_ancestry: bool) -> None:
+    path = _normalize_state_path(path)
+    if path.parent == path:
+        raise TaskLeaseError(
+            "task_lease_state_path_unsafe",
+            "task lease state directory must not be the filesystem root",
+        )
+    missing: list[Path] = []
+    cursor = path
+    try:
+        _reject_symlink_directory_components(path)
+        while not cursor.exists():
+            missing.append(cursor)
+            parent = cursor.parent
+            if parent == cursor:
+                raise TaskLeaseError(
+                    "task_lease_state_path_unsafe",
+                    "task lease state directory has no existing ancestor",
+                )
+            cursor = parent
+        for directory in reversed(missing):
+            try:
+                directory.mkdir(mode=0o700)
+            except FileExistsError:
+                pass
+            _inspect_private_directory(directory)
+            os.chmod(directory, 0o700)
+        _reject_symlink_directory_components(path)
+        metadata = _inspect_private_directory(path)
+        if metadata.st_mode & 0o077:
+            raise TaskLeaseError(
+                "task_lease_state_path_unsafe",
+                "task lease state directory must be owner-only",
+            )
+        if missing or synchronize_ancestry:
+            _fsync_directory_ancestry(path)
+    except TaskLeaseError:
+        raise
     except OSError as exc:
         raise TaskLeaseError("task_lease_state_path_unsafe", str(exc)) from exc
 
@@ -404,9 +496,12 @@ def _read_journal(path: Path) -> dict[str, Any] | None:
 
 def _open_lock(state_path: Path) -> tuple[Any, bool, Path]:
     _require_supported_platform()
-    state_path = state_path.expanduser().absolute()
-    _ensure_private_directory(state_path.parent)
+    state_path = _normalize_state_path(state_path)
     lock_path = state_path.with_name(f"{state_path.name}.lock")
+    _ensure_private_directory(
+        state_path.parent,
+        synchronize_ancestry=not (lock_path.exists() or lock_path.is_symlink()),
+    )
     flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
     try:
         descriptor = os.open(
@@ -432,10 +527,16 @@ def _open_lock(state_path: Path) -> tuple[Any, bool, Path]:
 
 @contextmanager
 def _locked_store(
-    state_path: Path, *, allow_indeterminate: bool = False
+    state_path: Path,
+    *,
+    allow_indeterminate: bool = False,
+    timeout_seconds: float | None = None,
 ) -> Iterator[_LockedStore]:
     import fcntl
 
+    state_path = _normalize_state_path(state_path)
+    if timeout_seconds is not None and timeout_seconds < 0:
+        raise ValueError("lock timeout must not be negative")
     state_key = _path_key(state_path)
     locked_paths = getattr(_CALLBACK_STATE, "locked_paths", None)
     if locked_paths is None:
@@ -452,7 +553,22 @@ def _locked_store(
         locked_paths.discard(state_key)
         raise
     try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        if timeout_seconds is None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        else:
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                try:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TaskLeaseError(
+                            "task_lease_lock_timeout",
+                            "task lease store lock did not become available in time",
+                        )
+                    time.sleep(min(LOCK_POLL_SECONDS, remaining))
     except Exception:
         handle.close()
         locked_paths.discard(state_key)
@@ -523,9 +639,25 @@ def _locked_store(
             state=state,
         )
     finally:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        handle.close()
-        locked_paths.discard(state_key)
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            try:
+                handle.close()
+            finally:
+                locked_paths.discard(state_key)
+
+
+def _initialize_store_if_needed(state_path: Path) -> None:
+    state_path = _normalize_state_path(state_path)
+    lock_path = state_path.with_name(f"{state_path.name}.lock")
+    journal_path = state_path.with_name(f"{state_path.name}.journal")
+    if (lock_path.exists() or lock_path.is_symlink()) and (
+        journal_path.exists() or journal_path.is_symlink()
+    ):
+        return
+    with _locked_store(state_path):
+        pass
 
 
 def _parse_state(state_bytes: bytes | None) -> dict[str, Any] | None:
@@ -1005,15 +1137,9 @@ def claim_lease(
     worker_id = _require_token(worker_id, "worker_id")
     scope = _require_scope(scope)
     ttl_ms = _ttl_ms(ttl_seconds)
-    with _locked_store(state_path) as store:
-        observed = clock()
-        if store.state is not None:
-            _advance_clock_floor(store, observed)
-            if store.state["scope"] != scope:
-                raise TaskLeaseError(
-                    "task_lease_scope_mismatch",
-                    "task lease store is bound to another Codememory scope",
-                )
+    state_path = _normalize_state_path(state_path)
+    _initialize_store_if_needed(state_path)
+    for _attempt in range(1, CLAIM_MAX_ATTEMPTS + 1):
         backend_fingerprint = validate_codememory_source(
             runner=runner,
             config_path=config_path,
@@ -1022,65 +1148,89 @@ def claim_lease(
             task_id=task_id,
             session_id=session_id,
         )
-        now_ms = clock()
-        if store.state is not None:
-            _advance_clock_floor(store, now_ms)
-        state = store.state or _new_state(
-            scope=scope, backend_fingerprint=backend_fingerprint, now_ms=now_ms
-        )
-        _check_clock(state, now_ms)
-        if state["backend_fingerprint"] != backend_fingerprint:
-            raise TaskLeaseError(
-                "task_lease_backend_mismatch",
-                "task lease store is bound to another Codememory backend",
-            )
-        current = state["leases"].get(task_id)
-        if isinstance(current, dict) and now_ms < int(current["expires_at_ms"]):
-            same_worker = (
-                current["session_id"] == session_id
-                and current["owner"] == owner
-                and current["worker_id"] == worker_id
-            )
-            if same_worker:
+        authority_checked_at = time.monotonic()
+        try:
+            with _locked_store(
+                state_path, timeout_seconds=CLAIM_LOCK_WAIT_SECONDS
+            ) as store:
+                if (
+                    time.monotonic() - authority_checked_at
+                    > SOURCE_AUTHORITY_MAX_AGE_SECONDS
+                ):
+                    continue
+                now_ms = clock()
+                if store.state is not None:
+                    _check_clock(store.state, now_ms)
+                    if store.state["scope"] != scope:
+                        raise TaskLeaseError(
+                            "task_lease_scope_mismatch",
+                            "task lease store is bound to another Codememory scope",
+                        )
+                state = store.state or _new_state(
+                    scope=scope, backend_fingerprint=backend_fingerprint, now_ms=now_ms
+                )
+                _check_clock(state, now_ms)
+                if state["backend_fingerprint"] != backend_fingerprint:
+                    raise TaskLeaseError(
+                        "task_lease_backend_mismatch",
+                        "task lease store is bound to another Codememory backend",
+                    )
+                current = state["leases"].get(task_id)
+                if isinstance(current, dict) and now_ms < int(current["expires_at_ms"]):
+                    same_worker = (
+                        current["session_id"] == session_id
+                        and current["owner"] == owner
+                        and current["worker_id"] == worker_id
+                    )
+                    if same_worker:
+                        _advance_clock_floor(store, now_ms)
+                        return {
+                            "result": "PASS",
+                            "command": "claim",
+                            "reason_code": "task_lease_already_held",
+                            "idempotent": True,
+                            "reclaimed": False,
+                            "lease": _public_lease(current, now_ms=now_ms),
+                        }
+                    raise TaskLeaseError(
+                        "task_lease_already_claimed",
+                        "task already has an unexpired lease",
+                        context={"task_id": task_id},
+                    )
+                previous_epoch = int(state["epochs"].get(task_id, 0))
+                fence_value = previous_epoch + 1
+                lease = {
+                    "task_id": task_id,
+                    "session_id": session_id,
+                    "owner": owner,
+                    "worker_id": worker_id,
+                    "lease_id": uuid.uuid4().hex,
+                    "fencing_token": fence_value,
+                    "issued_at_ms": now_ms,
+                    "heartbeat_at_ms": now_ms,
+                    "expires_at_ms": now_ms + ttl_ms,
+                    "source_sampled_at_ms": now_ms,
+                }
+                state["epochs"][task_id] = fence_value
+                state["leases"][task_id] = lease
+                _set_clock(state, now_ms)
+                _commit_state(store, state)
                 return {
                     "result": "PASS",
                     "command": "claim",
-                    "reason_code": "task_lease_already_held",
-                    "idempotent": True,
-                    "reclaimed": False,
-                    "lease": _public_lease(current, now_ms=now_ms),
+                    "reason_code": "task_lease_claimed",
+                    "idempotent": False,
+                    "reclaimed": isinstance(current, dict),
+                    "lease": _public_lease(lease, now_ms=now_ms),
                 }
-            raise TaskLeaseError(
-                "task_lease_already_claimed",
-                "task already has an unexpired lease",
-                context={"task_id": task_id},
-            )
-        previous_epoch = int(state["epochs"].get(task_id, 0))
-        fence_value = previous_epoch + 1
-        lease = {
-            "task_id": task_id,
-            "session_id": session_id,
-            "owner": owner,
-            "worker_id": worker_id,
-            "lease_id": uuid.uuid4().hex,
-            "fencing_token": fence_value,
-            "issued_at_ms": now_ms,
-            "heartbeat_at_ms": now_ms,
-            "expires_at_ms": now_ms + ttl_ms,
-            "source_sampled_at_ms": now_ms,
-        }
-        state["epochs"][task_id] = fence_value
-        state["leases"][task_id] = lease
-        _set_clock(state, now_ms)
-        _commit_state(store, state)
-        return {
-            "result": "PASS",
-            "command": "claim",
-            "reason_code": "task_lease_claimed",
-            "idempotent": False,
-            "reclaimed": isinstance(current, dict),
-            "lease": _public_lease(lease, now_ms=now_ms),
-        }
+        except TaskLeaseError as exc:
+            if exc.reason_code != "task_lease_lock_timeout":
+                raise
+    raise TaskLeaseError(
+        "task_lease_admission_contended",
+        "lease admission could not obtain a fresh serialized state window",
+        context={"attempts": CLAIM_MAX_ATTEMPTS, "retryable": True},
+    )
 
 
 def heartbeat_lease(
@@ -1279,7 +1429,7 @@ def lease_doctor(
         **report,
         "command": "doctor",
         "reason_code": "task_lease_healthy",
-        "path": str(state_path.expanduser().absolute()),
+        "path": str(_normalize_state_path(state_path)),
         "limitations": [
             "single_host_cooperative_only",
             "source_authority_sampled_at_claim",
