@@ -1,8 +1,9 @@
-const SHELL_TOKEN = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|]+)`
+const SHELL_TOKEN = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|'\"]+)`
 const GIT_SAFE_GLOBAL_FLAGS = String.raw`(?:\s+(?:--no-pager|-C\s+${SHELL_TOKEN}|--git-dir\s+${SHELL_TOKEN}|--work-tree\s+${SHELL_TOKEN}))*`
 const GIT_SAFE_ARGS = String.raw`(?:\s+[^;&|]+)*`
 const GIT_SINGLE_ARG = String.raw`(?:\s+${SHELL_TOKEN})`
 const GIT_REQUIRED_ARGS = String.raw`(?:\s+[^;&|]+)+`
+const OC_REQUIRED_ARGS = String.raw`(?:\s+${SHELL_TOKEN})+`
 const SAFE_ENV_KEY = String.raw`(?:CI|GIT_TERMINAL_PROMPT|GIT_EDITOR|GIT_PAGER|PAGER|GCM_INTERACTIVE|OPENCODE_SESSION_ID)`
 const SAFE_ENV_PREFIX = String.raw`(?:(?:env\s+)?(?:${SAFE_ENV_KEY}=${SHELL_TOKEN}\s+)*)`
 const OPTIONAL_RTK_WRAPPER = String.raw`(?:(?:[^\s;&|]*/)?rtk\s+)?`
@@ -86,11 +87,11 @@ const ALLOWED_PROTECTED_SHELL_PATTERNS: RegExp[] = [
   gitProtectedPattern(String.raw`restore\s+--source\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
   gitProtectedPattern(String.raw`checkout\s+${PROTECTED_BRANCH_REF}\s+--`, GIT_REQUIRED_ARGS),
   ocProtectedPattern(String.raw`(?:current|next|queue)`, GIT_SAFE_ARGS),
-  ocProtectedPattern(String.raw`add\s+task`, GIT_REQUIRED_ARGS),
-  ocProtectedPattern(String.raw`add\s+session`, GIT_REQUIRED_ARGS),
-  ocProtectedPattern(String.raw`resume`, GIT_REQUIRED_ARGS),
-  ocProtectedPattern(String.raw`done`, GIT_REQUIRED_ARGS),
-  ocProtectedPattern(String.raw`end-session`, GIT_REQUIRED_ARGS),
+  ocProtectedPattern(String.raw`add\s+task`, OC_REQUIRED_ARGS),
+  ocProtectedPattern(String.raw`add\s+session`, OC_REQUIRED_ARGS),
+  ocProtectedPattern(String.raw`resume`, OC_REQUIRED_ARGS),
+  ocProtectedPattern(String.raw`done`, OC_REQUIRED_ARGS),
+  ocProtectedPattern(String.raw`end-session`, OC_REQUIRED_ARGS),
   protectedPattern(String.raw`${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+doctor(?:\s+[^;&|]+)*`),
   protectedPattern(String.raw`${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-sidecars(?:\s+[^;&|]+)*`),
   protectedPattern(String.raw`${PYTHON_PROTECTED_BINARY}\s+[^;&|]*scripts/session_command\.py\s+repair-runtime-permissions(?:\s+[^;&|]+)*`),
@@ -189,7 +190,7 @@ function hasHardDisallowedShellSyntax(command: string): boolean {
 }
 
 function hasShellExpansionSyntax(command: string): boolean {
-  return /`|\$\(|\$\{|\$[A-Za-z_]/.test(command)
+  return /`|\$/.test(command)
 }
 
 function splitChainedCommands(command: string): string[] {
