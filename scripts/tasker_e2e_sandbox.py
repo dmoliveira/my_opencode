@@ -7,11 +7,13 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,59 @@ TASKER_READ_ONLY_SUBCOMMANDS = frozenset(
     {"config", "current", "find", "get", "help", "list", "next", "queue"}
 )
 TASKER_WRITE_SUBCOMMANDS = frozenset({"add", "link", "set"})
+TASKER_SANDBOX_PASSTHROUGH_ENV = frozenset(
+    {
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "SYSTEMROOT",
+        "WINDIR",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "PORTKEY_API_KEY",
+        "PORTKEY_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+    }
+)
+TASKER_SANDBOX_CHILD_ENV = frozenset(
+    TASKER_SANDBOX_PASSTHROUGH_ENV
+    | {
+        "CI",
+        "GIT_TERMINAL_PROMPT",
+        "GIT_EDITOR",
+        "GIT_PAGER",
+        "PAGER",
+        "GCM_INTERACTIVE",
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CONFIG_DIRS",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "TMPDIR",
+        "PATH",
+        "OPENCODE_CONFIG_PATH",
+        "OPENCODE_DISABLE_PROJECT_CONFIG",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS",
+        "OPENCODE_DISABLE_EXTERNAL_SKILLS",
+        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
+        "OPENCODE_SESSION_ID",
+        "MY_OPENCODE_SESSION_ID",
+        "TASKER_E2E_ISOLATED_ENV",
+    }
+)
+TASKER_SANDBOX_BLOCKED_ENV = frozenset(
+    {
+        "CODEMEMORY_CONFIG_PATH",
+        "CODEMEMORY_SQLITE_PATH",
+        "DATABASE_URL",
+        "OPENCODE_CONFIG_CONTENT",
+    }
+)
+ACTIVE_OC_ENV: dict[str, str] | None = None
+ACTIVE_OC_CWD: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -52,7 +107,11 @@ def run_process(
     timeout_ms: int,
     env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
+    env = {
+        name: os.environ[name]
+        for name in TASKER_SANDBOX_PASSTHROUGH_ENV
+        if name in os.environ
+    }
     env.setdefault("CI", "true")
     env.setdefault("GIT_TERMINAL_PROMPT", "0")
     env.setdefault("GIT_EDITOR", "true")
@@ -60,7 +119,15 @@ def run_process(
     env.setdefault("PAGER", "cat")
     env.setdefault("GCM_INTERACTIVE", "never")
     if env_overrides:
-        env.update(env_overrides)
+        env.update(
+            {
+                name: value
+                for name, value in env_overrides.items()
+                if name in TASKER_SANDBOX_CHILD_ENV
+            }
+        )
+    for name in TASKER_SANDBOX_BLOCKED_ENV:
+        env.pop(name, None)
     return subprocess.run(
         command,
         cwd=cwd,
@@ -72,7 +139,139 @@ def run_process(
     )
 
 
+def resolve_tasker_launcher(name: str) -> str:
+    launcher = shutil.which(name)
+    if launcher is None:
+        raise RuntimeError(f"tasker e2e sandbox requires an installed {name} launcher")
+    resolved = Path(launcher).resolve(strict=True)
+    if not resolved.is_file() or not os.access(resolved, os.X_OK):
+        raise RuntimeError(f"tasker e2e sandbox launcher is not executable: {name}")
+    return str(resolved)
+
+
+def resolve_tasker_launchers() -> tuple[str, str]:
+    return resolve_tasker_launcher("oc"), resolve_tasker_launcher("opencode")
+
+
+def render_tasker_oc_launcher(real_oc: str, codememory_config: Path) -> str:
+    template = """#!__PYTHON_EXECUTABLE__
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+
+REAL_OC = __REAL_OC__
+CONFIG_PATH = __CONFIG_PATH__
+
+
+def reject() -> None:
+    print("tasker sandbox rejected Codememory config override", file=sys.stderr)
+    raise SystemExit(64)
+
+
+def safe_environment() -> dict[str, str]:
+    names = (
+        "HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CONFIG_DIRS",
+        "XDG_CACHE_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "PORTKEY_API_KEY",
+        "PORTKEY_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",
+    )
+    environment = {"PATH": os.defpath}
+    environment.update(
+        {name: os.environ[name] for name in names if os.environ.get(name)}
+    )
+    return environment
+
+
+def main() -> int:
+    if any(
+        argument == "--config" or argument.startswith("--config=")
+        for argument in sys.argv[1:]
+    ):
+        reject()
+    result = subprocess.run(
+        [REAL_OC, "--config", CONFIG_PATH, *sys.argv[1:]],
+        capture_output=False,
+        check=False,
+        env=safe_environment(),
+    )
+    return result.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+    return (
+        template.replace("__PYTHON_EXECUTABLE__", str(Path(sys.executable).resolve()))
+        .replace("__REAL_OC__", repr(str(Path(real_oc).resolve())))
+        .replace("__CONFIG_PATH__", repr(str(codememory_config.resolve())))
+    )
+
+
+def configure_tasker_runtime_launchers(
+    runtime_env: dict[str, str], *, real_oc: str, real_opencode: str | None = None
+) -> None:
+    wrapper = Path(runtime_env["TASKER_E2E_OC_WRAPPER"])
+    if wrapper.exists() or wrapper.is_symlink():
+        raise RuntimeError("tasker e2e sandbox refuses a pre-existing oc wrapper")
+    wrapper.write_text(
+        render_tasker_oc_launcher(
+            real_oc,
+            Path(runtime_env["TASKER_E2E_CODEMEMORY_CONFIG"]),
+        ),
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o700)
+    real_rg = shutil.which("rg")
+    rg_wrapper = Path(runtime_env["TASKER_E2E_RG_WRAPPER"])
+    if real_rg is not None:
+        resolved_rg = Path(real_rg).resolve(strict=True)
+        if rg_wrapper.exists() or rg_wrapper.is_symlink():
+            raise RuntimeError("tasker e2e sandbox refuses a pre-existing rg wrapper")
+        rg_wrapper.symlink_to(resolved_rg)
+    runtime_env["TASKER_E2E_REAL_OC"] = str(Path(real_oc).resolve(strict=True))
+    if real_opencode is not None:
+        runtime_env["TASKER_E2E_OPENCODE_BIN"] = str(
+            Path(real_opencode).resolve(strict=True)
+        )
+
+
 def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
+    config_home.mkdir(parents=True, exist_ok=True)
+    if config_home.is_symlink():
+        raise RuntimeError("tasker e2e sandbox refuses a symlinked temporary root")
+    existing_wrapper = config_home / "bin" / "oc"
+    existing_rg_wrapper = config_home / "bin" / "rg"
+    if (
+        existing_wrapper.exists()
+        or existing_wrapper.is_symlink()
+        or (existing_rg_wrapper.exists() or existing_rg_wrapper.is_symlink())
+    ):
+        raise RuntimeError("tasker e2e sandbox refuses a pre-existing tool wrapper")
+    if any(config_home.iterdir()):
+        raise RuntimeError("tasker e2e sandbox requires an empty temporary root")
+    config_home = config_home.resolve()
+    wrapper = config_home / "bin" / "oc"
+    rg_wrapper = wrapper.with_name("rg")
+    if wrapper.parent.is_symlink() or any(
+        path.exists() or path.is_symlink() for path in (wrapper, rg_wrapper)
+    ):
+        raise RuntimeError("tasker e2e sandbox refuses a pre-existing tool wrapper")
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
     config_root = config_home / "opencode"
     agent_dir = config_root / "agent"
     agent_dir.mkdir(parents=True, exist_ok=True)
@@ -98,12 +297,115 @@ def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
         + "\n",
         encoding="utf-8",
     )
-    return {
-        "XDG_CONFIG_HOME": str(config_home),
-        "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
-        "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
-        "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "1",
+    codememory_root = config_home / "codememory"
+    codememory_root.mkdir(parents=True, exist_ok=True)
+    codememory_config = config_home / "codememory.sqlite.yaml"
+    codememory_database = codememory_root / "tasker-e2e.sqlite3"
+    codememory_cache = config_home / "codememory-cache"
+    codememory_config.write_text(
+        "\n".join(
+            (
+                "version: 1",
+                "database:",
+                "  backend: sqlite",
+                "  url: ''",
+                f"  path: {json.dumps(str(codememory_database))}",
+                "  max_connections: 1",
+                "models:",
+                "  summary_model: opencode-small",
+                "  summary_tool: auto",
+                "  decision_model: opencode-small",
+                "cache:",
+                "  enabled: true",
+                f"  dir: {json.dumps(str(codememory_cache))}",
+                "  reuse_unchanged: true",
+                "  ttl_minutes: 60",
+                "defaults:",
+                "  scope_key: tasker-e2e",
+                "  canonicalize_worktree: true",
+                "  prefer_alias: true",
+                "session:",
+                "  stale_after_minutes: 30",
+                "  touch_on_write: true",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    codememory_config.chmod(0o600)
+    workspace = config_home / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    (workspace / "docs").symlink_to(REPO_ROOT / "docs", target_is_directory=True)
+    (workspace / "AGENTS.md").symlink_to(REPO_ROOT / "AGENTS.md")
+    workspace_codememory = workspace / ".codememory"
+    workspace_codememory.mkdir(parents=True, exist_ok=True)
+    (workspace_codememory / "config.sqlite.yaml").write_text(
+        codememory_config.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    scenario_root = config_home / "scenarios"
+    scenario_root.mkdir(parents=True, exist_ok=True)
+    runtime_paths = {
+        "home": config_home / "home",
+        "cache": config_home / "cache",
+        "data": config_home / "data",
+        "state": config_home / "state",
+        "tmp": config_home / "tmp",
+        "config_dirs": config_home / "config-dirs",
     }
+    for path in runtime_paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    runtime_env = {
+        name: os.environ[name]
+        for name in TASKER_SANDBOX_PASSTHROUGH_ENV
+        if name in os.environ
+    }
+    runtime_env.update(
+        {
+            "TASKER_E2E_ISOLATED_ENV": "1",
+            "HOME": str(runtime_paths["home"]),
+            "XDG_CONFIG_HOME": str(config_home),
+            "XDG_CONFIG_DIRS": str(runtime_paths["config_dirs"]),
+            "XDG_CACHE_HOME": str(runtime_paths["cache"]),
+            "XDG_DATA_HOME": str(runtime_paths["data"]),
+            "XDG_STATE_HOME": str(runtime_paths["state"]),
+            "TMPDIR": str(runtime_paths["tmp"]),
+            "PATH": str(wrapper.parent),
+            "OPENCODE_CONFIG_PATH": str(config_root / "opencode.json"),
+            "OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+            "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
+            "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1",
+            "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS": "1",
+            "TASKER_E2E_CODEMEMORY_CONFIG": str(codememory_config),
+            "TASKER_E2E_CODEMEMORY_DATABASE": str(codememory_database),
+            "TASKER_E2E_OC_WRAPPER": str(wrapper),
+            "TASKER_E2E_RG_WRAPPER": str(rg_wrapper),
+            "TASKER_E2E_WORKSPACE": str(workspace),
+            "TASKER_E2E_SCENARIO_ROOT": str(scenario_root),
+        }
+    )
+    return runtime_env
+
+
+def initialize_tasker_runtime(
+    runtime_env: dict[str, str], *, cwd: Path | None = None
+) -> None:
+    real_oc = runtime_env.get("TASKER_E2E_REAL_OC")
+    config = runtime_env.get("TASKER_E2E_CODEMEMORY_CONFIG")
+    if not real_oc or not config:
+        raise RuntimeError("tasker e2e runtime launchers are not configured")
+    result = run_process(
+        [real_oc, "--config", config, "db", "migrate", "--format", "json"],
+        cwd=cwd or Path(runtime_env["TASKER_E2E_WORKSPACE"]),
+        timeout_ms=120000,
+        env_overrides={**runtime_env, "PATH": os.defpath},
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Codememory sandbox initialization failed: {result.stderr}")
+
+
+def direct_oc_environment(runtime_env: dict[str, str]) -> dict[str, str]:
+    """Give direct harness calls system tools without exposing host environment."""
+    return {**runtime_env, "PATH": os.defpath}
 
 
 def _oc_subcommand(tokens: list[str]) -> str:
@@ -141,7 +443,9 @@ def validate_tasker_shell_command(command: str) -> None:
     for token in tokens:
         if token == "&&":
             if not segments[-1]:
-                raise AssertionError(f"Tasker emitted invalid shell chaining: {command}")
+                raise AssertionError(
+                    f"Tasker emitted invalid shell chaining: {command}"
+                )
             segments.append([])
             continue
         if token and set(token) <= SHELL_OPERATOR_CHARS:
@@ -178,7 +482,21 @@ def validate_tasker_shell_command(command: str) -> None:
 
 
 def oc_json(*args: str) -> dict[str, Any]:
-    result = run_process(["oc", *args], cwd=REPO_ROOT, timeout_ms=120000)
+    runtime_env = ACTIVE_OC_ENV
+    if runtime_env is None:
+        raise RuntimeError("tasker e2e Codememory runtime is not configured")
+    executable = runtime_env["TASKER_E2E_REAL_OC"]
+    config = runtime_env["TASKER_E2E_CODEMEMORY_CONFIG"]
+    command = [executable]
+    command.extend(("--config", config))
+    command.extend(args)
+    cwd = ACTIVE_OC_CWD or Path(runtime_env["TASKER_E2E_WORKSPACE"])
+    result = run_process(
+        command,
+        cwd=cwd,
+        timeout_ms=120000,
+        env_overrides=direct_oc_environment(runtime_env),
+    )
     if result.returncode != 0:
         raise RuntimeError(f"oc {' '.join(args)} failed: {result.stderr}")
     return json.loads(result.stdout)
@@ -272,7 +590,9 @@ def choose_id(found: dict[str, set[str]], kind: str, title: str) -> str:
     raise AssertionError(f"missing {kind} with title '{title}'")
 
 
-def build_scenarios(total_runs: int) -> list[Scenario]:
+def build_scenarios(
+    total_runs: int, *, worktree_root: Path | None = None
+) -> list[Scenario]:
     relation_phrases = [
         "make docs depend on migration",
         "make docs only after migration",
@@ -281,11 +601,15 @@ def build_scenarios(total_runs: int) -> list[Scenario]:
         "migration must finish before docs",
     ]
     stamp = int(time.time())
+    if worktree_root is None:
+        worktree_root = Path(tempfile.mkdtemp(prefix="tasker-e2e-scenarios-"))
+    worktree_root.mkdir(parents=True, exist_ok=True)
     scenarios: list[Scenario] = []
     for index in range(total_runs):
         scope = f"tasker-e2e-{stamp}-{index:02d}"
-        worktree = tempfile.mkdtemp(prefix=f"tasker-e2e-{index:02d}-")
         prefix = f"tasker-e2e-{index:02d}"
+        worktree = worktree_root / f"{prefix}-worktree"
+        worktree.mkdir(parents=True, exist_ok=True)
         if index % 5 == 0:
             task_title = f"{prefix} task"
             memory_title = f"{prefix} memory"
@@ -557,53 +881,125 @@ def validate_scenario(
 def run_scenario(
     scenario: Scenario, *, timeout_ms: int, runtime_env: dict[str, str]
 ) -> dict[str, Any]:
+    global ACTIVE_OC_CWD, ACTIVE_OC_ENV
+    previous_oc_env = ACTIVE_OC_ENV
+    previous_oc_cwd = ACTIVE_OC_CWD
+    ACTIVE_OC_ENV = runtime_env
+    ACTIVE_OC_CWD = Path(runtime_env["TASKER_E2E_WORKSPACE"])
     run_count = 2 if scenario.mode == "duplicate" else 1
     last_events: list[dict[str, Any]] = []
-    for _ in range(run_count):
-        result = run_process(
-            [
-                "opencode",
-                "run",
-                "--model",
-                TASKER_MODEL,
-                "--agent",
-                "tasker",
-                "--format",
-                "json",
-                "--dir",
-                str(REPO_ROOT),
-                scenario.prompt,
-            ],
-            cwd=REPO_ROOT,
-            timeout_ms=timeout_ms,
-            env_overrides=runtime_env,
-        )
-        last_events = parse_events(result.stdout)
-        if result.returncode != 0:
-            raise AssertionError(result.stderr or result.stdout)
-    return validate_scenario(scenario, last_events)
+    try:
+        for _ in range(run_count):
+            result = run_process(
+                [
+                    runtime_env["TASKER_E2E_OPENCODE_BIN"],
+                    "run",
+                    "--model",
+                    TASKER_MODEL,
+                    "--agent",
+                    "tasker",
+                    "--format",
+                    "json",
+                    "--dir",
+                    runtime_env["TASKER_E2E_WORKSPACE"],
+                    scenario.prompt,
+                ],
+                cwd=Path(runtime_env["TASKER_E2E_WORKSPACE"]),
+                timeout_ms=timeout_ms,
+                env_overrides=runtime_env,
+            )
+            last_events = parse_events(result.stdout)
+            if result.returncode != 0:
+                raise AssertionError(result.stderr or result.stdout)
+        return validate_scenario(scenario, last_events)
+    finally:
+        ACTIVE_OC_ENV = previous_oc_env
+        ACTIVE_OC_CWD = previous_oc_cwd
+
+
+def snapshot_tree(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {"<missing>": ""}
+    snapshot: dict[str, str] = {}
+    for candidate in sorted(path.rglob("*")):
+        relative = str(candidate.relative_to(path))
+        if candidate.is_symlink():
+            snapshot[relative] = f"symlink:{candidate.readlink()}"
+        elif candidate.is_file():
+            snapshot[relative] = sha256(candidate.read_bytes()).hexdigest()
+    return snapshot
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     started = time.time()
-    scenarios = build_scenarios(args.runs)
     passed: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
-    with tempfile.TemporaryDirectory(prefix="tasker-e2e-config-") as config_home:
-        runtime_env = prepare_tasker_runtime(Path(config_home))
-        for scenario in scenarios:
-            try:
-                passed.append(
-                    run_scenario(
-                        scenario,
-                        timeout_ms=args.timeout_ms,
-                        runtime_env=runtime_env,
+    repository_codememory = REPO_ROOT / ".codememory"
+    repository_codememory_before = snapshot_tree(repository_codememory)
+    disposable_database_created = False
+    temporary_root_removed = False
+    try:
+        real_oc, real_opencode = resolve_tasker_launchers()
+        with tempfile.TemporaryDirectory(prefix="tasker-e2e-config-") as config_home:
+            temporary_root = Path(config_home)
+            runtime_env = prepare_tasker_runtime(temporary_root)
+            configure_tasker_runtime_launchers(
+                runtime_env,
+                real_oc=real_oc,
+                real_opencode=real_opencode,
+            )
+            initialize_tasker_runtime(runtime_env)
+            scenarios = build_scenarios(
+                args.runs,
+                worktree_root=Path(runtime_env["TASKER_E2E_SCENARIO_ROOT"]),
+            )
+            for scenario in scenarios:
+                try:
+                    passed.append(
+                        run_scenario(
+                            scenario,
+                            timeout_ms=args.timeout_ms,
+                            runtime_env=runtime_env,
+                        )
                     )
-                )
-            except Exception as exc:  # noqa: BLE001
-                failures.append({"name": scenario.name, "error": str(exc)})
-                break
+                except Exception as exc:  # noqa: BLE001
+                    failures.append({"name": scenario.name, "error": str(exc)})
+                    break
+            disposable_database_created = Path(
+                runtime_env["TASKER_E2E_CODEMEMORY_DATABASE"]
+            ).is_file()
+    except Exception as exc:  # noqa: BLE001
+        failures.append({"name": "runtime-isolation", "error": str(exc)})
+    finally:
+        temporary_root_removed = (
+            "temporary_root" in locals() and not temporary_root.exists()
+        )
+
+    repository_codememory_isolated = (
+        snapshot_tree(repository_codememory) == repository_codememory_before
+    )
+    if not repository_codememory_isolated:
+        failures.append(
+            {
+                "name": "repository-codememory-isolation",
+                "error": "repository .codememory content changed during the disposable sandbox run",
+            }
+        )
+    if not temporary_root_removed:
+        failures.append(
+            {
+                "name": "temporary-root-cleanup",
+                "error": "tasker sandbox temporary root was not removed",
+            }
+        )
+    if not disposable_database_created:
+        failures.append(
+            {
+                "name": "disposable-codememory-store",
+                "error": "the sandbox did not create its configured disposable Codememory database",
+            }
+        )
     warning_count = sum(len(item.get("warnings", [])) for item in passed)
     clean_run = not failures and warning_count == 0 and len(passed) == args.runs
     payload = {
@@ -612,6 +1008,9 @@ def main(argv: list[str]) -> int:
         "completed_runs": len(passed),
         "failed_runs": len(failures),
         "warning_count": warning_count,
+        "repository_codememory_isolated": repository_codememory_isolated,
+        "disposable_database_created": disposable_database_created,
+        "temporary_root_removed": temporary_root_removed,
         "duration_seconds": round(time.time() - started, 2),
         "passed": passed,
         "failures": failures,
