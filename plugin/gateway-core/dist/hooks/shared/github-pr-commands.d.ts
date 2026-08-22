@@ -3,6 +3,7 @@ export interface PrBodyInspection {
     inspectable: boolean;
 }
 export declare function tokenizeShellCommand(command: string): string[];
+export declare function resolveGitHubPrCreateEvidenceDirectory(command: string, directory: string): string | null;
 export declare function isGitHubPrMergeCommand(command: string): boolean;
 export declare function extractGitHubPrMergeSelector(command: string): string;
 export declare function gitHubPrMergeHasStrategy(command: string): boolean;

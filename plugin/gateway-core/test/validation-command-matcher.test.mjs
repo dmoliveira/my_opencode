@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { classifyValidationCommand, isValidationCommand } from "../dist/hooks/shared/validation-command-matcher.js"
+import {
+  classifyValidationCommand,
+  isValidationCommand,
+  validationCommandDirectory,
+} from "../dist/hooks/shared/validation-command-matcher.js"
 
 test("validation-command-matcher classifies repo-native and wrapped test commands", () => {
   assert.deepEqual(classifyValidationCommand("python3 scripts/selftest.py"), ["test"])
@@ -19,7 +23,7 @@ test("validation-command-matcher covers run and prefix package-manager forms", (
 
 test("validation-command-matcher exposes validation truthiness", () => {
   assert.equal(isValidationCommand("make validate"), true)
-  assert.deepEqual(classifyValidationCommand("make validate"), ["lint"])
+  assert.deepEqual(classifyValidationCommand("make validate"), ["lint", "test"])
   assert.deepEqual(classifyValidationCommand("uvx ruff check ."), ["lint"])
   assert.deepEqual(classifyValidationCommand("uv run ruff check src"), ["lint"])
   assert.equal(isValidationCommand("git status --short"), false)
@@ -52,6 +56,16 @@ test("validation-command-matcher accepts quoted metacharacters and environment p
   assert.deepEqual(classifyValidationCommand("CI=true npm test -- --name='a|b'"), ["test"])
   assert.deepEqual(
     classifyValidationCommand("OPENCODE_SESSION_ID='session-1' CI=true make validate"),
-    ["lint"],
+    ["lint", "test"],
   )
+})
+
+test("validation-command-matcher binds only standalone absolute make -C validation to its target", () => {
+  assert.deepEqual(classifyValidationCommand('make -C "/tmp/target worktree" validate'), ["lint", "test"])
+  assert.equal(
+    validationCommandDirectory('CI=true make -C "/tmp/target worktree" validate', "/tmp/session-root"),
+    "/tmp/target worktree",
+  )
+  assert.equal(validationCommandDirectory("make -C relative validate", "/tmp/session-root"), "/tmp/session-root")
+  assert.equal(validationCommandDirectory("make -C /tmp/target validate && true", "/tmp/session-root"), "/tmp/session-root")
 })

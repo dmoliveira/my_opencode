@@ -5,7 +5,7 @@ import {
   type LlmDecisionRuntime,
   writeDecisionComparisonAudit,
 } from "../shared/llm-decision-runtime.js"
-import { classifyValidationCommand } from "../shared/validation-command-matcher.js"
+import { classifyValidationCommand, validationCommandDirectory } from "../shared/validation-command-matcher.js"
 import {
   captureGitStateFingerprint,
   clearValidationEvidence,
@@ -49,6 +49,7 @@ interface PendingCommandEntry {
   sessionId: string
   command: string
   categories: ValidationEvidenceCategory[]
+  directory: string
   fingerprint: GitStateFingerprint | null
 }
 
@@ -214,14 +215,16 @@ export function createValidationEvidenceLedgerHook(options: {
           return
         }
         const categories = classifyValidationCommand(command)
+        const directory = validationCommandDirectory(command, directoryFor(eventPayload, options.directory))
         pendingCommands.set(invocationId, {
           callId: invocationId,
           sessionId: sid,
           command,
           categories,
+          directory,
           fingerprint:
             categories.length > 0
-              ? captureGitStateFingerprint(directoryFor(eventPayload, options.directory))
+              ? captureGitStateFingerprint(directory)
               : null,
         })
         return
@@ -259,7 +262,7 @@ export function createValidationEvidenceLedgerHook(options: {
         return
       }
 
-      const directory = directoryFor(eventPayload, options.directory)
+      const directory = pending.directory
       if (pending.categories.length === 0) {
         if (options.decisionRuntime) {
           await recordLlmTelemetry(options.decisionRuntime, directory, sid, pending.command)

@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 const COMMAND_SEPARATOR_TOKENS = new Set(["&&", "||", ";", "|"]);
 const FIELD_FLAGS = new Set(["-f", "-F", "--field", "--raw-field"]);
@@ -58,6 +59,64 @@ function ghCommandSlices(command) {
         index = commandStart + slice.length + 1;
     }
     return commands;
+}
+function prCreateHead(tokens) {
+    for (let index = 3; index < tokens.length; index += 1) {
+        const token = tokens[index];
+        if (token === "--head") {
+            return { specified: true, value: tokens[index + 1] ?? "" };
+        }
+        if (token.startsWith("--head=")) {
+            return { specified: true, value: token.slice("--head=".length) };
+        }
+    }
+    return { specified: false, value: "" };
+}
+function isLocalBranchName(branch) {
+    if (!branch || branch.includes(":") || !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(branch)) {
+        return false;
+    }
+    try {
+        execFileSync("git", ["check-ref-format", "--branch", branch], { stdio: "ignore" });
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+// Resolves explicit gh pr create heads only. API-based PR creation remains
+// fail-closed when branch-bound validation evidence is required.
+export function resolveGitHubPrCreateEvidenceDirectory(command, directory) {
+    const prCommands = ghCommandSlices(command).filter((tokens) => tokens[1] === "pr" && tokens[2] === "create");
+    if (prCommands.length !== 1) {
+        return null;
+    }
+    const head = prCreateHead(prCommands[0]);
+    if (!head.specified) {
+        return directory;
+    }
+    if (!isLocalBranchName(head.value)) {
+        return null;
+    }
+    try {
+        const worktrees = execFileSync("git", ["-C", directory, "worktree", "list", "--porcelain"], {
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        const expectedBranch = `refs/heads/${head.value}`;
+        for (const entry of worktrees.split("\n\n")) {
+            const lines = entry.split("\n");
+            const worktree = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
+            const branch = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
+            if (worktree && branch === expectedBranch) {
+                return realpathSync(worktree);
+            }
+        }
+    }
+    catch {
+        // Evidence lookup must fail closed when Git cannot prove the worktree.
+    }
+    return null;
 }
 function inlineOptionValue(token, name) {
     if (token.startsWith(`${name}=`)) {
