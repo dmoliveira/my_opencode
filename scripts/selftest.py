@@ -18378,8 +18378,8 @@ jobs:
             and routing_categories.get("critical", {}).get("model")
             == "openai/gpt-5.6-sol"
             and routing_categories.get("writing", {}).get("model")
-            == "openai/gpt-5.4",
-            "model routing schema should use Luna, Terra, and Sol for subagent categories while preserving writing",
+            == "openai/gpt-5.6-terra",
+            "model routing schema should use current GPT-5.6 tiers for all categories",
         )
 
         expected_subagent_models = {
@@ -18435,7 +18435,7 @@ jobs:
             },
             "tasker": {
                 "category": "writing",
-                "model": "openai/gpt-5.4",
+                "model": "openai/gpt-5.6-terra",
                 "pinned": False,
             },
         }

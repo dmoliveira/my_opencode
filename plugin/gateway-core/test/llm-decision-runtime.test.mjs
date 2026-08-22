@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   consumeLlmDecisionFallbackNotice,
+  buildCompactDecisionCacheKey,
   buildSingleCharDecisionPrompt,
   createLlmDecisionRuntime,
   peekLlmDecisionFallbackNotice,
@@ -37,6 +38,24 @@ test("buildSingleCharDecisionPrompt encodes answer-only contract", () => {
 test("truncateDecisionText marks oversized content", () => {
   const value = truncateDecisionText("abcdefghij", 8)
   assert.match(value, /\[truncated\]$/)
+})
+
+test("compact decision cache keys fingerprint text beyond the visible prefix", () => {
+  const prefix = "shared intent " + "x".repeat(300)
+  const first = buildCompactDecisionCacheKey({
+    prefix: "route",
+    parts: ["explore", "librarian"],
+    text: `${prefix} tail-one`,
+    maxTextChars: 64,
+  })
+  const second = buildCompactDecisionCacheKey({
+    prefix: "route",
+    parts: ["explore", "librarian"],
+    text: `${prefix} tail-two`,
+    maxTextChars: 64,
+  })
+
+  assert.notEqual(first, second)
 })
 
 test("shouldAuditDecisionDisagreement only reports real semantic differences", () => {
@@ -536,6 +555,57 @@ test("llm decision runtime caches accepted decisions", async () => {
   assert.equal(second.cached, true)
   assert.equal(second.meaning, "continue")
   assert.equal(calls, 1)
+})
+
+test("llm decision runtime does not reuse a cached decision for a different long tail", async () => {
+  let calls = 0
+  const runtime = createLlmDecisionRuntime({
+    directory: process.cwd(),
+    config: {
+      enabled: true,
+      mode: "assist",
+      command: "opencode",
+      model: "github-copilot/gpt-5-mini",
+      env: {},
+      timeoutMs: 1000,
+      failureCooldownMs: 10000,
+      maxPromptChars: 200,
+      maxContextChars: 1000,
+      enableCache: true,
+      cacheTtlMs: 10000,
+      maxCacheEntries: 8,
+    },
+    runner: async () => {
+      calls += 1
+      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+    },
+  })
+  const textPrefix = "shared intent " + "x".repeat(300)
+  const base = {
+    hookId: "test-hook",
+    sessionId: "session-cache-tail",
+    templateId: "route-v1",
+    instruction: "Pick a route.",
+    allowedChars: ["Y", "N"],
+  }
+  const keyFor = (tail) =>
+    buildCompactDecisionCacheKey({
+      prefix: "route",
+      parts: ["explore", "librarian"],
+      text: `${textPrefix} ${tail}`,
+      maxTextChars: 64,
+    })
+
+  await runtime.decide({ ...base, context: `${textPrefix} tail-one`, cacheKey: keyFor("tail-one") })
+  await runtime.decide({ ...base, context: `${textPrefix} tail-two`, cacheKey: keyFor("tail-two") })
+  const cached = await runtime.decide({
+    ...base,
+    context: `${textPrefix} tail-one`,
+    cacheKey: keyFor("tail-one"),
+  })
+
+  assert.equal(calls, 2)
+  assert.equal(cached.cached, true)
 })
 
 test("llm decision runtime prunes cache to max entries", async () => {

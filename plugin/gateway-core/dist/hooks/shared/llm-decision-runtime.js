@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { basename } from "node:path";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
@@ -106,8 +107,14 @@ export function buildCompactDecisionCacheKey(options) {
     const prefix = String(options.prefix ?? "").trim();
     const parts = (options.parts ?? []).map((part) => String(part ?? "").trim()).filter(Boolean);
     const maxTextChars = safePositiveInt(options.maxTextChars ?? 240, 240);
-    const normalizedText = String(options.text ?? "").trim().toLowerCase().replace(/\s+/g, " ").slice(0, maxTextChars);
-    return [prefix, ...parts, normalizedText].filter(Boolean).join(":");
+    const normalizedText = String(options.text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    const visibleText = normalizedText.slice(0, maxTextChars);
+    const fingerprint = normalizedText
+        ? createHash("sha256").update(normalizedText).digest("hex").slice(0, 16)
+        : "";
+    return [prefix, ...parts, visibleText, fingerprint ? `h=${fingerprint}` : ""]
+        .filter(Boolean)
+        .join(":");
 }
 export function buildSingleCharDecisionPrompt(request) {
     const compactContext = sanitizeDecisionText(request.context) || "(empty)";

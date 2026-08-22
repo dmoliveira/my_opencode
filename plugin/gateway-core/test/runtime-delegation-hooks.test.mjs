@@ -3,6 +3,7 @@ import { dirname, join } from "node:path"
 import test from "node:test"
 import { fileURLToPath } from "node:url"
 
+import GatewayCorePlugin from "../dist/index.js"
 import { createAgentDeniedToolEnforcerHook } from "../dist/hooks/agent-denied-tool-enforcer/index.js"
 import { createAgentDiscoverabilityInjectorHook } from "../dist/hooks/agent-discoverability-injector/index.js"
 import { createAgentModelResolverHook } from "../dist/hooks/agent-model-resolver/index.js"
@@ -209,6 +210,130 @@ test("agent model resolver preserves explicit-none context for inferred assist d
   assert.equal(output.args.subagent_type, "librarian")
   assert.match(capturedContext, /explicit_subagent=none/)
   assert.doesNotMatch(capturedInstruction, /K=keep explicit choice/)
+})
+
+test("agent model resolver bounds routing context and fingerprints the retained tail", async () => {
+  const contexts = []
+  const cacheKeys = []
+  const hook = createAgentModelResolverHook({
+    directory: REPO_DIRECTORY,
+    enabled: true,
+    defaultOverrideDelta: 99,
+    defaultIntentThreshold: 99,
+    agentPolicyOverrides: {},
+    decisionRuntime: {
+      config: {
+        enabled: true,
+        mode: "assist",
+        command: "opencode",
+        model: "openai/gpt-5.1-codex-mini",
+        timeoutMs: 1000,
+        maxPromptChars: 200,
+        maxContextChars: 1000,
+      },
+      decide: async (request) => {
+        contexts.push(request.context)
+        cacheKeys.push(request.cacheKey)
+        return {
+          mode: "assist",
+          accepted: true,
+          char: "N",
+          raw: "N",
+          durationMs: 1,
+          model: "openai/gpt-5.1-codex-mini",
+          templateId: "delegation-route-v1",
+        }
+      },
+    },
+  })
+
+  for (const tail of ["tail-one", "tail-two"]) {
+    const output = {
+      args: {
+        prompt: `Gather official docs and upstream reference. HEAD ${"x".repeat(1600)} ${tail}`,
+        description: "Need external references.",
+      },
+    }
+    await hook.event("tool.execute.before", {
+      input: { tool: "task", sessionID: `session-routing-context-${tail}` },
+      output,
+    })
+  }
+
+  assert.equal(contexts.length, 2)
+  assert.ok(contexts.every((context) => context.length <= 1000))
+  assert.match(contexts[0], /HEAD/)
+  assert.match(contexts[0], /tail-one/)
+  assert.match(contexts[1], /tail-two/)
+  assert.notEqual(cacheKeys[0], cacheKeys[1])
+})
+
+test("agent efficiency flow routes, shapes, caps, and releases delegated work", async () => {
+  const plugin = GatewayCorePlugin({
+    directory: REPO_DIRECTORY,
+    config: {
+      hooks: {
+        enabled: true,
+        order: [
+          "agent-model-resolver",
+          "agent-context-shaper",
+          "delegation-concurrency-guard",
+        ],
+        disabled: [],
+      },
+      delegationConcurrencyGuard: {
+        enabled: true,
+        maxTotalConcurrent: 2,
+        maxExpensiveConcurrent: 2,
+        maxDeepConcurrent: 2,
+        maxCriticalConcurrent: 1,
+      },
+    },
+  })
+
+  const makeOutput = (label) => ({
+    args: {
+      subagent_type: "explore",
+      description: `Map ${label} implementation locations`,
+      prompt: `Find implementation location for ${label} in the repository.`,
+    },
+  })
+  const first = makeOutput("first")
+  const second = makeOutput("second")
+  const third = makeOutput("third")
+
+  await plugin["tool.execute.before"](
+    { tool: "task", sessionID: "session-agent-efficiency-e2e" },
+    first,
+  )
+  await plugin["tool.execute.before"](
+    { tool: "task", sessionID: "session-agent-efficiency-e2e" },
+    second,
+  )
+
+  assert.equal(first.args.category, "quick")
+  assert.match(first.args.prompt, /one objective, then return/)
+  assert.match(first.args.prompt, /handoff: findings, evidence, confidence/)
+  assert.equal((first.args.prompt.match(/delegated task focus/g) ?? []).length, 1)
+
+  await assert.rejects(
+    () =>
+      plugin["tool.execute.before"](
+        { tool: "task", sessionID: "session-agent-efficiency-e2e" },
+        third,
+      ),
+    /maxTotalConcurrent/i,
+  )
+
+  await plugin["tool.execute.after"](
+    { tool: "task", sessionID: "session-agent-efficiency-e2e" },
+    { ...first, output: "completed" },
+  )
+  await plugin["tool.execute.before"](
+    { tool: "task", sessionID: "session-agent-efficiency-e2e" },
+    third,
+  )
+  assert.equal(third.args.category, "quick")
 })
 
 test("agent model resolver shadow or assist mode does not override explicit route", async () => {

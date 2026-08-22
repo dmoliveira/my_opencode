@@ -271,6 +271,15 @@
   },
   {
     "language": "python",
+    "file": "build_agents.py",
+    "function": "build_agents",
+    "kind": "path.unlink",
+    "destination": "path",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
     "file": "checkpoint_snapshot_manager.py",
     "function": "_atomic_write_json",
     "kind": "path.mkdir",
