@@ -47,6 +47,18 @@ class ManagedRuntimePolicyTest(unittest.TestCase):
             self._config()["plugin"],
         )
 
+    def test_gateway_sidecar_disables_selected_optional_hooks(self) -> None:
+        config = json.loads(
+            (REPO_ROOT / "gateway-core.config.json").read_text(encoding="utf-8")
+        )
+        for section in (
+            "directoryReadmeInjector",
+            "keywordDetector",
+            "thinkMode",
+        ):
+            with self.subTest(section=section):
+                self.assertIs(config[section]["enabled"], False)
+
 
 if __name__ == "__main__":
     unittest.main()
