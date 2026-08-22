@@ -68,8 +68,8 @@ export function createPrBodyEvidenceGuardHook(options: {
           : options.directory
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim()
       const evidenceDirectory = resolveGitHubPrCreateEvidenceDirectory(command, directory)
-      if (options.requireValidationEvidence && sessionId && requiredMarkers.length > 0) {
-        const status = evidenceDirectory
+      if (options.requireValidationEvidence && requiredMarkers.length > 0) {
+        const status = sessionId && evidenceDirectory
           ? validationEvidenceStatus(sessionId, requiredMarkers, evidenceDirectory)
           : { missing: requiredMarkers }
         if (status.missing.length > 0) {
@@ -87,7 +87,7 @@ export function createPrBodyEvidenceGuardHook(options: {
         }
       }
 
-      const inspection = inspectGitHubPrCreateBody(command, evidenceDirectory ?? directory)
+      const inspection = inspectGitHubPrCreateBody(command, directory)
       if (!inspection.inspectable) {
         if (options.allowUninspectableBody) {
           return

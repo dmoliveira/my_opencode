@@ -31,7 +31,7 @@ function isWorktreeClean(directory: string): boolean {
       .trim()
     return output.length === 0
   } catch {
-    return true
+    return false
   }
 }
 
@@ -67,7 +67,18 @@ export function createPrReadinessGuardHook(options: {
       const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim()
       const evidenceDirectory = resolveGitHubPrCreateEvidenceDirectory(command, directory)
       const prDirectory = evidenceDirectory ?? directory
-      if (options.requireCleanWorktree && !isWorktreeClean(prDirectory)) {
+      if (options.requireCleanWorktree && !evidenceDirectory) {
+        writeGatewayEventAudit(prDirectory, {
+          hook: "pr-readiness-guard",
+          stage: "skip",
+          reason_code: "pr_create_unresolved_worktree",
+          session_id: sessionId,
+        })
+        throw new Error(
+          "[pr-readiness-guard] Unable to resolve a unique local PR worktree for clean-worktree enforcement.",
+        )
+      }
+      if (options.requireCleanWorktree && evidenceDirectory && !isWorktreeClean(evidenceDirectory)) {
         writeGatewayEventAudit(prDirectory, {
           hook: "pr-readiness-guard",
           stage: "skip",
@@ -76,10 +87,10 @@ export function createPrReadinessGuardHook(options: {
         })
         throw new Error("[pr-readiness-guard] Worktree is dirty. Commit/stash changes before creating PR.")
       }
-      if (!options.requireValidationEvidence || !sessionId || required.length === 0) {
+      if (!options.requireValidationEvidence || required.length === 0) {
         return
       }
-      const status = evidenceDirectory
+      const status = sessionId && evidenceDirectory
         ? validationEvidenceStatus(sessionId, required, evidenceDirectory)
         : { missing: required }
       if (status.missing.length === 0) {
