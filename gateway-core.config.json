@@ -18,5 +18,14 @@
     "enabled": true,
     "maxSessions": 16,
     "maxLabelChars": 80
+  },
+  "directoryReadmeInjector": {
+    "enabled": false
+  },
+  "keywordDetector": {
+    "enabled": false
+  },
+  "thinkMode": {
+    "enabled": false
   }
 }

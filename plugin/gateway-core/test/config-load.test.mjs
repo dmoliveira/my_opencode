@@ -35,6 +35,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.preemptiveCompaction.guardVerbosity, "normal")
   assert.equal(config.compactionContextInjector.enabled, true)
   assert.equal(config.preemptiveCompaction.defaultContextLimitTokens, 128000)
+  assert.equal(config.globalProcessPressure.enabled, true)
   assert.equal(config.globalProcessPressure.checkCooldownToolCalls, 3)
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
   assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
@@ -738,6 +739,32 @@ test("loadGatewayConfigSource merges sidecar config with runtime source", () => 
       "auto-slash-command": "assist",
       "provider-error-classifier": "assist",
     })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSource preserves process pressure while disabling optional hooks", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-optional-hooks-"))
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(
+      join(directory, ".opencode", "gateway-core.config.json"),
+      JSON.stringify({
+        directoryReadmeInjector: { enabled: false },
+        keywordDetector: { enabled: false },
+        thinkMode: { enabled: false },
+      }),
+      "utf-8",
+    )
+
+    const loaded = loadGatewayConfigSourceWithMeta(directory, {})
+    const config = loadGatewayConfig(loaded.source)
+
+    assert.equal(config.globalProcessPressure.enabled, true)
+    assert.equal(config.directoryReadmeInjector.enabled, false)
+    assert.equal(config.keywordDetector.enabled, false)
+    assert.equal(config.thinkMode.enabled, false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
