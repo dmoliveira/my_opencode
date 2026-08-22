@@ -8,7 +8,7 @@ Primary operating contract stays in `AGENTS.md`. Use this page only when advance
 
 - Use one worktree branch per focused delivery slice.
 - Keep one writer per overlapping path.
-- Keep at most two concurrent subagents.
+- Keep at most two concurrent subagents. The project gateway overlay enforces this per gateway-core plugin instance; separate runtime instances can reserve independently.
 - Prefer read-only fan-out first, then a single integrating writer.
 
 ## Worker packet checklist
@@ -35,6 +35,11 @@ Do not repeat reviewer/verifier passes on unchanged diffs.
 - Capture the smallest useful plan before coding when work is `medium` or `large`.
 - Keep dependency graphs compact: objective, slices, dependency edges, required checks, current next slice.
 - Prefer finishing the active worktree card before opening another long-lived slice.
+
+## Compact handoffs
+
+- Delegated prompts receive a best-effort handoff reminder: return findings, evidence, confidence, affected paths, next action, and validation; omit the child transcript.
+- Treat the reminder as an output contract, not a parser-enforced schema. Keep evidence to file/line references or exact commands so the parent can decide without replaying the full child context.
 
 ## Pressure-mode defaults
 

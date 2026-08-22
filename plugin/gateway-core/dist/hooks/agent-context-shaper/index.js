@@ -50,7 +50,7 @@ function buildTaskFocusReminder(context) {
         context.metadata.avoid_when.length > 0
         ? context.metadata.avoid_when[0]
         : undefined, "scope drift or unrelated follow-up work");
-    return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups.`;
+    return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups; handoff: findings, evidence, confidence, affected paths, next action, validation; omit transcript.`;
 }
 export function createAgentContextShaperHook(options) {
     const contextByDelegation = new Map();

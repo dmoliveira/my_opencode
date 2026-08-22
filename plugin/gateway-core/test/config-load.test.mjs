@@ -120,6 +120,10 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.providerModelBudgetEnforcer.maxDelegationsPerWindow, 24)
   assert.equal(config.providerModelBudgetEnforcer.maxEstimatedTokensPerWindow, 24000)
   assert.equal(config.providerModelBudgetEnforcer.maxPerModelDelegationsPerWindow, 16)
+  assert.equal(config.delegationConcurrencyGuard.maxTotalConcurrent, 8)
+  assert.equal(config.delegationConcurrencyGuard.maxExpensiveConcurrent, 2)
+  assert.equal(config.delegationConcurrencyGuard.maxDeepConcurrent, 3)
+  assert.equal(config.delegationConcurrencyGuard.maxCriticalConcurrent, 1)
   assert.equal(config.subagentLifecycleSupervisor.enabled, true)
   assert.equal(config.subagentLifecycleSupervisor.maxRetriesPerSession, 3)
   assert.equal(config.subagentLifecycleSupervisor.staleRunningMs, 300000)
@@ -147,6 +151,26 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("loadGatewayConfig accepts the project two-worker delegation overlay", () => {
+  const config = loadGatewayConfig({
+    delegationConcurrencyGuard: {
+      enabled: true,
+      maxTotalConcurrent: 2,
+      maxExpensiveConcurrent: 2,
+      maxDeepConcurrent: 2,
+      maxCriticalConcurrent: 1,
+    },
+  })
+
+  assert.deepEqual(config.delegationConcurrencyGuard, {
+    enabled: true,
+    maxTotalConcurrent: 2,
+    maxExpensiveConcurrent: 2,
+    maxDeepConcurrent: 2,
+    maxCriticalConcurrent: 1,
+  })
 })
 
 test("hook dispatch latency config is typed and bounded", () => {

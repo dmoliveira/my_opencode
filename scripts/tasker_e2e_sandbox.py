@@ -17,7 +17,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ID_RE = re.compile(r"\b(?P<kind>task|epic|memory|doc|link)_\d+\b")
-TASKER_MODEL = "openai/gpt-5.4"
+TASKER_MODEL = "openai/gpt-5.6-terra"
 SHELL_OPERATOR_CHARS = frozenset(";&|<>")
 TASKER_READ_ONLY_SUBCOMMANDS = frozenset(
     {"config", "current", "find", "get", "help", "list", "next", "queue"}
