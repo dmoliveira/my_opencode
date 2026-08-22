@@ -125,6 +125,15 @@ from playwright_defaults import (  # type: ignore
     PLAYWRIGHT_MCP_COMMAND,
     PLAYWRIGHT_MCP_PACKAGE_SPEC,
 )
+from tasker_e2e_sandbox import (  # type: ignore
+    configure_tasker_runtime_launchers,
+    direct_oc_environment,
+    initialize_tasker_runtime,
+    prepare_tasker_runtime,
+    resolve_tasker_launcher,
+    run_process as run_tasker_process,
+    snapshot_tree,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -258,17 +267,21 @@ def run_script_layered(
     )
 
 
-def run_oc_json(cwd: Path, *args: str) -> dict:
-    env = os.environ.copy()
-    env.setdefault("OPENCODE_SESSION_ID", "selftest-tasker-sandbox")
-    env.setdefault("MY_OPENCODE_SESSION_ID", env["OPENCODE_SESSION_ID"])
-    result = subprocess.run(
-        ["oc", *args],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
+def run_oc_json(
+    cwd: Path, *args: str, env_overrides: dict[str, str] | None = None
+) -> dict:
+    if env_overrides is None:
+        raise RuntimeError("selftest Codememory runtime is not configured")
+    runtime_env = dict(env_overrides)
+    runtime_env.setdefault("OPENCODE_SESSION_ID", "selftest-tasker-sandbox")
+    runtime_env.setdefault("MY_OPENCODE_SESSION_ID", runtime_env["OPENCODE_SESSION_ID"])
+    executable = runtime_env["TASKER_E2E_REAL_OC"]
+    config = runtime_env["TASKER_E2E_CODEMEMORY_CONFIG"]
+    result = run_tasker_process(
+        [executable, "--config", config, *args],
         cwd=cwd,
+        timeout_ms=120000,
+        env_overrides=direct_oc_environment(runtime_env),
     )
     expect(result.returncode == 0, f"oc {' '.join(args)} failed: {result.stderr}")
     return parse_json_output(result.stdout)
@@ -812,9 +825,26 @@ exit 0
             )
         else:
             sandbox_scope = f"selftest-tasker-sandbox-{sha256(str(tmp).encode('utf-8')).hexdigest()[:12]}"
-            sandbox_worktree = tmp / "tasker-sandbox-worktree"
+            repository_codememory_before = snapshot_tree(REPO_ROOT / ".codememory")
+            real_oc = resolve_tasker_launcher("oc")
+            tasker_runtime_root = tmp / "tasker-codememory"
+            tasker_runtime_env = prepare_tasker_runtime(tasker_runtime_root)
+            configure_tasker_runtime_launchers(
+                tasker_runtime_env,
+                real_oc=real_oc,
+            )
+            initialize_tasker_runtime(tasker_runtime_env)
+            sandbox_worktree = Path(tasker_runtime_env["TASKER_E2E_WORKSPACE"])
+
+            def tasker_oc_json(_cwd: Path, *args: str) -> dict:
+                return run_oc_json(
+                    sandbox_worktree,
+                    *args,
+                    env_overrides=tasker_runtime_env,
+                )
+
             sandbox_worktree.mkdir(parents=True, exist_ok=True)
-            tasker_epic = run_oc_json(
+            tasker_epic = tasker_oc_json(
                 REPO_ROOT,
                 "add",
                 "epic",
@@ -830,7 +860,7 @@ exit 0
                 "--format",
                 "json",
             )
-            tasker_plan_task = run_oc_json(
+            tasker_plan_task = tasker_oc_json(
                 REPO_ROOT,
                 "add",
                 "task",
@@ -852,7 +882,7 @@ exit 0
                 "--format",
                 "json",
             )
-            tasker_docs_task = run_oc_json(
+            tasker_docs_task = tasker_oc_json(
                 REPO_ROOT,
                 "add",
                 "task",
@@ -874,7 +904,7 @@ exit 0
                 "--format",
                 "json",
             )
-            tasker_memory = run_oc_json(
+            tasker_memory = tasker_oc_json(
                 REPO_ROOT,
                 "add",
                 "memory",
@@ -892,7 +922,7 @@ exit 0
                 "--format",
                 "json",
             )
-            parent_link_one = run_oc_json(
+            parent_link_one = tasker_oc_json(
                 REPO_ROOT,
                 "link",
                 str(tasker_epic["id"]),
@@ -901,7 +931,7 @@ exit 0
                 "--format",
                 "json",
             )
-            parent_link_two = run_oc_json(
+            parent_link_two = tasker_oc_json(
                 REPO_ROOT,
                 "link",
                 str(tasker_epic["id"]),
@@ -910,7 +940,7 @@ exit 0
                 "--format",
                 "json",
             )
-            dependency_link = run_oc_json(
+            dependency_link = tasker_oc_json(
                 REPO_ROOT,
                 "link",
                 str(tasker_docs_task["id"]),
@@ -919,7 +949,7 @@ exit 0
                 "--format",
                 "json",
             )
-            memory_link = run_oc_json(
+            memory_link = tasker_oc_json(
                 REPO_ROOT,
                 "link",
                 str(tasker_memory["id"]),
@@ -929,7 +959,7 @@ exit 0
                 "json",
             )
             tasker_link_records = [
-                run_oc_json(
+                tasker_oc_json(
                     REPO_ROOT,
                     "get",
                     str(link["id"]),
@@ -978,7 +1008,7 @@ exit 0
             tasker_plan_links = {
                 "links": tasker_edges_for(str(tasker_plan_task["id"]))
             }
-            tasker_memory_full = run_oc_json(
+            tasker_memory_full = tasker_oc_json(
                 REPO_ROOT,
                 "get",
                 str(tasker_memory["id"]),
@@ -1044,6 +1074,23 @@ exit 0
                 == "selftest planning note captured through the tasker sandbox"
                 and "planning" in (tasker_memory_full.get("labels") or []),
                 "tasker sandbox memory should preserve note body and planning label",
+            )
+            tasker_database = Path(
+                tasker_runtime_env["TASKER_E2E_CODEMEMORY_DATABASE"]
+            )
+            expect(
+                tasker_database.is_file(),
+                "tasker selftest should use the configured disposable Codememory database",
+            )
+            expect(
+                snapshot_tree(REPO_ROOT / ".codememory")
+                == repository_codememory_before,
+                "tasker selftest must not change repository Codememory storage",
+            )
+            shutil.rmtree(tasker_runtime_root)
+            expect(
+                not tasker_runtime_root.exists(),
+                "tasker selftest should remove its disposable Codememory root",
             )
         literal_result = subprocess.run(
             [
