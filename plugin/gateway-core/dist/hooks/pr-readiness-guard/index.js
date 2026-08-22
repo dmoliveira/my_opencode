@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
+import { isGitHubPrCreateCommand, resolveGitHubPrCreateEvidenceDirectory, } from "../shared/github-pr-commands.js";
 import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 // Returns true when git worktree has no pending tracked or untracked changes.
 function isWorktreeClean(directory) {
@@ -40,8 +40,10 @@ export function createPrReadinessGuardHook(options) {
                 ? eventPayload.directory
                 : options.directory;
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim();
-            if (options.requireCleanWorktree && !isWorktreeClean(directory)) {
-                writeGatewayEventAudit(directory, {
+            const evidenceDirectory = resolveGitHubPrCreateEvidenceDirectory(command, directory);
+            const prDirectory = evidenceDirectory ?? directory;
+            if (options.requireCleanWorktree && !isWorktreeClean(prDirectory)) {
+                writeGatewayEventAudit(prDirectory, {
                     hook: "pr-readiness-guard",
                     stage: "skip",
                     reason_code: "pr_create_dirty_worktree",
@@ -52,11 +54,13 @@ export function createPrReadinessGuardHook(options) {
             if (!options.requireValidationEvidence || !sessionId || required.length === 0) {
                 return;
             }
-            const status = validationEvidenceStatus(sessionId, required, directory);
+            const status = evidenceDirectory
+                ? validationEvidenceStatus(sessionId, required, evidenceDirectory)
+                : { missing: required };
             if (status.missing.length === 0) {
                 return;
             }
-            writeGatewayEventAudit(directory, {
+            writeGatewayEventAudit(prDirectory, {
                 hook: "pr-readiness-guard",
                 stage: "skip",
                 reason_code: "pr_create_missing_validation",

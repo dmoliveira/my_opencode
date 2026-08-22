@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
-import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
+import { inspectGitHubPrCreateBody, isGitHubPrCreateCommand, resolveGitHubPrCreateEvidenceDirectory, } from "../shared/github-pr-commands.js";
 import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 function buildSectionInstruction(section) {
     return section === "summary"
@@ -33,8 +33,11 @@ export function createPrBodyEvidenceGuardHook(options) {
                 ? eventPayload.directory
                 : options.directory;
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim();
+            const evidenceDirectory = resolveGitHubPrCreateEvidenceDirectory(command, directory);
             if (options.requireValidationEvidence && sessionId && requiredMarkers.length > 0) {
-                const status = validationEvidenceStatus(sessionId, requiredMarkers, directory);
+                const status = evidenceDirectory
+                    ? validationEvidenceStatus(sessionId, requiredMarkers, evidenceDirectory)
+                    : { missing: requiredMarkers };
                 if (status.missing.length > 0) {
                     writeGatewayEventAudit(directory, {
                         hook: "pr-body-evidence-guard",
@@ -45,7 +48,7 @@ export function createPrBodyEvidenceGuardHook(options) {
                     throw new Error(`[pr-body-evidence-guard] Missing validation evidence before PR create: ${status.missing.join(", ")}. Evidence must be recorded in this session or the current worktree before PR creation.`);
                 }
             }
-            const inspection = inspectGitHubPrCreateBody(command, directory);
+            const inspection = inspectGitHubPrCreateBody(command, evidenceDirectory ?? directory);
             if (!inspection.inspectable) {
                 if (options.allowUninspectableBody) {
                     return;

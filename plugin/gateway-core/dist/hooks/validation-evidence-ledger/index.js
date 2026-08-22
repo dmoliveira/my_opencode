@@ -1,6 +1,6 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
-import { classifyValidationCommand } from "../shared/validation-command-matcher.js";
+import { classifyValidationCommand, validationCommandDirectory } from "../shared/validation-command-matcher.js";
 import { captureGitStateFingerprint, clearValidationEvidence, markValidationEvidence, } from "./evidence.js";
 function sessionId(payload) {
     const candidates = [payload.input?.sessionID, payload.input?.sessionId, payload.properties?.info?.id];
@@ -138,13 +138,15 @@ export function createValidationEvidenceLedgerHook(options) {
                     return;
                 }
                 const categories = classifyValidationCommand(command);
+                const directory = validationCommandDirectory(command, directoryFor(eventPayload, options.directory));
                 pendingCommands.set(invocationId, {
                     callId: invocationId,
                     sessionId: sid,
                     command,
                     categories,
+                    directory,
                     fingerprint: categories.length > 0
-                        ? captureGitStateFingerprint(directoryFor(eventPayload, options.directory))
+                        ? captureGitStateFingerprint(directory)
                         : null,
                 });
                 return;
@@ -178,7 +180,7 @@ export function createValidationEvidenceLedgerHook(options) {
                 commandExitCode(eventPayload) !== 0) {
                 return;
             }
-            const directory = directoryFor(eventPayload, options.directory);
+            const directory = pending.directory;
             if (pending.categories.length === 0) {
                 if (options.decisionRuntime) {
                     await recordLlmTelemetry(options.decisionRuntime, directory, sid, pending.command);
