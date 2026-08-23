@@ -1739,7 +1739,11 @@ class _LeaseHeartbeatKeeper:
         return self._superseded.is_set()
 
     def _classify_failure(self) -> None:
-        state = _lease_attempt_heartbeat_state(self.job_id, self.attempt_id)
+        try:
+            state = _lease_attempt_heartbeat_state(self.job_id, self.attempt_id)
+        except Exception:  # noqa: BLE001 - heartbeat state failures must fail closed
+            self._lease_lost.set()
+            return
         if state == "superseded":
             self._superseded.set()
         else:
@@ -1769,6 +1773,9 @@ class _LeaseHeartbeatKeeper:
             )
         except (AttemptSuperseded, TaskLeaseError, BackgroundStoreError):
             self._classify_failure()
+            return False
+        except Exception:  # noqa: BLE001 - any renewal failure must stop execution
+            self._lease_lost.set()
             return False
         return True
 

@@ -898,6 +898,102 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             self.assertFalse(keeper.superseded)
             bg._best_effort_release(identity, self.root / "leases.json")
 
+    def test_unexpected_periodic_heartbeat_failure_marks_keeper_lost(self) -> None:
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease([sys.executable, "-c", "pass"])
+            identity, current = self.reserve_and_claim(job, config_path)
+            attempt = bg.current_attempt(current)
+            assert attempt is not None
+            with bg.locked_jobs(writeback=True) as data:
+                stored = bg.find_job(data, job["id"])
+                assert stored is not None
+                stored_attempt = bg.current_attempt(stored)
+                assert stored_attempt is not None
+                stored_attempt["status"] = "running"
+
+            real_heartbeat = bg.heartbeat_lease
+            calls = 0
+
+            def fail_after_initial(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls > 1:
+                    raise RuntimeError("unexpected heartbeat failure")
+                return real_heartbeat(*args, **kwargs)
+
+            keeper = bg._LeaseHeartbeatKeeper(
+                job["id"],
+                str(attempt["id"]),
+                identity,
+                ttl_seconds=1,
+                state_path=self.root / "leases.json",
+            )
+            with patch.object(bg, "heartbeat_lease", side_effect=fail_after_initial):
+                keeper.start()
+                for _ in range(100):
+                    if keeper.lease_lost:
+                        break
+                    time.sleep(0.03)
+                keeper.stop()
+            self.assertGreaterEqual(calls, 2)
+            self.assertTrue(keeper.lease_lost)
+            self.assertFalse(keeper.superseded)
+            bg._best_effort_release(identity, self.root / "leases.json")
+
+    def test_unexpected_periodic_heartbeat_failure_contains_worker(self) -> None:
+        with (
+            self.patched_store(),
+            patch.object(bg, "LEASE_EXECUTION_ENABLED", True),
+        ):
+            job, config_path = self.enqueue_lease(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                ttl_seconds=1,
+            )
+            real_heartbeat = bg.heartbeat_lease
+            calls = 0
+
+            def fail_after_initial(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls > 1:
+                    raise RuntimeError("unexpected heartbeat failure")
+                return real_heartbeat(*args, **kwargs)
+
+            with (
+                patch.object(
+                    bg,
+                    "make_oc_runner",
+                    return_value=self.source_runner(config_path),
+                ),
+                patch.object(
+                    bg, "heartbeat_lease", side_effect=fail_after_initial
+                ),
+                patch.object(
+                    bg,
+                    "_best_effort_release",
+                    wraps=bg._best_effort_release,
+                ) as release_spy,
+            ):
+                _, leased, _ = bg._reserve_jobs(
+                    job_id=job["id"], max_jobs=1, lease_max_concurrency=1
+                )
+                status, _ = bg._run_lease_job(leased[0])
+
+            self.assertEqual("reconciling", status)
+            self.assertGreaterEqual(calls, 2)
+            self.assertEqual(0, release_spy.call_count)
+            current = bg._snapshot_job(job["id"])
+            assert current is not None
+            self.assertEqual("reconciling", current["status"])
+            self.assertEqual("unknown", current["attempts"][0]["status"])
+            self.assertEqual(
+                1,
+                leases.lease_status(state_path=self.root / "leases.json")["count"],
+            )
+
     def test_settlement_heartbeats_until_terminal_projection(self) -> None:
         receipt_entered = threading.Event()
         release_receipt = threading.Event()
