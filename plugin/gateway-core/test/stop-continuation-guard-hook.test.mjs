@@ -56,7 +56,7 @@ test("stop-continuation-guard blocks idle continuation after stop command", asyn
     })
 
     await plugin["tool.execute.before"](
-      { tool: "slashcommand", sessionID: "session-stop-1" },
+       { tool: "slashcommand", sessionID: "session-stop-1", agent: "build" },
       { args: { command: "/autopilot stop" } },
     )
 

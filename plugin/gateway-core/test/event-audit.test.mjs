@@ -95,7 +95,7 @@ test("chat transform audits total, selected, and attempted hook counts", async (
       )
     assert.equal(dispatches.length, 2)
     for (const dispatch of dispatches) {
-      assert.equal(dispatch.hook_count, 2)
+       assert.equal(dispatch.hook_count, 3)
       assert.equal(dispatch.selected_hook_count, 0)
       assert.equal(dispatch.loop_attempt_count, 0)
     }
@@ -171,7 +171,7 @@ test("disabled semantic summarizer is not constructed", async () => {
       .filter(Boolean)
       .map((line) => JSON.parse(line))
       .find((entry) => entry.reason_code === "chat_messages_transform_dispatch")
-    assert.equal(dispatch?.hook_count, 0)
+     assert.equal(dispatch?.hook_count, 1)
     assert.equal(dispatch?.selected_hook_count, 0)
     assert.equal(dispatch?.loop_attempt_count, 0)
   } finally {
@@ -989,7 +989,7 @@ test("gateway child mode records minimal hook activation", async () => {
     )
     const dispatch = lines.find((item) => item.reason_code === "event_dispatch")
     assert.equal(childMode?.child_mode, "llm_decision")
-    assert.equal(dispatch?.hook_count, 0)
+     assert.equal(dispatch?.hook_count, 1)
   } finally {
     if (previousEnabled === undefined) {
       delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT

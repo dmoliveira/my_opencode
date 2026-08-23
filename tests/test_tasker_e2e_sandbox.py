@@ -18,7 +18,7 @@ import tasker_e2e_sandbox
 class TaskerShellBoundaryTest(unittest.TestCase):
     def test_allows_single_codememory_command(self) -> None:
         tasker_e2e_sandbox.validate_tasker_shell_command(
-            'oc add task "planned work" --kind chore --priority P2 --format json'
+            'oc add task "planned work" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --kind chore --priority P2 --format json'
         )
 
     def test_allows_exact_launcher_discovery(self) -> None:
@@ -56,7 +56,7 @@ class TaskerShellBoundaryTest(unittest.TestCase):
 
     def test_allows_single_write_with_global_options(self) -> None:
         tasker_e2e_sandbox.validate_tasker_shell_command(
-            'oc --format json add task "planned work" --kind chore --priority P2'
+            'oc --format json add task "planned work" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --kind chore --priority P2'
         )
 
     def test_rejects_chaining_pipes_redirects_and_newlines(self) -> None:
@@ -100,8 +100,21 @@ class TaskerShellBoundaryTest(unittest.TestCase):
         )
         tasker_e2e_sandbox.validate_commands(
             scenario,
-            ['oc add task "Docs" --summary "Do not run git, tests, or PR creation"'],
+            ['oc add task "Docs" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --summary "Do not run git, tests, or PR creation"'],
         )
+
+    def test_rejects_write_outside_prompt_sandbox(self) -> None:
+        scenario = tasker_e2e_sandbox.Scenario(
+            name="scoped-write",
+            prompt="Use scope 'sandbox', worktree '/tmp/worktree', and branch 'sandbox/tasker'.",
+            expected_titles={},
+            expected_edges=[],
+        )
+        with self.assertRaisesRegex(AssertionError, "crossed the requested sandbox"):
+            tasker_e2e_sandbox.validate_commands(
+                scenario,
+                ['oc add task "Docs" --scope other --worktree /tmp/worktree --branch sandbox/tasker'],
+            )
 
     def test_links_for_resolves_current_link_records(self) -> None:
         responses = [
@@ -145,6 +158,8 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             self.assertTrue(tasker_path.is_symlink())
             self.assertEqual(REPO_ROOT / "agent" / "tasker.md", tasker_path.resolve())
             self.assertEqual(str(config_home.resolve()), runtime_env["XDG_CONFIG_HOME"])
+            self.assertEqual(1, len(config["plugin"]))
+            self.assertTrue(config["plugin"][0].endswith("plugin/gateway-core/dist/index.js"))
             self.assertEqual("allow", config["permission"]["bash"])
             self.assertEqual("deny", config["permission"]["edit"])
 

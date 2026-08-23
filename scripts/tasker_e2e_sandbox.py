@@ -280,6 +280,9 @@ def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
         json.dumps(
             {
                 "$schema": "https://opencode.ai/config.json",
+                "plugin": [
+                    f"file://{(REPO_ROOT / 'plugin/gateway-core/dist/index.js').resolve()}",
+                ],
                 "permission": {
                     "bash": "allow",
                     "read": "allow",
@@ -423,6 +426,31 @@ def _oc_subcommand(tokens: list[str]) -> str:
     return ""
 
 
+def _option_value(tokens: list[str], name: str) -> str | None:
+    for index, token in enumerate(tokens):
+        if token == name and index + 1 < len(tokens):
+            return tokens[index + 1]
+        if token.startswith(f"{name}="):
+            return token[len(name) + 1 :]
+    return None
+
+
+def _prompt_sandbox(prompt: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for name in ("scope", "worktree", "branch"):
+        match = re.search(
+            rf"(?:--{name}\s+|\b{name}(?:_key)?\s*(?:is|=|:)?\s*)"
+            rf"(?:\"([^\"]+)\"|'([^']+)'|([^\s,.;]+))",
+            prompt,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            value = next((item for item in match.groups() if item), "").strip()
+            if value:
+                values[name] = value
+    return values
+
+
 def validate_tasker_shell_command(command: str) -> None:
     if not command.strip():
         raise AssertionError("Tasker emitted an empty shell command")
@@ -457,6 +485,8 @@ def validate_tasker_shell_command(command: str) -> None:
         raise AssertionError(f"Tasker emitted invalid shell chaining: {command}")
 
     write_count = 0
+    def has_option(segment: list[str], name: str) -> bool:
+        return any(token == name or token.startswith(name + "=") for token in segment)
     for segment in segments:
         if segment == ["command", "-v", "oc"]:
             continue
@@ -470,6 +500,12 @@ def validate_tasker_shell_command(command: str) -> None:
         if subcommand in TASKER_READ_ONLY_SUBCOMMANDS:
             continue
         if subcommand in TASKER_WRITE_SUBCOMMANDS:
+            if len(segments) > 1:
+                raise AssertionError(
+                    f"Tasker combined a backend write with another shell command: {command}"
+                )
+            if subcommand == "add" and not all(has_option(segment, option) for option in ("--scope", "--worktree", "--branch")):
+                raise AssertionError(f"Tasker add command lacks explicit scope/worktree/branch: {command}")
             write_count += 1
             continue
         raise AssertionError(
@@ -721,8 +757,19 @@ def build_scenarios(
 
 
 def validate_commands(scenario: Scenario, commands: list[str]) -> None:
+    expected_sandbox = _prompt_sandbox(scenario.prompt)
     for command in commands:
         validate_tasker_shell_command(command)
+        tokens = shlex.split(command)
+        if _oc_subcommand(tokens) == "add" and expected_sandbox:
+            actual_sandbox = {
+                name: _option_value(tokens, f"--{name}")
+                for name in ("scope", "worktree", "branch")
+            }
+            if actual_sandbox != expected_sandbox:
+                raise AssertionError(
+                    f"Tasker add command crossed the requested sandbox: {command}"
+                )
 
     add_commands = [
         cmd

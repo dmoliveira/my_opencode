@@ -25,6 +25,7 @@ interface GatewayContext {
                 data?: Array<{
                     info?: {
                         role?: string;
+                        agent?: string;
                     };
                     parts?: Array<{
                         type: string;
@@ -76,6 +77,7 @@ interface ToolBeforeInput {
     tool: string;
     sessionID?: string;
     callID?: string;
+    agent?: string;
 }
 interface ToolBeforeOutput {
     args?: {
