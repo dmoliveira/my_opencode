@@ -744,6 +744,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     disabled: [],
     order: [
+      "tasker-command-gateway",
       "codememory-milestone-bridge",
       "intent-ingress-outbox",
       "execution-status",

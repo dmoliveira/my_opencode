@@ -8,6 +8,7 @@ import { createAdaptiveDelegationPolicyHook } from "./hooks/adaptive-delegation-
 import { createAgentContextShaperHook } from "./hooks/agent-context-shaper/index.js";
 import { createAgentDiscoverabilityInjectorHook } from "./hooks/agent-discoverability-injector/index.js";
 import { createAgentDeniedToolEnforcerHook } from "./hooks/agent-denied-tool-enforcer/index.js";
+import { createTaskerCommandGatewayHook } from "./hooks/tasker-command-gateway/index.js";
 import { createAgentModelResolverHook } from "./hooks/agent-model-resolver/index.js";
 import { createAgentUserReminderHook } from "./hooks/agent-user-reminder/index.js";
 import { createAssistantMessageTimestampHook } from "./hooks/assistant-message-timestamp/index.js";
@@ -224,9 +225,28 @@ function resolveGatewayRuntime(ctx, options) {
         cfg: loadGatewayConfig(loadedConfig.source),
     };
 }
+function promptSandboxValue(prompt, name) {
+    const pattern = new RegExp(`(?:--${name}\\s+|\\b${name}(?:_key)?\\s*(?:is|=|:)?\\s*)(?:"([^"]+)"|'([^']+)'|([^\\s,.;]+))`, "i");
+    const match = pattern.exec(prompt);
+    return (match?.[1] ?? match?.[2] ?? match?.[3])?.trim() || undefined;
+}
+function taskerSandboxFromPrompt(prompt) {
+    const scope = promptSandboxValue(prompt, "scope");
+    const worktree = promptSandboxValue(prompt, "worktree");
+    const branch = promptSandboxValue(prompt, "branch");
+    return scope && worktree && branch ? { scope, worktree, branch } : undefined;
+}
 // Creates ordered hook list using one resolved gateway config snapshot.
-function configuredHooks(ctx, runtime) {
+function configuredHooks(ctx, runtime, resolveTaskerAgent = () => undefined, resolveTaskerSandbox = () => undefined) {
     const { directory, loadedConfig, cfg } = runtime;
+    const taskerCommandGateway = createTaskerCommandGatewayHook({
+        directory,
+        resolveAgent: resolveTaskerAgent,
+        resolveSandbox: resolveTaskerSandbox,
+        // OpenCode always supplies a client. Lightweight unit contexts without one
+        // cannot execute a real tool call and are treated as non-runtime mocks.
+        failClosedOnUnknownIdentity: Boolean(ctx.client),
+    });
     if (isLlmDecisionChildProcess()) {
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
@@ -234,7 +254,7 @@ function configuredHooks(ctx, runtime) {
             reason_code: "child_mode_minimal_hooks_enabled",
             child_mode: "llm_decision",
         });
-        return [];
+        return [taskerCommandGateway];
     }
     writeGatewayEventAudit(directory, {
         hook: "gateway-core",
@@ -260,7 +280,7 @@ function configuredHooks(ctx, runtime) {
         },
     });
     if (!cfg.hooks.enabled) {
-        return [];
+        return [taskerCommandGateway];
     }
     if (cfg.todoContinuationEnforcer.enabled &&
         (!cfg.llmDecisionRuntime.enabled || cfg.llmDecisionRuntime.mode === "disabled")) {
@@ -879,7 +899,10 @@ function configuredHooks(ctx, runtime) {
             },
         })),
     ];
-    return resolveHookOrder(hooks.filter((hook) => hook !== null), hookPlan.order, cfg.hooks.disabled);
+    return [
+        taskerCommandGateway,
+        ...resolveHookOrder(hooks.filter((hook) => hook !== null), hookPlan.order, cfg.hooks.disabled),
+    ];
 }
 // Creates gateway plugin entrypoint with deterministic hook dispatch.
 export default function GatewayCorePlugin(ctx, options) {
@@ -910,7 +933,56 @@ export default function GatewayCorePlugin(ctx, options) {
             },
         })
         : null;
-    const hooks = configuredHooks(ctx, runtime);
+    const sessionAgents = new Map();
+    const sessionSandboxes = new Map();
+    const deletedSessionAgents = new Set();
+    const deletedSessionOrder = [];
+    const rememberSessionAgent = (sessionID, agent) => {
+        const normalizedSessionID = sessionID.trim();
+        const normalizedAgent = agent.trim();
+        if (normalizedSessionID && normalizedAgent && !deletedSessionAgents.has(normalizedSessionID)) {
+            sessionAgents.set(normalizedSessionID, normalizedAgent);
+        }
+    };
+    const resolveTaskerAgent = async (sessionID) => {
+        if (deletedSessionAgents.has(sessionID)) {
+            return undefined;
+        }
+        const cached = sessionAgents.get(sessionID);
+        if (cached) {
+            return cached;
+        }
+        if (!sessionID || !ctx.client?.session?.messages) {
+            return undefined;
+        }
+        try {
+            const response = await ctx.client.session.messages({
+                path: { id: sessionID },
+                query: { directory },
+            });
+            const agent = response.data
+                ?.slice()
+                .reverse()
+                .map((message) => message.info?.agent?.trim())
+                .find((value) => Boolean(value));
+            if (agent) {
+                rememberSessionAgent(sessionID, agent);
+            }
+            return agent;
+        }
+        catch {
+            return undefined;
+        }
+    };
+    const rememberTaskerSandbox = (sessionID, prompt) => {
+        const normalizedSessionID = sessionID.trim();
+        const sandbox = taskerSandboxFromPrompt(prompt);
+        if (normalizedSessionID && sandbox && !deletedSessionAgents.has(normalizedSessionID)) {
+            sessionSandboxes.set(normalizedSessionID, sandbox);
+        }
+    };
+    const resolveTaskerSandbox = async (sessionID) => sessionSandboxes.get(sessionID);
+    const hooks = configuredHooks(ctx, runtime, resolveTaskerAgent, resolveTaskerSandbox);
     const hookDispatchLatency = cfg.hookDispatchLatency.enabled && gatewayEventAuditEnabled()
         ? createHookDispatchLatencyCollector({
             enabled: true,
@@ -941,6 +1013,25 @@ export default function GatewayCorePlugin(ctx, options) {
     // Dispatches plugin lifecycle event to all enabled hooks in order.
     async function event(input) {
         const eventType = input.event.type;
+        if (eventType === "session.deleted" && input.event.properties && typeof input.event.properties === "object") {
+            const properties = input.event.properties;
+            const nested = properties.info && typeof properties.info === "object" ? properties.info : {};
+            const sessionID = String(properties.sessionID ?? properties.sessionId ?? properties.id ?? nested.id ?? "").trim();
+            if (sessionID) {
+                sessionAgents.delete(sessionID);
+                sessionSandboxes.delete(sessionID);
+                if (!deletedSessionAgents.has(sessionID)) {
+                    deletedSessionAgents.add(sessionID);
+                    deletedSessionOrder.push(sessionID);
+                    if (deletedSessionOrder.length > 4096) {
+                        const expired = deletedSessionOrder.shift();
+                        if (expired) {
+                            deletedSessionAgents.delete(expired);
+                        }
+                    }
+                }
+            }
+        }
         const payload = {
             properties: input.event.properties,
             directory,
@@ -988,6 +1079,9 @@ export default function GatewayCorePlugin(ctx, options) {
     }
     // Dispatches slash command interception event to ordered hooks.
     async function toolExecuteBefore(input, output) {
+        if (input.sessionID && input.agent) {
+            rememberSessionAgent(input.sessionID, input.agent);
+        }
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
             stage: "dispatch",
@@ -1189,6 +1283,17 @@ export default function GatewayCorePlugin(ctx, options) {
                 properties.prompt = canonicalPrompt;
             }
         }
+        if (input.sessionID) {
+            const prompt = [
+                properties.prompt,
+                properties.text,
+                properties.message,
+                ...(properties.parts ?? []).map((part) => part.text),
+            ]
+                .filter((value) => typeof value === "string")
+                .join("\n");
+            rememberTaskerSandbox(input.sessionID, prompt);
+        }
         writeGatewayEventAudit(directory, {
             hook: "gateway-core",
             stage: "dispatch",
@@ -1221,6 +1326,9 @@ export default function GatewayCorePlugin(ctx, options) {
         const modelID = String(input.model?.modelID ?? input.model?.id ?? "").trim();
         const sessionID = String(input.sessionID ?? "").trim();
         const agent = String(input.agent ?? "").trim();
+        if (sessionID) {
+            rememberSessionAgent(sessionID, agent);
+        }
         const currentPromptCacheKey = Object.prototype.hasOwnProperty.call(output.options, "promptCacheKey")
             ? output.options.promptCacheKey
             : undefined;

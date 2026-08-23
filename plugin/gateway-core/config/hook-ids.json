@@ -1,6 +1,7 @@
 {
   "version": 1,
   "hook_ids": [
+    "tasker-command-gateway",
     "codememory-milestone-bridge",
     "intent-ingress-outbox",
     "execution-status",

@@ -1052,7 +1052,8 @@ test("session-recovery does not proactively recover fresh question lifecycle on 
     await plugin["tool.execute.before"](
       {
         tool: "question",
-        sessionID: "session-recovery-fresh-question",
+         sessionID: "session-recovery-fresh-question",
+         agent: "build",
       },
       { args: {} },
     )
@@ -1108,7 +1109,8 @@ test("session-recovery clears proactive question tracking after user reply", asy
     await plugin["tool.execute.before"](
       {
         tool: "question",
-        sessionID: "session-recovery-question-user-replied",
+         sessionID: "session-recovery-question-user-replied",
+         agent: "build",
       },
       { args: {} },
     )

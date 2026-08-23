@@ -88,7 +88,7 @@ test("gateway continuation keeps checklist context from autopilot-go style comma
       '" --completion-mode promise --json'
 
     await plugin["tool.execute.before"](
-      { tool: "command", sessionID: "session-instructions" },
+       { tool: "command", sessionID: "session-instructions", agent: "build" },
       { args: { command: renderedCommand } },
     )
 
@@ -187,7 +187,7 @@ test("gateway continuation honors configured maxIgnoredCompletionCycles", async 
       'python3 "$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py" go --goal "close one checklist" --done-criteria "finish the one item" --completion-mode promise --json'
 
     await plugin["tool.execute.before"](
-      { tool: "command", sessionID: "session-max-ignored-cycles" },
+       { tool: "command", sessionID: "session-max-ignored-cycles", agent: "build" },
       { args: { command: renderedCommand } },
     )
 
@@ -280,7 +280,7 @@ test("gateway continuation default stops on first stalled completion cycle", asy
       'python3 "$HOME/.config/opencode/my_opencode/scripts/autopilot_command.py" go --goal "close one checklist" --done-criteria "finish the one item" --completion-mode promise --json'
 
     await plugin["tool.execute.before"](
-      { tool: "command", sessionID: "session-default-max-ignored-cycles" },
+       { tool: "command", sessionID: "session-default-max-ignored-cycles", agent: "build" },
       { args: { command: renderedCommand } },
     )
 
