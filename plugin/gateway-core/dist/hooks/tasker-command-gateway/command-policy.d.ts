@@ -16,5 +16,4 @@ export type TaskerCommandInspection = Readonly<{
 }>;
 export declare function inspectTaskerCommand(command: string, context?: TaskerCommandContext): readonly TaskerCommandInspection[] | null;
 export declare function isAllowedTaskerCommand(command: string, context?: TaskerCommandContext): boolean;
-export declare function extractTaskerRecordTargets(value: unknown): Map<string, TaskerSandbox>;
 export declare function extractTaskerRecordIds(value: unknown): Set<string>;

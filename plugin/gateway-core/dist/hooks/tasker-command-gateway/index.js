@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { extractTaskerRecordIds, extractTaskerRecordTargets, inspectTaskerCommand, isAllowedTaskerCommand, } from "./command-policy.js";
+import { extractTaskerRecordIds, inspectTaskerCommand, isAllowedTaskerCommand, } from "./command-policy.js";
 const DISCOVERY = new Set(["read", "list", "glob", "grep"]);
 const normalize = (value) => String(value ?? "").trim().toLowerCase();
 function blocked(directory, sessionID, tool, reason) {
@@ -91,10 +91,8 @@ export function createTaskerCommandGatewayHook(options) {
                         }
                     }
                     else {
-                        for (const [id, target] of extractTaskerRecordTargets(event.output?.output)) {
-                            if (target.scope === sandbox.scope && target.worktree === sandbox.worktree && target.branch === sandbox.branch) {
-                                records.set(id, target);
-                            }
+                        for (const id of extractTaskerRecordIds(event.output?.output)) {
+                            records.set(id, sandbox);
                         }
                     }
                 }

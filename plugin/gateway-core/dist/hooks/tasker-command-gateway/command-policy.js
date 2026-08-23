@@ -148,7 +148,17 @@ function hasKnownRecord(context, id) {
     }
     return context.knownRecordIds?.has(id) === true;
 }
-function readCommand(args) {
+function optionalScopeMatches(parsed, context) {
+    const scopes = parsed.values.get("--scope") ?? [];
+    return scopes.length <= 1 &&
+        (!context.sandbox || scopes.length === 0 || scopes[0] === context.sandbox.scope);
+}
+function requiresSandboxScope(parsed, context) {
+    return !context.sandbox ||
+        hasExactlyOne(parsed.values, "--scope") &&
+            parsed.values.get("--scope")?.[0] === context.sandbox.scope;
+}
+function readCommand(args, context) {
     const verb = args[1] ?? "";
     if (verb === "config") {
         return args.length === 3 && args[2] === "--doctor"
@@ -162,7 +172,7 @@ function readCommand(args) {
     }
     if (READ_VERBS.has(verb)) {
         const parsed = splitOptions(args.slice(2), READ_OPTIONS);
-        return parsed && parsed.positionals.length === 0 && validValues(parsed)
+        return parsed && parsed.positionals.length === 0 && validValues(parsed) && optionalScopeMatches(parsed, context)
             ? { kind: "read", verb, positionals: [], options: optionsObject(parsed) }
             : null;
     }
@@ -172,6 +182,7 @@ function readCommand(args) {
         return parsed &&
             parsed.positionals.length === 1 &&
             RECORD_ID.test(parsed.positionals[0] ?? "") &&
+            (!context.sandbox || hasKnownRecord(context, parsed.positionals[0] ?? "")) &&
             validValues(parsed) &&
             view.every((value) => ["short", "full", "links"].includes(value))
             ? { kind: "read", verb, positionals: parsed.positionals, options: optionsObject(parsed) }
@@ -182,6 +193,7 @@ function readCommand(args) {
         return parsed &&
             parsed.positionals.length === 1 &&
             READ_TYPES.has(parsed.positionals[0] ?? "") &&
+            requiresSandboxScope(parsed, context) &&
             validValues(parsed)
             ? { kind: "read", verb, positionals: parsed.positionals, options: optionsObject(parsed) }
             : null;
@@ -192,6 +204,7 @@ function readCommand(args) {
             parsed.positionals.length === 1 &&
             hasExactlyOne(parsed.values, "--type") &&
             READ_TYPES.has(parsed.values.get("--type")?.[0] ?? "") &&
+            requiresSandboxScope(parsed, context) &&
             validValues(parsed)
             ? { kind: "read", verb, positionals: parsed.positionals, options: optionsObject(parsed) }
             : null;
@@ -251,7 +264,7 @@ function classify(segment, context) {
     if (!args) {
         return null;
     }
-    return readCommand(args) ?? writeCommand(args, context);
+    return readCommand(args, context) ?? writeCommand(args, context);
 }
 export function inspectTaskerCommand(command, context = {}) {
     const segments = parseShell(command);
@@ -270,23 +283,13 @@ export function isAllowedTaskerCommand(command, context = {}) {
 }
 const RECORD_ID_FIELDS = new Set(["id", "from_id", "to_id"]);
 const ERROR_FIELDS = new Set(["error", "errors", "stderr"]);
-function recordTarget(value) {
-    const scope = value.scope_key ?? value.scope;
-    const worktree = value.worktree ?? value.worktree_path ?? value.worktreePath;
-    const branch = value.branch;
-    return typeof scope === "string" &&
-        typeof worktree === "string" &&
-        typeof branch === "string"
-        ? { scope, worktree, branch }
-        : undefined;
-}
-function collectStructuredRecordTargets(value, matches, inheritedTarget) {
+function collectStructuredRecordIds(value, matches) {
     if (!value || typeof value !== "object") {
         return;
     }
     if (Array.isArray(value)) {
         for (const item of value) {
-            collectStructuredRecordTargets(item, matches, inheritedTarget);
+            collectStructuredRecordIds(item, matches);
         }
         return;
     }
@@ -294,69 +297,28 @@ function collectStructuredRecordTargets(value, matches, inheritedTarget) {
     if ([...ERROR_FIELDS].some((field) => record[field])) {
         return;
     }
-    const target = recordTarget(record) ?? inheritedTarget;
     for (const [key, item] of Object.entries(record)) {
         if (RECORD_ID_FIELDS.has(key) && typeof item === "string" && RECORD_ID.test(item)) {
-            if (target) {
-                matches.set(item, target);
-            }
+            matches.add(item);
             continue;
         }
         if (item && typeof item === "object") {
-            collectStructuredRecordTargets(item, matches, target);
+            collectStructuredRecordIds(item, matches);
         }
     }
-}
-export function extractTaskerRecordTargets(value) {
-    const matches = new Map();
-    if (typeof value === "string") {
-        try {
-            collectStructuredRecordTargets(JSON.parse(value), matches);
-        }
-        catch {
-            return matches;
-        }
-    }
-    else {
-        collectStructuredRecordTargets(value, matches);
-    }
-    return matches;
 }
 export function extractTaskerRecordIds(value) {
     const matches = new Set();
-    const collect = (candidate) => {
-        if (!candidate || typeof candidate !== "object") {
-            return;
-        }
-        if (Array.isArray(candidate)) {
-            for (const item of candidate) {
-                collect(item);
-            }
-            return;
-        }
-        const record = candidate;
-        if ([...ERROR_FIELDS].some((field) => record[field])) {
-            return;
-        }
-        for (const [key, item] of Object.entries(record)) {
-            if (RECORD_ID_FIELDS.has(key) && typeof item === "string" && RECORD_ID.test(item)) {
-                matches.add(item);
-            }
-            else if (item && typeof item === "object") {
-                collect(item);
-            }
-        }
-    };
     if (typeof value === "string") {
         try {
-            collect(JSON.parse(value));
+            collectStructuredRecordIds(JSON.parse(value), matches);
         }
         catch {
             return matches;
         }
     }
     else {
-        collect(value);
+        collectStructuredRecordIds(value, matches);
     }
     return matches;
 }

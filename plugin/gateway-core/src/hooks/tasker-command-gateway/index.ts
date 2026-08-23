@@ -2,7 +2,6 @@ import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
   extractTaskerRecordIds,
-  extractTaskerRecordTargets,
   inspectTaskerCommand,
   isAllowedTaskerCommand,
   type TaskerCommandInspection,
@@ -132,10 +131,8 @@ export function createTaskerCommandGatewayHook(options: {
               records.set(id, sandbox)
             }
           } else {
-            for (const [id, target] of extractTaskerRecordTargets(event.output?.output)) {
-              if (target.scope === sandbox.scope && target.worktree === sandbox.worktree && target.branch === sandbox.branch) {
-                records.set(id, target)
-              }
+            for (const id of extractTaskerRecordIds(event.output?.output)) {
+              records.set(id, sandbox)
             }
           }
         }

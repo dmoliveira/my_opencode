@@ -106,6 +106,10 @@ test("binds writes to the sandbox declared by the planning prompt", async () => 
       sessionID: "tasker-sandbox",
       prompt: "Use scope 'sandbox', worktree '/tmp/worktree', and branch 'sandbox/tasker'.",
     })
+    await plugin["chat.message"]({
+      sessionID: "tasker-sandbox",
+      prompt: "Use scope 'other', worktree '/tmp/other', and branch 'other'.",
+    })
     await before(
       plugin,
       "tasker-sandbox",
@@ -128,12 +132,16 @@ test("binds writes to the sandbox declared by the planning prompt", async () => 
         args: { command: "oc find planned --type task --scope sandbox" },
       },
       {
-        output: '{"items":[{"id":"task_119","scope_key":"sandbox","worktree":"/tmp/worktree","branch":"sandbox/tasker","title":"mentions task_999"}]}',
+        output: '{"items":[{"id":"task_119","scope_key":"sandbox","title":"mentions task_999"}]}',
       },
     )
     await before(plugin, "tasker-sandbox", "oc set task_119 status doing")
     await assert.rejects(
       before(plugin, "tasker-sandbox", "oc set task_999 status doing"),
+      /tasker_command_boundary_blocked/,
+    )
+    await assert.rejects(
+      before(plugin, "tasker-sandbox", "oc find foreign --type task --scope other"),
       /tasker_command_boundary_blocked/,
     )
     await before(plugin, "tasker-sandbox", "oc find other --type task --scope sandbox")
@@ -146,10 +154,7 @@ test("binds writes to the sandbox declared by the planning prompt", async () => 
       },
       { output: '{"items":[{"id":"task_120","scope_key":"sandbox"}]}' },
     )
-    await assert.rejects(
-      before(plugin, "tasker-sandbox", "oc set task_120 status doing"),
-      /tasker_command_boundary_blocked/,
-    )
+    await before(plugin, "tasker-sandbox", "oc set task_120 status doing")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

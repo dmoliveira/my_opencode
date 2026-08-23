@@ -1531,7 +1531,12 @@ export default function GatewayCorePlugin(
   const rememberTaskerSandbox = (sessionID: string, prompt: string): void => {
     const normalizedSessionID = sessionID.trim();
     const sandbox = taskerSandboxFromPrompt(prompt);
-    if (normalizedSessionID && sandbox && !deletedSessionAgents.has(normalizedSessionID)) {
+    if (
+      normalizedSessionID &&
+      sandbox &&
+      !sessionSandboxes.has(normalizedSessionID) &&
+      !deletedSessionAgents.has(normalizedSessionID)
+    ) {
       sessionSandboxes.set(normalizedSessionID, sandbox);
     }
   };

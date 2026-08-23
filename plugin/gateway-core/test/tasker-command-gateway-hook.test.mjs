@@ -71,6 +71,8 @@ test("blocks arbitrary tools and shell syntax", async () => {
     ["oc current && oc add memory note", "bash"],
     ["oc current $(id)", "bash"],
     ["oc current `id`", "bash"],
+    ["oc find tasker --type task --scope other", "bash"],
+    ["oc list task --scope other", "bash"],
     ["/tmp/oc current", "bash"],
     ["", "task"],
     ["", "write"],
