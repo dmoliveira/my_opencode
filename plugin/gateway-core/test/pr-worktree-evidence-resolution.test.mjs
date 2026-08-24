@@ -18,6 +18,7 @@ let callSequence = 0
 function createFixture() {
   const directory = mkdtempSync(join(tmpdir(), "gateway-pr-worktree-"))
   const featureDirectory = `${directory}-feature`
+  const remoteDirectory = `${directory}-origin.git`
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: directory })
   execFileSync("git", ["config", "user.email", "pr-worktree@example.invalid"], { cwd: directory })
   execFileSync("git", ["config", "user.name", "PR Worktree Test"], { cwd: directory })
@@ -25,8 +26,17 @@ function createFixture() {
   writeFileSync(join(directory, "tracked.txt"), "baseline\n", "utf-8")
   execFileSync("git", ["add", ".gitignore", "tracked.txt"], { cwd: directory })
   execFileSync("git", ["commit", "-qm", "fixture"], { cwd: directory })
+  execFileSync("git", ["init", "--bare", "-q", remoteDirectory])
+  execFileSync("git", ["remote", "add", "origin", remoteDirectory], { cwd: directory })
+  execFileSync("git", ["push", "-qu", "origin", "main"], { cwd: directory })
   execFileSync("git", ["worktree", "add", "-b", "feature/evidence", featureDirectory], { cwd: directory })
-  return { directory, featureDirectory, extraWorktrees: [] }
+  writeFileSync(join(featureDirectory, "feature.txt"), "feature\n", "utf-8")
+  execFileSync("git", ["add", "feature.txt"], { cwd: featureDirectory })
+  execFileSync("git", ["commit", "-qm", "fixture feature"], { cwd: featureDirectory })
+  execFileSync("git", ["push", "-qu", "--set-upstream", "origin", "feature/evidence"], {
+    cwd: featureDirectory,
+  })
+  return { directory, featureDirectory, remoteDirectory, extraWorktrees: [] }
 }
 
 function cleanupFixture(fixture) {
@@ -38,6 +48,7 @@ function cleanupFixture(fixture) {
     }
   }
   rmSync(fixture.directory, { recursive: true, force: true })
+  rmSync(fixture.remoteDirectory, { recursive: true, force: true })
 }
 
 async function recordValidation(plugin, sessionID, command) {
@@ -60,6 +71,8 @@ test("PR head evidence resolves one local worktree and rejects ambiguous forms",
       "gh pr create -H feature/evidence --title x --body x",
       "env gh pr create --head feature/evidence --title x --body x",
       "command gh pr create --head feature/evidence --title x --body x",
+      "command -p gh pr create --head feature/evidence --title x --body x",
+      "command -p -- gh pr create --head feature/evidence --title x --body x",
     ]) {
       assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), expected, command)
     }
@@ -72,6 +85,7 @@ test("PR head evidence resolves one local worktree and rejects ambiguous forms",
       "gh pr create --head feature/evidence -H feature/evidence --title x --body x",
       "gh pr create --head owner:feature/evidence --title x --body x",
       "gh pr create --head feature/evidence --title x --body x && gh pr create --title y --body y",
+      "G=gh; \"$G\" pr create --head feature/evidence --title x --body x",
       "gh api repos/owner/repo/pulls -X POST -f head=feature/evidence -f base=main",
     ]) {
       assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), null, command)
@@ -84,6 +98,59 @@ test("PR head evidence resolves one local worktree and rejects ambiguous forms",
       resolveGitHubPrCreateEvidenceDirectory("gh pr create --head feature/evidence --title x --body x", fixture.directory),
       null,
     )
+  } finally {
+    cleanupFixture(fixture)
+  }
+})
+
+test("explicit PR heads require matching local, tracking, and remote branch commits", () => {
+  const fixture = createFixture()
+  try {
+    const command = "gh pr create --head feature/evidence --title x --body x"
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), realpathSync(fixture.featureDirectory))
+
+    writeFileSync(join(fixture.featureDirectory, "next.txt"), "next\n", "utf-8")
+    execFileSync("git", ["add", "next.txt"], { cwd: fixture.featureDirectory })
+    execFileSync("git", ["commit", "-qm", "next feature"], { cwd: fixture.featureDirectory })
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), null)
+
+    const localHead = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fixture.featureDirectory,
+      encoding: "utf-8",
+    }).trim()
+    execFileSync("git", ["update-ref", "refs/remotes/origin/feature/evidence", localHead], {
+      cwd: fixture.featureDirectory,
+    })
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), null)
+
+    execFileSync("git", ["push", "-q", "origin", "feature/evidence"], { cwd: fixture.featureDirectory })
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), realpathSync(fixture.featureDirectory))
+
+    const mainHead = execFileSync("git", ["rev-parse", "main"], {
+      cwd: fixture.directory,
+      encoding: "utf-8",
+    }).trim()
+    execFileSync("git", ["update-ref", "refs/heads/feature/evidence", mainHead], {
+      cwd: fixture.remoteDirectory,
+    })
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), null)
+
+  } finally {
+    cleanupFixture(fixture)
+  }
+})
+
+test("explicit PR heads allow unrelated remotes but require one matching upstream endpoint", () => {
+  const fixture = createFixture()
+  try {
+    const command = "gh pr create --head feature/evidence --title x --body x"
+    execFileSync("git", ["remote", "add", "upstream", fixture.remoteDirectory], { cwd: fixture.featureDirectory })
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), realpathSync(fixture.featureDirectory))
+
+    execFileSync("git", ["remote", "set-url", "--add", "--push", "origin", `${fixture.remoteDirectory}-other`], {
+      cwd: fixture.featureDirectory,
+    })
+    assert.equal(resolveGitHubPrCreateEvidenceDirectory(command, fixture.directory), null)
   } finally {
     cleanupFixture(fixture)
   }
@@ -114,6 +181,14 @@ test("PR guards recognize wrapped or compact compound PR commands and fail evide
     for (const command of [
       "env gh pr create --head feature/evidence --title x --body x",
       "command gh pr create --head feature/evidence --title x --body x",
+      "command -p gh pr create --head feature/evidence --title x --body x",
+      "command -p -- gh pr create --head feature/evidence --title x --body x",
+      "G=gh; \"$G\" pr create --head feature/evidence --title x --body x",
+      "bash -lc 'gh pr create --head feature/evidence --title x --body x'",
+      "eval 'gh pr create --head feature/evidence --title x --body x'",
+      "$(printf gh) pr create --head feature/evidence --title x --body x",
+      "$'gh' pr create --head feature/evidence --title x --body x",
+      "G=gh; \"$G\" --repo owner/repo pr create --head feature/evidence --title x --body x",
       "exec gh pr create --head feature/evidence --title x --body x",
       "g\\h pr create --head feature/evidence --title x --body x",
       "g''h pr create --head feature/evidence --title x --body x",
@@ -153,6 +228,7 @@ test("PR guards recognize wrapped or compact compound PR commands and fail evide
       "gh api graphql -f query='mutation { # createPullRequest(input: {})\ncloseIssue(input: {}) { clientMutationId } }'",
       "echo \"gh api graphql -f query='mutation { createPullRequest(input: {}) { clientMutationId } }'\"",
       "echo gh pr create --title x --body x",
+      "command -v gh pr create --title x --body x",
     ]) {
       assert.equal(isGitHubPrCreateCommand(command), false, command)
     }

@@ -98,13 +98,20 @@ test("pr-readiness-guard blocks PR creation when validation evidence is missing"
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-pr-validation" },
-        { args: { command: "gh pr create --title x --body y" } },
-      ),
-      /Missing validation evidence/,
-    )
+    for (const command of [
+      "gh pr create --title x --body y",
+      "command -p gh pr create --title x --body y",
+      "command -p -- gh pr create --title x --body y",
+    ]) {
+      await assert.rejects(
+        plugin["tool.execute.before"](
+          { tool: "bash", sessionID: "session-pr-validation" },
+          { args: { command } },
+        ),
+        /Missing validation evidence/,
+        command,
+      )
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

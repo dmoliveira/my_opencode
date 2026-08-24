@@ -114,6 +114,9 @@ function transparentGhCommandStart(tokens: string[]): number {
   }
   if (tokens[index] === "command") {
     index += 1
+    while (tokens[index] === "-p") {
+      index += 1
+    }
     if (tokens[index] === "--") {
       index += 1
     } else if (tokens[index]?.startsWith("-")) {
@@ -176,10 +179,31 @@ function ghCommandSlices(command: string): string[][] {
 function shellWrappedGhCommandSlices(command: string): string[][] {
   const tokens = tokenizeShellCommand(command)
   const shellIndex = tokens.findIndex((token) => /(?:^|[\\/])(?:bash|sh|zsh)(?:\.exe)?$/i.test(token))
-  if (shellIndex < 0 || tokens[shellIndex + 1] !== "-c" || !tokens[shellIndex + 2]) {
+  const shellOptions = tokens[shellIndex + 1] ?? ""
+  if (
+    shellIndex < 0 ||
+    !/^-[A-Za-z]*c[A-Za-z]*$/.test(shellOptions) ||
+    !tokens[shellIndex + 2]
+  ) {
     return []
   }
   return ghCommandSlices(tokens[shellIndex + 2])
+}
+
+function hasOpaqueShellPrCreateIntent(command: string): boolean {
+  if (!/(?:^|\s)pr\s+create(?:\s|$)/i.test(command)) {
+    return false
+  }
+  if (hasShellControlSyntax(command)) {
+    return true
+  }
+  if (/\$(?:['"({]|[A-Za-z_])|`/.test(command)) {
+    return true
+  }
+  return (
+    /(?:^|\s)eval(?:\s|$)/i.test(command) ||
+    /(?:^|\s)(?:ba|z)?sh\s+-[A-Za-z]*c[A-Za-z]*(?:\s|$)/i.test(command)
+  )
 }
 
 function hasShellControlSyntax(command: string): boolean {
@@ -271,6 +295,7 @@ function hasGitHubRepositoryOverride(command: string, tokens: string[]): boolean
 function mayInvokeGitHubPrCreateThroughWrapper(command: string): boolean {
   const directCommands = ghCommandSlices(command)
   const wrappedCommands = shellWrappedGhCommandSlices(command)
+  const hasOpaquePrCreate = hasOpaqueShellPrCreateIntent(command)
   const isPrCreate = (tokens: string[]): boolean => {
     if (ghPrCreateIndex(tokens) >= 0 || isGraphQlPullRequestCreate(tokens)) {
       return true
@@ -278,10 +303,10 @@ function mayInvokeGitHubPrCreateThroughWrapper(command: string): boolean {
     const invocation = parseGhApiInvocation(tokens)
     return invocation.method === "POST" && isPullRequestCreateEndpoint(invocation.endpoint)
   }
-  if (!directCommands.some(isPrCreate) && !wrappedCommands.some(isPrCreate)) {
+  if (!hasOpaquePrCreate && !directCommands.some(isPrCreate) && !wrappedCommands.some(isPrCreate)) {
     return false
   }
-  return wrappedCommands.some(isPrCreate) || hasShellControlSyntax(command)
+  return hasOpaquePrCreate || wrappedCommands.some(isPrCreate) || hasShellControlSyntax(command)
 }
 
 function prCreateHead(
@@ -350,6 +375,75 @@ function isLocalBranchName(branch: string): boolean {
   }
 }
 
+function gitOutput(directory: string, args: string[]): string {
+  return execFileSync("git", ["-C", directory, ...args], {
+    encoding: "utf-8",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 15_000,
+  }).trim()
+}
+
+function normalizedRemoteUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "").replace(/\.git$/i, "")
+}
+
+function isSafeRemoteName(remote: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(remote)
+}
+
+function isGitObjectId(value: string): boolean {
+  return /^[a-f0-9]{40,64}$/i.test(value)
+}
+
+function hasSynchronizedRemoteHead(worktree: string, branch: string): boolean {
+  try {
+    const localHead = gitOutput(worktree, ["rev-parse", "--verify", "HEAD"])
+    const localBranchHead = gitOutput(worktree, ["rev-parse", "--verify", `refs/heads/${branch}`])
+    if (!isGitObjectId(localHead) || localHead !== localBranchHead) {
+      return false
+    }
+
+    const remote = gitOutput(worktree, ["config", "--get", `branch.${branch}.remote`])
+    const mergeRef = gitOutput(worktree, ["config", "--get", `branch.${branch}.merge`])
+    if (!isSafeRemoteName(remote) || remote === "." || mergeRef !== `refs/heads/${branch}`) {
+      return false
+    }
+
+    const fetchUrls = gitOutput(worktree, ["remote", "get-url", "--all", remote])
+      .split("\n")
+      .filter(Boolean)
+      .map(normalizedRemoteUrl)
+    const pushUrls = gitOutput(worktree, ["remote", "get-url", "--push", "--all", remote])
+      .split("\n")
+      .filter(Boolean)
+      .map(normalizedRemoteUrl)
+    if (
+      fetchUrls.length !== 1 ||
+      pushUrls.length !== 1 ||
+      !fetchUrls[0] ||
+      fetchUrls[0] !== pushUrls[0]
+    ) {
+      return false
+    }
+
+    const trackingHead = gitOutput(worktree, ["rev-parse", "--verify", `refs/remotes/${remote}/${branch}`])
+    if (trackingHead !== localHead) {
+      return false
+    }
+    const remoteLines = gitOutput(worktree, ["ls-remote", "--heads", remote, `refs/heads/${branch}`])
+      .split("\n")
+      .filter(Boolean)
+    const matchingRemoteHeads = remoteLines
+      .map((line) => line.split("\t", 2))
+      .filter(([objectId, ref]) => ref === `refs/heads/${branch}` && isGitObjectId(objectId))
+    return matchingRemoteHeads.length === 1 && matchingRemoteHeads[0][0] === localHead
+  } catch {
+    // A PR guard must not accept evidence when Git cannot prove the pushed head.
+    return false
+  }
+}
+
 // Resolves explicit gh pr create heads only. API-based PR creation remains
 // fail-closed when branch-bound validation evidence is required.
 export function resolveGitHubPrCreateEvidenceDirectory(command: string, directory: string): string | null {
@@ -390,7 +484,9 @@ export function resolveGitHubPrCreateEvidenceDirectory(command: string, director
         matches.push(realpathSync(worktree))
       }
     }
-    return matches.length === 1 ? matches[0] : null
+    return matches.length === 1 && hasSynchronizedRemoteHead(matches[0], head.value)
+      ? matches[0]
+      : null
   } catch {
     // Evidence lookup must fail closed when Git cannot prove the worktree.
   }
