@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import importlib
 import hashlib
+import importlib
 import json
 import os
 import sys
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -214,6 +214,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
         module = importlib.reload(importlib.import_module("session_metadata_index"))
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "index.json"
+            now = datetime.now(UTC)
             path.write_text(
                 json.dumps(
                     {
@@ -221,7 +222,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
                             {
                                 "session_id": "legacy",
                                 "event_count": 1,
-                                "last_event_at": "2026-07-29T00:00:00+00:00",
+                                "last_event_at": (now - timedelta(days=1)).isoformat(),
                             }
                         ]
                     }
@@ -232,7 +233,7 @@ class SessionMetadataIndexTest(unittest.TestCase):
             with patch.dict(os.environ, {"OPENCODE_SESSION_ID": "legacy"}):
                 result = module.update_session_index(
                     {
-                        "timestamp": "2026-07-30T00:00:00+00:00",
+                        "timestamp": now.isoformat(),
                         "cwd": "/repo",
                         "reason": "manual",
                     },
