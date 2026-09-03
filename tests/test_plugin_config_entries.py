@@ -473,6 +473,94 @@ class PluginConfigEntriesTest(unittest.TestCase):
             saved = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertEqual("google-drive", saved["profiles"]["mcp"])
 
+    def test_installer_accepts_miro_mcp_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "install-state.json"
+            calls: list[tuple[str, tuple[str, ...]]] = []
+
+            def run_repo_script(name: str, *args: str) -> int:
+                calls.append((name, args))
+                return 0
+
+            with (
+                patch.object(install_wizard, "STATE_PATH", state_path),
+                patch.object(
+                    install_wizard, "run_repo_script", side_effect=run_repo_script
+                ),
+            ):
+                result = install_wizard.main(
+                    [
+                        "--non-interactive",
+                        "--skip-extras",
+                        "--plugin-profile",
+                        "lean",
+                        "--mcp-profile",
+                        "miro",
+                        "--policy-profile",
+                        "balanced",
+                        "--notify-profile",
+                        "skip",
+                        "--telemetry-profile",
+                        "off",
+                        "--post-session-profile",
+                        "disabled",
+                        "--model-profile",
+                        "balanced",
+                        "--browser-profile",
+                        "playwright",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertIn(("mcp_command.py", ("profile", "miro")), calls)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual("miro", saved["profiles"]["mcp"])
+
+    def test_installer_preserves_miro_mcp_profile_on_reconfigure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "install-state.json"
+            state_path.write_text(
+                json.dumps({"profiles": {"mcp": "miro"}, "managed": {}}),
+                encoding="utf-8",
+            )
+            calls: list[tuple[str, tuple[str, ...]]] = []
+
+            def run_repo_script(name: str, *args: str) -> int:
+                calls.append((name, args))
+                return 0
+
+            with (
+                patch.object(install_wizard, "STATE_PATH", state_path),
+                patch.object(
+                    install_wizard, "run_repo_script", side_effect=run_repo_script
+                ),
+            ):
+                result = install_wizard.main(
+                    [
+                        "--non-interactive",
+                        "--skip-extras",
+                        "--plugin-profile",
+                        "lean",
+                        "--policy-profile",
+                        "balanced",
+                        "--notify-profile",
+                        "skip",
+                        "--telemetry-profile",
+                        "off",
+                        "--post-session-profile",
+                        "disabled",
+                        "--model-profile",
+                        "balanced",
+                        "--browser-profile",
+                        "playwright",
+                    ]
+                )
+
+            self.assertEqual(0, result)
+            self.assertIn(("mcp_command.py", ("profile", "miro")), calls)
+            saved = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual("miro", saved["profiles"]["mcp"])
+
     def test_installer_fresh_failure_does_not_claim_failed_or_skipped_profiles(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             state_path = Path(tmp) / "install-state.json"

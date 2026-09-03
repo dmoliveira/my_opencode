@@ -2015,6 +2015,8 @@ exit 0
             "playwright",
             "exa_search",
             "github",
+            "google-drive",
+            "miro",
         ):
             expect(
                 report.get("servers", {}).get(server_name, {}).get("status")
