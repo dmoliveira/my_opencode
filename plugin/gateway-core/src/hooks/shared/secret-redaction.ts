@@ -411,7 +411,7 @@ export function createSecretRedactor(options: {
         return redactionToken
       })
     }
-    if (next !== text && firstPatternMatch(next, patterns) !== null) {
+    if (firstPatternIndex !== null && firstPatternMatch(next, patterns) !== null) {
       throw new SecretRedactionError("unexpected_failure")
     }
     return { text: next, firstPatternIndex }
@@ -1231,6 +1231,42 @@ export function createSecretRedactor(options: {
     }
   }
 
+  function traverseProviderSystem(system: unknown): SecretRedactionStats {
+    if (!Array.isArray(system) || isProxy(system)) {
+      throw new SecretRedactionError("malformed_provider_object")
+    }
+    const state = createTraversalState(limits, false, true)
+    try {
+      chargeNode(state)
+      const systemEntries = providerOwnDataChildren(
+        system,
+        state.budget.maxNodes - state.budget.nodes,
+      )
+      state.active.add(system)
+      for (const [index, entry] of systemEntries) {
+        visit(
+          entry,
+          system,
+          index,
+          typeof entry === "string" ? "redact" : "root-scan",
+          1,
+          null,
+          null,
+          [index],
+          state,
+        )
+      }
+      state.active.delete(system)
+      state.visited.add(system)
+      return state.stats
+    } catch (error) {
+      if (error instanceof SecretRedactionError) {
+        throw error
+      }
+      throw new SecretRedactionError("unexpected_failure")
+    }
+  }
+
   return {
     redactText(text: string): { text: string; stats: SecretRedactionStats } {
       const stats = emptyStats()
@@ -1248,10 +1284,7 @@ export function createSecretRedactor(options: {
       return traverseProviderMessages(messages)
     },
     redactProviderSystem(system: unknown): SecretRedactionStats {
-      if (!Array.isArray(system) || isProxy(system)) {
-        throw new SecretRedactionError("malformed_provider_object")
-      }
-      return traverse(system, "redact", true)
+      return traverseProviderSystem(system)
     },
   }
 }

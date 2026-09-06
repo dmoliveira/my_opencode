@@ -43,6 +43,9 @@ Provider traversal starts in root scan mode so protocol fields block while
 recognized mutable content fields can be redacted. Once an immutable field is
 entered, nested descendants remain in blocking scan mode, except for the
 explicitly qualified projections described below.
+System roots retain direct string entries as mutable prompt text; object entries
+begin in root scan mode so unknown system fields block while recognized content
+fields remain redactable.
 
 OpenAI reasoning replay is one narrow exception. The gateway preserves
 `parts[index].metadata.openai.reasoningEncryptedContent` without regex scanning

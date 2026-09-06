@@ -26,11 +26,15 @@ export interface ProviderBoundarySecretFinalizer {
   }): void
 }
 
-function messageSessionId(messages: unknown): string {
+function messageSessionId(messages: unknown, maxMessages: number): string {
   if (!Array.isArray(messages) || isProxy(messages)) {
     return ""
   }
-  for (let index = 0; index < messages.length; index += 1) {
+  const limit = Number.isFinite(maxMessages) && maxMessages > 0 ? Math.floor(maxMessages) : 0
+  if (limit === 0 || messages.length > limit) {
+    return ""
+  }
+  for (let index = 0; index < messages.length && index < limit; index += 1) {
     const message = ownDataValue(messages, index)
     const info = ownDataValue(message, "info")
     const sessionID = ownDataValue(info, "sessionID")
@@ -136,11 +140,13 @@ export function createProviderBoundarySecretFinalizer(options: {
         return
       }
       const directory = payload.directory?.trim() || options.directory
-      const sessionId =
-        normalizeGatewayAuditSessionId(payload.input?.sessionID) || messageSessionId(messages)
+      let sessionId = normalizeGatewayAuditSessionId(payload.input?.sessionID)
       try {
         if (!Array.isArray(messages)) {
           throw new SecretRedactionError("malformed_provider_object")
+        }
+        if (!sessionId) {
+          sessionId = messageSessionId(messages, options.providerLimits.maxMessages)
         }
         const stats = redactor.redactProviderMessages(messages)
         auditOpaqueAttachmentOmission(directory, "messages", sessionId, stats)
