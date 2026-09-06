@@ -8,6 +8,12 @@ redacted in place. Except for the bounded opaque envelopes defined below,
 secret-pattern matches in protocol identifiers, URLs, metadata, unknown fields,
 or object keys block dispatch without logging the matched value.
 
+The configured redaction token must be non-empty, contain non-whitespace text,
+fit within 256 UTF-8 bytes, and match none of the configured detectors. Positive
+replacement expansion consumes the same character budget as the scanned input.
+After mutable replacement, the final value is checked again without mutation;
+any residual detector match blocks dispatch.
+
 The built-in OpenAI-key detector is left-token-bounded as
 `\bsk-[A-Za-z0-9_\-]{20,}`. It detects keys at the start of a value or after
 punctuation or whitespace, but does not mistake an `sk-...` suffix inside an
@@ -15,7 +21,9 @@ ordinary identifier such as `task-validation-accounting` for a secret. Explicit
 custom patterns are not boundary-rewritten and can intentionally retain broader
 matching.
 
-Provider messages and system values must be JSON-shaped data: records use the
+Provider message and system roots must be arrays at both the public redactor API
+and finalizer boundary; a present non-array root blocks as
+`malformed_provider_object`. Their contents must be JSON-shaped data: records use the
 ordinary or null prototype, arrays use the standard array prototype, the global
 `Object.prototype` has its standard unextended key set, and every traversed child
 is an own enumerable data property. Proxies, functions/callable proxies, custom
@@ -25,7 +33,16 @@ array properties, `undefined`, bigint, and non-finite numbers block as
 than invoking getters, preventing a value from changing between validation and
 dispatch scanning.
 Audit fallback session-ID extraction uses the same proxy-safe own-data
-descriptor rule and never invokes message accessors before validation.
+descriptor rule and never invokes message accessors before validation. Session IDs
+are normalized only when they fit within 256 UTF-8 bytes; oversized or blank IDs
+are omitted from audit fields.
+Boundary audit events emit only `has_session_id` and a SHA-256
+`session_id_hash`; they never persist the raw session ID.
+
+Provider traversal starts in root scan mode so protocol fields block while
+recognized mutable content fields can be redacted. Once an immutable field is
+entered, nested descendants remain in blocking scan mode, except for the
+explicitly qualified projections described below.
 
 OpenAI reasoning replay is one narrow exception. The gateway preserves
 `parts[index].metadata.openai.reasoningEncryptedContent` without regex scanning
@@ -157,7 +174,7 @@ tool result:
 - `providerMaxMessageChars`: `33,554,432`
 
 `providerMaxChars` and `providerMaxMessageChars` include traversed regex-scanned
-text, preserved ciphertext, and qualified attachment URLs. Local UI-only tool
+text, positive replacement expansion, preserved ciphertext, and qualified attachment URLs. Local UI-only tool
 metadata is not traversed or charged because the reviewed converter does not
 dispatch it. Public `scannedChars` telemetry counts each qualified URL once
 because every configured detector except the one transport-incompatible Google

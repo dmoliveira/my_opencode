@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   linkSync,
@@ -16,6 +17,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  gatewayAuditSessionFields,
   flushGatewayEventAuditExportsForTest,
   gatewayEventAuditExportStatsForTest,
   resetGatewayEventAuditStateForTest,
@@ -27,6 +29,19 @@ const inheritedOtelToggle = process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED;
 test.beforeEach(() => {
   resetGatewayEventAuditStateForTest();
   process.env.MY_OPENCODE_OTEL_EXPORT_ENABLED = "0";
+});
+
+test("gateway audit session fields normalize and hash without retaining raw IDs", () => {
+  const sessionId = "  session-audit-canary  ";
+  assert.deepEqual(gatewayAuditSessionFields(sessionId), {
+    has_session_id: true,
+    session_id_hash: createHash("sha256")
+      .update("session-audit-canary", "utf8")
+      .digest("hex"),
+  });
+  assert.deepEqual(gatewayAuditSessionFields(" \t"), {
+    has_session_id: false,
+  });
 });
 
 test.afterEach(async () => {
@@ -274,7 +289,7 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
       stage: "dispatch",
       reason_code: "security_probe",
       event_type: "tool.execute.after",
-      session_id: "raw-session-canary",
+       ...gatewayAuditSessionFields("raw-session-canary"),
       command: "command-canary",
       message: "message-canary",
       error_message: "error-canary",
@@ -312,6 +327,7 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
         `unexpected OTLP canary: ${canary}`,
       );
     }
+    assert.equal(localBody.includes("raw-session-canary"), false);
     assert.equal(localBody.includes("cache-fingerprint-canary"), true);
     assert.equal(localBody.includes("cache-strategy-canary"), true);
     assert.equal(localBody.includes('"omitted_match_count":7'), true);
@@ -336,6 +352,7 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
     assert.equal(keys.has("reason_code"), true);
     assert.equal(keys.has("hook_count"), true);
     assert.equal(keys.has("session_id_hash"), true);
+    assert.equal(keys.has("has_session_id"), true);
     assert.equal(keys.has("session_id"), false);
     assert.equal(keys.has("command"), false);
     assert.equal(keys.has("message"), false);
@@ -346,6 +363,11 @@ test("gateway event audit exports only allowlisted sanitized OTLP metadata", asy
     assert.equal(keys.has("prompt_cache_shard_count"), false);
     assert.equal(keys.has("prompt_cache_shard"), false);
     assert.equal(keys.has("omitted_match_count"), false);
+    const sessionHash = attributes.find((attribute) => attribute.key === "session_id_hash");
+    assert.equal(
+      sessionHash?.value?.stringValue,
+      createHash("sha256").update("raw-session-canary", "utf8").digest("hex"),
+    );
     assert.equal(
       requests[0].init?.headers?.["content-type"],
       "application/json",

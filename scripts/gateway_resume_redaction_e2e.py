@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import os
 import re
@@ -1549,8 +1550,11 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 redaction_row = redaction_rows[0]
                 require(
-                    redaction_row.get("session_id") == resume_session_id,
-                    "redaction_audit_session_invalid",
+                    redaction_row.get("has_session_id") is True
+                    and redaction_row.get("session_id_hash")
+                    == hashlib.sha256(resume_session_id.encode("utf-8")).hexdigest()
+                    and "session_id" not in redaction_row,
+                    "redaction_audit_session_hash_invalid",
                 )
                 require(
                     redaction_row.get("match_count") == 1,

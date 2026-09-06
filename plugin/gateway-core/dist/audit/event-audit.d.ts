@@ -13,6 +13,11 @@ export interface GatewayEventAuditExportStats extends MutableOtelExportStats {
     inFlight: number;
 }
 export declare function sanitizeGatewayAuditText(value: unknown): string;
+export declare function normalizeGatewayAuditSessionId(sessionId: unknown): string;
+export declare function gatewayAuditSessionFields(sessionId: unknown): {
+    has_session_id: boolean;
+    session_id_hash?: string;
+};
 export declare function gatewayEventAuditExportStatsForTest(): GatewayEventAuditExportStats;
 export declare function flushGatewayEventAuditExportsForTest(): Promise<void>;
 export declare function resetGatewayEventAuditStateForTest(): void;

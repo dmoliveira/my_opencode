@@ -234,7 +234,10 @@ const OTLP_STRING_ATTRIBUTES = new Set([
   "source",
   "stage",
   "status",
+  "session_id_hash",
 ]);
+
+const MAX_GATEWAY_AUDIT_SESSION_ID_BYTES = 256;
 
 const OTLP_BOOLEAN_ATTRIBUTES = new Set([
   "blocked",
@@ -839,12 +842,41 @@ function nowNanos(): string {
 
 function hashedSessionId(entry: Record<string, unknown>): string | null {
   for (const key of ["session_id", "sessionID", "sessionId"]) {
-    const value = entry[key];
-    if (typeof value === "string" && value.trim()) {
-      return createHash("sha256").update(value, "utf-8").digest("hex");
+    const normalized = normalizeGatewayAuditSessionId(entry[key]);
+    if (normalized) {
+      return createHash("sha256").update(normalized, "utf-8").digest("hex");
     }
   }
   return null;
+}
+
+export function normalizeGatewayAuditSessionId(sessionId: unknown): string {
+  if (typeof sessionId !== "string" || sessionId.length > MAX_GATEWAY_AUDIT_SESSION_ID_BYTES) {
+    return "";
+  }
+  const normalized = sessionId.trim();
+  if (
+    !normalized ||
+    Buffer.byteLength(normalized, "utf8") > MAX_GATEWAY_AUDIT_SESSION_ID_BYTES
+  ) {
+    return "";
+  }
+  return normalized;
+}
+
+export function gatewayAuditSessionFields(
+  sessionId: unknown,
+): { has_session_id: boolean; session_id_hash?: string } {
+  const normalized = normalizeGatewayAuditSessionId(sessionId);
+  if (!normalized) {
+    return { has_session_id: false };
+  }
+  return {
+    has_session_id: true,
+    session_id_hash: createHash("sha256")
+      .update(normalized, "utf-8")
+      .digest("hex"),
+  };
 }
 
 function allowlistedOtelEvent(

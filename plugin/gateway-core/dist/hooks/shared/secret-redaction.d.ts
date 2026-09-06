@@ -1,4 +1,4 @@
-export type SecretRedactionErrorCode = "invalid_pattern" | "immutable_match" | "cycle_detected" | "depth_limit" | "node_limit" | "text_limit" | "malformed_provider_object" | "malformed_provider_metadata" | "mutation_failed" | "unexpected_failure";
+export type SecretRedactionErrorCode = "invalid_pattern" | "invalid_redaction_token" | "immutable_match" | "cycle_detected" | "depth_limit" | "node_limit" | "text_limit" | "malformed_provider_object" | "malformed_provider_metadata" | "mutation_failed" | "unexpected_failure";
 export type SecretRedactionMatchTarget = "key" | "value";
 export type SecretRedactionLocationCode = "provider_metadata_openai_item_id" | "provider_metadata_openai_other" | "immutable_protocol_field" | "unknown_field";
 interface SecretRedactionMatchDiagnostics {
