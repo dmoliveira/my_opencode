@@ -4,6 +4,7 @@ import { parseCanonicalProviderAttachmentDataUrl } from "./provider-attachment-d
 
 export type SecretRedactionErrorCode =
   | "invalid_pattern"
+  | "invalid_redaction_token"
   | "immutable_match"
   | "cycle_detected"
   | "depth_limit"
@@ -84,7 +85,7 @@ interface PatternApplicationOptions {
   charge?: boolean
 }
 
-type VisitMode = "redact" | "scan"
+type VisitMode = "redact" | "root-scan" | "immutable-scan"
 type PropertyPath = Array<string | number>
 
 interface ResourceBudget {
@@ -114,6 +115,7 @@ const OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_SOURCE = "AIza[0-9A-Za-z\\-_]{20,
 const OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_FLAGS = "g"
 const OPAQUE_ATTACHMENT_PATTERN_PREFIX = "AIza"
 const OPAQUE_ATTACHMENT_PATTERN_MIN_SUFFIX_LENGTH = 20
+const MAX_REDACTION_TOKEN_BYTES = 256
 const STANDARD_OBJECT_PROTOTYPE_KEYS = new Set<PropertyKey>([
   "constructor",
   "__defineGetter__",
@@ -253,6 +255,35 @@ function isLinearOpaqueAttachmentPattern(pattern: CompiledPattern): boolean {
   )
 }
 
+function patternMatches(value: string, pattern: CompiledPattern): boolean {
+  if (isLinearOpaqueAttachmentPattern(pattern)) {
+    for (const _match of opaqueAttachmentPatternMatches(value)) return true
+    return false
+  }
+  return new RegExp(pattern.source, pattern.flags).test(value)
+}
+
+function firstPatternMatch(value: string, patterns: CompiledPattern[]): number | null {
+  for (const pattern of patterns) {
+    if (patternMatches(value, pattern)) return pattern.index
+  }
+  return null
+}
+
+function validateRedactionToken(
+  redactionToken: unknown,
+  patterns: CompiledPattern[],
+): asserts redactionToken is string {
+  if (
+    typeof redactionToken !== "string" ||
+    redactionToken.trim().length === 0 ||
+    Buffer.byteLength(redactionToken, "utf8") > MAX_REDACTION_TOKEN_BYTES ||
+    firstPatternMatch(redactionToken, patterns) !== null
+  ) {
+    throw new SecretRedactionError("invalid_redaction_token")
+  }
+}
+
 function emptyStats(): SecretRedactionStats {
   return {
     matches: 0,
@@ -278,6 +309,8 @@ export function createSecretRedactor(options: {
   omittableOpaqueAttachmentPatternIndex?: number | null
 }): SecretRedactor {
   const patterns = options.patterns.map(compilePattern)
+  validateRedactionToken(options.redactionToken, patterns)
+  const redactionToken = options.redactionToken
   const omittableOpaqueAttachmentPatternIndex = Number.isInteger(
     options.omittableOpaqueAttachmentPatternIndex,
   )
@@ -329,12 +362,20 @@ export function createSecretRedactor(options: {
     budget: ResourceBudget,
     localBudget?: ResourceBudget,
   ): void {
-    budget.chars += text.length
+    chargeCharCount(text.length, budget, localBudget)
+  }
+
+  function chargeCharCount(
+    count: number,
+    budget: ResourceBudget,
+    localBudget?: ResourceBudget,
+  ): void {
+    budget.chars += count
     if (budget.chars > budget.maxChars) {
       throw new SecretRedactionError("text_limit")
     }
     if (localBudget) {
-      localBudget.chars += text.length
+      localBudget.chars += count
       if (localBudget.chars > localBudget.maxChars) {
         throw new SecretRedactionError("text_limit")
       }
@@ -348,7 +389,8 @@ export function createSecretRedactor(options: {
     localBudget?: ResourceBudget,
     applicationOptions: PatternApplicationOptions = {},
   ): PatternApplication {
-    if (applicationOptions.charge !== false) {
+    const shouldCharge = applicationOptions.charge !== false
+    if (shouldCharge) {
       chargeChars(text, budget, localBudget)
     }
     stats.scannedChars += text.length
@@ -356,11 +398,20 @@ export function createSecretRedactor(options: {
     let firstPatternIndex: number | null = null
     for (const [patternIndex, pattern] of patterns.entries()) {
       const regex = new RegExp(pattern.source, pattern.flags)
-      next = next.replace(regex, () => {
+      next = next.replace(regex, (match) => {
+        if (shouldCharge) {
+          const expansion = redactionToken.length - match.length
+          if (expansion > 0) {
+            chargeCharCount(expansion, budget, localBudget)
+          }
+        }
         firstPatternIndex ??= patternIndex
         stats.matches += 1
-        return options.redactionToken
+        return redactionToken
       })
+    }
+    if (next !== text && firstPatternMatch(next, patterns) !== null) {
+      throw new SecretRedactionError("unexpected_failure")
     }
     return { text: next, firstPatternIndex }
   }
@@ -784,8 +835,11 @@ export function createSecretRedactor(options: {
   }
 
   function childMode(parentMode: VisitMode, key: string): VisitMode {
+    if (parentMode === "immutable-scan") {
+      return "immutable-scan"
+    }
     if (IMMUTABLE_PROTOCOL_KEYS.has(key)) {
-      return "scan"
+      return "immutable-scan"
     }
     if (MUTABLE_CONTENT_KEYS.has(key)) {
       return "redact"
@@ -965,7 +1019,7 @@ export function createSecretRedactor(options: {
       if (applied.text === value) {
         return
       }
-      if (mode === "scan") {
+      if (mode !== "redact") {
         throw immutableMatchError({
           matchTarget: "value",
           patternIndex: applied.firstPatternIndex,
@@ -1127,11 +1181,8 @@ export function createSecretRedactor(options: {
   }
 
   function traverseProviderMessages(messages: unknown): SecretRedactionStats {
-    if (messages && typeof messages === "object" && isProxy(messages)) {
+    if (!Array.isArray(messages) || isProxy(messages)) {
       throw new SecretRedactionError("malformed_provider_object")
-    }
-    if (!Array.isArray(messages)) {
-      return traverse(messages, "scan", true)
     }
     if (messages.length > providerLimits.maxMessages) {
       throw new SecretRedactionError("node_limit")
@@ -1158,7 +1209,7 @@ export function createSecretRedactor(options: {
           message,
           messages,
           index,
-          "scan",
+          "root-scan",
           1,
           null,
           null,
@@ -1196,6 +1247,9 @@ export function createSecretRedactor(options: {
       return traverseProviderMessages(messages)
     },
     redactProviderSystem(system: unknown): SecretRedactionStats {
+      if (!Array.isArray(system) || isProxy(system)) {
+        throw new SecretRedactionError("malformed_provider_object")
+      }
       return traverse(system, "redact", true)
     },
   }

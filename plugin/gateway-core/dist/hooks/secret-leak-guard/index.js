@@ -1,4 +1,4 @@
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { gatewayAuditSessionFields, writeGatewayEventAudit, } from "../../audit/event-audit.js";
 import { createSecretRedactor, } from "../shared/secret-redaction.js";
 function mergeStats(target, source) {
     target.matches += source.matches;
@@ -54,7 +54,7 @@ export function createSecretLeakGuardHook(options) {
                 hook: "secret-leak-guard",
                 stage: "state",
                 reason_code: "secret_output_redacted",
-                session_id: sessionId,
+                ...gatewayAuditSessionFields(sessionId),
                 match_count: stats.matches,
                 redacted_field_count: stats.redactedFields,
                 scanned_chars: stats.scannedChars,

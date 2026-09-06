@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -41,10 +42,15 @@ function pluginFor(directory, config = {}) {
   })
 }
 
-function directRedactor({ limits = {}, providerLimits = {} } = {}) {
+function directRedactor({
+  limits = {},
+  providerLimits = {},
+  patterns = secretConfig().patterns,
+  redactionToken = "[REDACTED]",
+} = {}) {
   return createSecretRedactor({
-    patterns: secretConfig().patterns,
-    redactionToken: "[REDACTED]",
+    patterns,
+    redactionToken,
     limits: {
       maxDepth: 12,
       maxNodes: 20000,
@@ -209,6 +215,40 @@ test("default case-insensitive assignment pattern is active", async () => {
   }
 })
 
+test("secret-output audit hashes tool session IDs", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-audit-session-"))
+  const auditPath = join(directory, "gateway-events.jsonl")
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousPath = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
+  const sessionCanary = `AIza${"C".repeat(20)}`
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = auditPath
+  try {
+    const plugin = pluginFor(directory)
+    const output = { output: "token=abcdefghijkl" }
+    await plugin["tool.execute.after"](
+      { tool: "bash", sessionID: sessionCanary },
+      output,
+    )
+    const audit = readFileSync(auditPath, "utf8")
+    assert.doesNotMatch(audit, new RegExp(sessionCanary))
+    const row = JSON.parse(audit.trim().split("\n").at(-1))
+    assert.equal(row.reason_code, "secret_output_redacted")
+    assert.equal(row.has_session_id, true)
+    assert.equal(
+      row.session_id_hash,
+      createHash("sha256").update(sessionCanary, "utf8").digest("hex"),
+    )
+    assert.equal("session_id" in row, false)
+  } finally {
+    if (previousAudit === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    if (previousPath === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
+    else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = previousPath
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("malformed secret patterns fail closed without exposing pattern text", () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-secret-invalid-"))
   try {
@@ -230,6 +270,133 @@ test("malformed secret patterns fail closed without exposing pattern text", () =
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("redaction tokens are bounded and cannot match configured detectors", () => {
+  const options = {
+    patterns: ["sk-[A-Za-z0-9_\\-]{10,}"],
+    limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+  }
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        ...options,
+        redactionToken: `sk-${"A".repeat(10)}`,
+      }),
+    (error) => error.code === "invalid_redaction_token",
+  )
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        ...options,
+        redactionToken: " ",
+      }),
+    (error) => error.code === "invalid_redaction_token",
+  )
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        ...options,
+        redactionToken: "A".repeat(257),
+      }),
+    (error) => error.code === "invalid_redaction_token",
+  )
+  assert.doesNotThrow(() =>
+    createSecretRedactor({
+      ...options,
+      redactionToken: "é".repeat(128),
+    }),
+  )
+  assert.throws(
+    () =>
+      createSecretRedactor({
+        ...options,
+        redactionToken: "é".repeat(129),
+      }),
+    (error) => error.code === "invalid_redaction_token",
+  )
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-invalid-token-"))
+  try {
+    assert.throws(
+      () =>
+        GatewayCorePlugin({
+          directory,
+          config: {
+            secretLeakGuard: secretConfig({
+              redactionToken: `sk-${"B".repeat(10)}`,
+            }),
+          },
+        }),
+      (error) => error.code === "invalid_redaction_token",
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("redaction expansion is budgeted and contextual residual matches fail closed", () => {
+  assert.doesNotThrow(() =>
+    directRedactor({
+      patterns: ["secret"],
+      redactionToken: "x",
+      limits: { maxChars: 6 },
+    }).redactText("secret"),
+  )
+  assert.throws(
+    () =>
+      directRedactor({
+        patterns: ["x"],
+        redactionToken: "yy",
+        limits: { maxChars: 3 },
+      }).redactText("xxx"),
+    (error) => error.code === "text_limit",
+  )
+  const exactProviderExpansion = directRedactor({
+    patterns: ["qq"],
+    redactionToken: "yyy",
+    providerLimits: { maxChars: 10, maxMessageChars: 10 },
+  }).redactProviderMessages([{ text: "qqqq" }])
+  assert.equal(exactProviderExpansion.matches, 2)
+  assert.throws(
+    () =>
+      directRedactor({
+        patterns: ["qq"],
+        redactionToken: "yyy",
+        providerLimits: { maxChars: 9, maxMessageChars: 10 },
+      }).redactProviderMessages([{ text: "qqqq" }]),
+    (error) => error.code === "text_limit",
+  )
+  assert.throws(
+    () =>
+      directRedactor({
+        patterns: ["secretsecret"],
+        redactionToken: "secret",
+      }).redactText("secretsecretsecretsecret"),
+    (error) => error.code === "unexpected_failure",
+  )
+})
+
+test("immutable provider provenance remains sticky below protocol fields", () => {
+  const secret = `sk-${"A".repeat(10)}`
+  const immutableMessage = {
+    info: { role: "user" },
+    parts: [{ type: "future-part", metadata: { content: secret } }],
+  }
+  assert.throws(
+    () => directRedactor().redactProviderMessages([immutableMessage]),
+    (error) =>
+      error.code === "immutable_match" &&
+      error.patternIndex === 0 &&
+      error.locationCode === "unknown_field",
+  )
+
+  const mutableMessage = {
+    info: { role: "user" },
+    parts: [{ type: "future-part", content: secret }],
+  }
+  const stats = directRedactor().redactProviderMessages([mutableMessage])
+  assert.equal(mutableMessage.parts[0].content, "[REDACTED]")
+  assert.equal(stats.matches, 1)
 })
 
 test("provider finalizer redacts runtime-shaped mutable content and preserves protocol fields", async () => {
@@ -425,9 +592,10 @@ test("immutable and unknown provider fields block without leaking canaries to au
   try {
     const plugin = pluginFor(directory)
     const canary = "UrlSecret_123456"
+    const sessionCanary = `AIza${"B".repeat(20)}`
     const messages = [
       {
-        info: { role: "user" },
+        info: { role: "user", sessionID: sessionCanary },
         parts: [{ type: "file", url: `https://example.invalid/?token=${canary}` }],
       },
     ]
@@ -438,10 +606,17 @@ test("immutable and unknown provider fields block without leaking canaries to au
     const audit = readFileSync(auditPath, "utf8")
     assert.match(audit, /provider_boundary_secret_dispatch_blocked/)
     assert.doesNotMatch(audit, new RegExp(canary))
+    assert.doesNotMatch(audit, new RegExp(sessionCanary))
     const urlBlock = JSON.parse(audit.trim().split("\n").at(-1))
     assert.equal(urlBlock.match_target, "value")
     assert.equal(urlBlock.pattern_index, 1)
     assert.equal(urlBlock.location_code, "immutable_protocol_field")
+    assert.equal(urlBlock.has_session_id, true)
+    assert.equal(
+      urlBlock.session_id_hash,
+      createHash("sha256").update(sessionCanary, "utf8").digest("hex"),
+    )
+    assert.equal("session_id" in urlBlock, false)
 
     const unknown = [
       {
@@ -458,6 +633,35 @@ test("immutable and unknown provider fields block without leaking canaries to au
     else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
     if (previousPath === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
     else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = previousPath
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("provider finalizers reject present malformed message and system roots", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-malformed-roots-"))
+  try {
+    const plugin = pluginFor(directory)
+    const redactor = directRedactor()
+    const malformedRoots = [{}, "safe", null, new Proxy([], {})]
+    for (const root of malformedRoots) {
+      assert.throws(
+        () => redactor.redactProviderMessages(root),
+        (error) => error.code === "malformed_provider_object",
+      )
+      assert.throws(
+        () => redactor.redactProviderSystem(root),
+        (error) => error.code === "malformed_provider_object",
+      )
+      await assert.rejects(
+        plugin["experimental.chat.messages.transform"]({}, { messages: root }),
+        (error) => error.code === "malformed_provider_object",
+      )
+      await assert.rejects(
+        plugin["experimental.chat.system.transform"]({}, { system: root }),
+        (error) => error.code === "malformed_provider_object",
+      )
+    }
+  } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
@@ -636,6 +840,64 @@ test("provider redactor preserves a canonical PNG Google-key collision and scans
       },
     )
   } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("provider attachment omission audit hashes provider-derived session IDs", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-secret-attachment-audit-session-"))
+  const auditPath = join(directory, "gateway-events.jsonl")
+  const previousAudit = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+  const previousPath = process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
+  const sessionCanary = "raw-session-attachment-canary"
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = "1"
+  process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = auditPath
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false, order: [], disabled: [] } },
+    })
+    const message = pngAttachmentMessage()
+    message.info.sessionID = sessionCanary
+    message.parts[0].sessionID = sessionCanary
+    await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
+    const oversizedSessionMessage = pngAttachmentMessage()
+    const oversizedSessionId = "s".repeat(1024)
+    oversizedSessionMessage.info.sessionID = oversizedSessionId
+    oversizedSessionMessage.parts[0].sessionID = oversizedSessionId
+    await plugin["experimental.chat.messages.transform"](
+      {},
+      { messages: [oversizedSessionMessage] },
+    )
+    const audit = readFileSync(auditPath, "utf8")
+    assert.doesNotMatch(audit, new RegExp(sessionCanary))
+    const omissions = audit
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter(
+        (row) =>
+          row.reason_code ===
+          "provider_boundary_opaque_attachment_collision_omitted",
+      )
+    const omission = omissions[0]
+    assert.ok(omission)
+    assert.equal(omission.has_session_id, true)
+    assert.equal(
+      omission.session_id_hash,
+      createHash("sha256").update(sessionCanary, "utf8").digest("hex"),
+    )
+    assert.equal("session_id" in omission, false)
+    const oversizedOmission = omissions.at(-1)
+    assert.ok(oversizedOmission)
+    assert.equal(oversizedOmission.has_session_id, false)
+    assert.equal("session_id_hash" in oversizedOmission, false)
+    assert.equal(audit.includes(oversizedSessionId), false)
+  } finally {
+    if (previousAudit === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT
+    else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT = previousAudit
+    if (previousPath === undefined) delete process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH
+    else process.env.MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH = previousPath
     rmSync(directory, { recursive: true, force: true })
   }
 })
