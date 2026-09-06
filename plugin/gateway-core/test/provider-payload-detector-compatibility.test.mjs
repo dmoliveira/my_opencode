@@ -162,17 +162,31 @@ function directUserFileMessage(fixture) {
   }
 }
 
-function maximumSizeDirectUserPdfFixture() {
+function maximumSizeDirectUserPdfFixture(collisionPosition = "end") {
   const prefix = "data:application/pdf;base64,"
   const payloadChars = MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS - prefix.length
   assert.equal(payloadChars % 4, 0)
   const bytes = Buffer.alloc((payloadChars / 4) * 3 - 1, 0x41)
   const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
-  collisionBytes.copy(bytes, bytes.length - collisionBytes.length - 2)
+  const collisionOffset =
+    collisionPosition === "start"
+      ? 0
+      : bytes.length - collisionBytes.length - 2
+  collisionBytes.copy(bytes, collisionOffset)
   const url = `${prefix}${bytes.toString("base64")}`
   assert.equal(url.length, MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS)
   assert.equal(url.includes(GOOGLE_KEY_COLLISION), true)
-  return { id: "pdf-max-size", mime: "application/pdf", url }
+  return { id: `pdf-max-size-${collisionPosition}`, mime: "application/pdf", url }
+}
+
+function canonicalPdfUrlContainingPattern(candidate, trailingBytes = Buffer.alloc(0)) {
+  const payload = Buffer.concat([
+    Buffer.from("PDF", "ascii"),
+    Buffer.from(candidate, "base64"),
+    trailingBytes,
+  ]).toString("base64")
+  assert.equal(payload.slice(4, 4 + candidate.length), candidate)
+  return `data:application/pdf;base64,${payload}`
 }
 
 function toolPathMessage(path) {
@@ -228,10 +242,13 @@ function jsonStringChars(value) {
   )
 }
 
-function defaultAttachmentRedactor(providerLimits = {}) {
+function defaultAttachmentRedactor(
+  providerLimits = {},
+  patterns = DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns,
+) {
   const config = DEFAULT_GATEWAY_CONFIG.secretLeakGuard
   return createSecretRedactor({
-    patterns: config.patterns,
+    patterns,
     omittableOpaqueAttachmentPatternIndex: 3,
     redactionToken: config.redactionToken,
     limits: {
@@ -282,13 +299,70 @@ test("assembled provider finalizer accepts a maximum-size canonical attachment",
       directory,
       config: { hooks: { enabled: false, order: [], disabled: [] } },
     })
-    const message = directUserFileMessage(maximumSizeDirectUserPdfFixture())
+    const message = directUserFileMessage(maximumSizeDirectUserPdfFixture("start"))
     await assert.doesNotReject(
       plugin["experimental.chat.messages.transform"]({}, { messages: [message] }),
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test("direct redactor uses bounded scanning for an early maximum-size attachment collision", () => {
+  const fixture = maximumSizeDirectUserPdfFixture("start")
+  const message = directUserFileMessage(fixture)
+  const stats = defaultAttachmentRedactor().redactProviderMessages([message])
+
+  assert.equal(message.parts[0].url, fixture.url)
+  assert.equal(stats.matches, 0)
+  assert.equal(stats.omittedOpaqueAttachmentMatches, 1)
+})
+
+test("bounded attachment scanning preserves native detector match boundaries", () => {
+  const cases = [
+    {
+      id: "pdf-short-pattern",
+      candidate: `AIza${"A".repeat(19)}`,
+      trailingBytes: Buffer.alloc(0),
+    },
+    {
+      id: "pdf-minimum-pattern",
+      candidate: GOOGLE_KEY_COLLISION,
+      trailingBytes: Buffer.alloc(0),
+    },
+    {
+      id: "pdf-greedy-pattern",
+      candidate: GOOGLE_KEY_COLLISION,
+      trailingBytes: Buffer.from("A", "ascii"),
+    },
+  ]
+
+  for (const fixture of cases) {
+    const url = canonicalPdfUrlContainingPattern(fixture.candidate, fixture.trailingBytes)
+    const expectedMatches = [...url.matchAll(/AIza[0-9A-Za-z\-_]{20,}/g)]
+    const stats = defaultAttachmentRedactor().redactProviderMessages([
+      directUserFileMessage({ id: fixture.id, mime: "application/pdf", url }),
+    ])
+
+    assert.equal(stats.matches, 0)
+    assert.equal(stats.omittedOpaqueAttachmentMatches, expectedMatches.length)
+  }
+})
+
+test("duplicate exact attachment detectors remain blocking on an early maximum-size collision", () => {
+  const patterns = [
+    ...DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns,
+    "AIza[0-9A-Za-z\\-_]{20,}",
+  ]
+  const message = directUserFileMessage(maximumSizeDirectUserPdfFixture("start"))
+
+  assert.throws(
+    () => defaultAttachmentRedactor({}, patterns).redactProviderMessages([message]),
+    (error) =>
+      error.code === "immutable_match" &&
+      error.patternIndex === patterns.length - 1 &&
+      error.locationCode === "immutable_protocol_field",
+  )
 })
 
 test("explicit broad detector retains configured identifier matching", async () => {

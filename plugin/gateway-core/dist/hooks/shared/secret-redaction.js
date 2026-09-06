@@ -17,6 +17,8 @@ export class SecretRedactionError extends Error {
 const MISSING_OWN_VALUE = Symbol("missing-own-value");
 const OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_SOURCE = "AIza[0-9A-Za-z\\-_]{20,}";
 const OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_FLAGS = "g";
+const OPAQUE_ATTACHMENT_PATTERN_PREFIX = "AIza";
+const OPAQUE_ATTACHMENT_PATTERN_MIN_SUFFIX_LENGTH = 20;
 const STANDARD_OBJECT_PROTOTYPE_KEYS = new Set([
     "constructor",
     "__defineGetter__",
@@ -108,6 +110,37 @@ function compilePattern(rawPattern, index) {
         throw new SecretRedactionError("invalid_pattern", `index=${index}`);
     }
     return { index, source, flags: normalizedFlags };
+}
+function isOpaqueAttachmentPatternCharacter(charCode) {
+    return ((charCode >= 0x30 && charCode <= 0x39) ||
+        (charCode >= 0x41 && charCode <= 0x5a) ||
+        (charCode >= 0x61 && charCode <= 0x7a) ||
+        charCode === 0x2d ||
+        charCode === 0x5f);
+}
+function* opaqueAttachmentPatternMatches(value) {
+    let searchFrom = 0;
+    while (searchFrom < value.length) {
+        const start = value.indexOf(OPAQUE_ATTACHMENT_PATTERN_PREFIX, searchFrom);
+        if (start < 0)
+            return;
+        const suffixStart = start + OPAQUE_ATTACHMENT_PATTERN_PREFIX.length;
+        let end = suffixStart;
+        while (end < value.length && isOpaqueAttachmentPatternCharacter(value.charCodeAt(end))) {
+            end += 1;
+        }
+        if (end - suffixStart >= OPAQUE_ATTACHMENT_PATTERN_MIN_SUFFIX_LENGTH) {
+            yield { start, end };
+            searchFrom = end;
+        }
+        else {
+            searchFrom = start + 1;
+        }
+    }
+}
+function isLinearOpaqueAttachmentPattern(pattern) {
+    return (pattern.source === OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_SOURCE &&
+        pattern.flags === OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_FLAGS);
 }
 function emptyStats() {
     return {
@@ -360,19 +393,15 @@ export function createSecretRedactor(options) {
     }
     function isOmittableOpaqueAttachmentPattern(pattern) {
         return (pattern.index === omittableOpaqueAttachmentPatternIndex &&
-            pattern.source === OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_SOURCE &&
-            pattern.flags === OPAQUE_ATTACHMENT_FALSE_POSITIVE_PATTERN_FLAGS);
+            isLinearOpaqueAttachmentPattern(pattern));
     }
     function opaqueAttachmentCollisionCount(value) {
         let count = 0;
         for (const pattern of patterns) {
             if (!isOmittableOpaqueAttachmentPattern(pattern))
                 continue;
-            const regex = new RegExp(pattern.source, pattern.flags);
-            for (let match = regex.exec(value); match; match = regex.exec(value)) {
-                count += 1;
-                if (match[0].length === 0)
-                    regex.lastIndex += 1;
+            for (const match of opaqueAttachmentPatternMatches(value)) {
+                count += match.end > match.start ? 1 : 0;
             }
         }
         return count;
@@ -383,11 +412,29 @@ export function createSecretRedactor(options) {
         stats.scannedChars += value.length;
         let omittedMatches = 0;
         for (const pattern of patterns) {
+            if (isLinearOpaqueAttachmentPattern(pattern)) {
+                for (const match of opaqueAttachmentPatternMatches(value)) {
+                    if (isOmittableOpaqueAttachmentPattern(pattern) &&
+                        payloadStart !== null &&
+                        payloadEnd !== null &&
+                        match.start >= payloadStart &&
+                        match.end <= payloadEnd) {
+                        omittedMatches += 1;
+                    }
+                    else {
+                        stats.matches += 1;
+                        return pattern.index;
+                    }
+                }
+                continue;
+            }
             const regex = new RegExp(pattern.source, pattern.flags);
             for (let match = regex.exec(value); match; match = regex.exec(value)) {
                 const start = match.index;
                 const end = start + match[0].length;
                 if (isOmittableOpaqueAttachmentPattern(pattern) &&
+                    payloadStart !== null &&
+                    payloadEnd !== null &&
                     start >= payloadStart &&
                     end <= payloadEnd) {
                     omittedMatches += 1;
@@ -597,11 +644,11 @@ export function createSecretRedactor(options) {
                     const envelope = omittedCollisionCount > 0
                         ? parseCanonicalProviderAttachmentDataUrl(value, mime)
                         : null;
-                    if (envelope) {
+                    if (envelope || patterns.some(isLinearOpaqueAttachmentPattern)) {
                         const blockingPatternIndex = scanQualifiedOpaqueAttachment({
                             value,
-                            payloadStart: envelope.payloadStart,
-                            payloadEnd: envelope.payloadEnd,
+                            payloadStart: envelope?.payloadStart ?? null,
+                            payloadEnd: envelope?.payloadEnd ?? null,
                             stats: state.stats,
                             budget: state.budget,
                             localBudget,
