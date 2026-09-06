@@ -301,6 +301,32 @@ test("redaction tokens are bounded and cannot match configured detectors", () =>
       }),
     (error) => error.code === "invalid_redaction_token",
   )
+  const originalTrim = String.prototype.trim
+  const originalRegExpTest = RegExp.prototype.test
+  const originalByteLength = Buffer.byteLength
+  try {
+    String.prototype.trim = () => {
+      throw new Error("oversized token was trimmed")
+    }
+    RegExp.prototype.test = () => {
+      throw new Error("oversized token reached detector matching")
+    }
+    Buffer.byteLength = () => {
+      throw new Error("oversized token reached byte-length validation")
+    }
+    assert.throws(
+      () =>
+        createSecretRedactor({
+          ...options,
+          redactionToken: "A".repeat(257),
+        }),
+      (error) => error.code === "invalid_redaction_token",
+    )
+  } finally {
+    String.prototype.trim = originalTrim
+    RegExp.prototype.test = originalRegExpTest
+    Buffer.byteLength = originalByteLength
+  }
   assert.doesNotThrow(() =>
     createSecretRedactor({
       ...options,
@@ -324,6 +350,18 @@ test("redaction tokens are bounded and cannot match configured detectors", () =>
           config: {
             secretLeakGuard: secretConfig({
               redactionToken: `sk-${"B".repeat(10)}`,
+            }),
+          },
+        }),
+      (error) => error.code === "invalid_redaction_token",
+    )
+    assert.throws(
+      () =>
+        GatewayCorePlugin({
+          directory,
+          config: {
+            secretLeakGuard: secretConfig({
+              redactionToken: " ".repeat(1024),
             }),
           },
         }),
