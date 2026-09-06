@@ -21,6 +21,20 @@ import {
 const KNOWN_GATEWAY_HOOK_IDS = new Set(DEFAULT_GATEWAY_HOOK_ORDER);
 const LLM_DECISION_HOOK_IDS = new Set(GATEWAY_LLM_DECISION_HOOK_IDS);
 const LLM_DECISION_MODES = new Set<string>(GATEWAY_LLM_DECISION_MODES);
+const MAX_REDACTION_TOKEN_BYTES = 256;
+
+function configuredRedactionToken(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+  if (
+    value.length > MAX_REDACTION_TOKEN_BYTES ||
+    Buffer.byteLength(value, "utf8") > MAX_REDACTION_TOKEN_BYTES
+  ) {
+    return value;
+  }
+  return value.trim().length > 0 ? value : fallback;
+}
 
 // Coerces unknown value into a normalized string array.
 function stringList(value: unknown): string[] {
@@ -1968,11 +1982,10 @@ export function loadGatewayConfig(raw: unknown): GatewayConfig {
         typeof secretLeakSource.providerBoundaryEnabled === "boolean"
           ? secretLeakSource.providerBoundaryEnabled
           : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.providerBoundaryEnabled,
-      redactionToken:
-        typeof secretLeakSource.redactionToken === "string" &&
-        secretLeakSource.redactionToken.trim().length > 0
-          ? secretLeakSource.redactionToken
-          : DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken,
+      redactionToken: configuredRedactionToken(
+        secretLeakSource.redactionToken,
+        DEFAULT_GATEWAY_CONFIG.secretLeakGuard.redactionToken,
+      ),
       patterns:
         secretLeakSource.patterns === undefined
           ? DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns

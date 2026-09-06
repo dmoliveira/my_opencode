@@ -160,6 +160,7 @@ function firstPatternMatch(value, patterns) {
 }
 function validateRedactionToken(redactionToken, patterns) {
     if (typeof redactionToken !== "string" ||
+        redactionToken.length > MAX_REDACTION_TOKEN_BYTES ||
         redactionToken.trim().length === 0 ||
         Buffer.byteLength(redactionToken, "utf8") > MAX_REDACTION_TOKEN_BYTES ||
         firstPatternMatch(redactionToken, patterns) !== null) {
