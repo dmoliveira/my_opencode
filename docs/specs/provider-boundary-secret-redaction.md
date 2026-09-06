@@ -21,6 +21,15 @@ ordinary identifier such as `task-validation-accounting` for a secret. Explicit
 custom patterns are not boundary-rewritten and can intentionally retain broader
 matching.
 
+The exact built-in detector profile is recognized by its ordered normalized source and
+flags, not by array identity, and remains on the synchronous compatibility path. Any
+other configured profile is executed through a one-shot `worker_threads` boundary.
+Descriptor-safe traversal and mutation stay on the main thread; only bounded primitive
+text operations cross the worker boundary. The worker returns replacement spans,
+statistics, and digests rather than logging input, pattern, or match text. The parent
+terminates the worker on timeout, crash, malformed response, or capacity exhaustion and
+blocks dispatch with a generic redaction error.
+
 Provider message and system roots must be arrays at both the public redactor API
 and finalizer boundary; a present non-array root blocks as
 `malformed_provider_object`. Their contents must be JSON-shaped data: records use the
@@ -175,6 +184,19 @@ tool result:
 - `providerMaxNodes`: `1,000,000`
 - `providerMaxChars`: `134,217,728`
 - `providerMaxMessageChars`: `33,554,432`
+
+Custom detector execution has additional worker bounds:
+
+- 64 patterns;
+- 16 KiB per normalized pattern and 128 KiB total pattern source;
+- 8,192 queued text operations and 8 MiB of input text per worker batch;
+- 64 MiB maximum intermediate worker output;
+- two active workers per process;
+- a one-second parent deadline by default.
+
+Custom profiles that exceed these bounds fail closed. The parent snapshots traversed
+objects and preflights all replacements before committing mutations, so graph changes
+during worker execution cannot overwrite newer values or partially dispatch.
 
 `providerMaxChars` and `providerMaxMessageChars` include traversed regex-scanned
 text, positive replacement expansion, preserved ciphertext, and qualified attachment URLs. Local UI-only tool

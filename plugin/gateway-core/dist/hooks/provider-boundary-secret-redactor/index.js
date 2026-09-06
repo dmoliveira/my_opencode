@@ -84,7 +84,7 @@ export function createProviderBoundarySecretFinalizer(options) {
         throw new SecretRedactionError("unexpected_failure");
     }
     return {
-        finalizeMessages(payload) {
+        async finalizeMessages(payload) {
             const messages = payload.output?.messages;
             if (messages === undefined) {
                 return;
@@ -98,7 +98,9 @@ export function createProviderBoundarySecretFinalizer(options) {
                 if (!sessionId) {
                     sessionId = messageSessionId(messages, options.providerLimits.maxMessages);
                 }
-                const stats = redactor.redactProviderMessages(messages);
+                const stats = redactor.usesIsolatedPatterns
+                    ? await redactor.redactProviderMessagesAsync(messages)
+                    : redactor.redactProviderMessages(messages);
                 auditOpaqueAttachmentOmission(directory, "messages", sessionId, stats);
                 auditRedaction(directory, "messages", sessionId, stats);
             }
@@ -106,7 +108,7 @@ export function createProviderBoundarySecretFinalizer(options) {
                 blockAudit(directory, "messages", sessionId, error);
             }
         },
-        finalizeSystem(payload) {
+        async finalizeSystem(payload) {
             const system = payload.output?.system;
             if (system === undefined) {
                 return;
@@ -117,7 +119,9 @@ export function createProviderBoundarySecretFinalizer(options) {
                 if (!Array.isArray(system)) {
                     throw new SecretRedactionError("malformed_provider_object");
                 }
-                const stats = redactor.redactProviderSystem(system);
+                const stats = redactor.usesIsolatedPatterns
+                    ? await redactor.redactProviderSystemAsync(system)
+                    : redactor.redactProviderSystem(system);
                 auditRedaction(directory, "system", sessionId, stats);
             }
             catch (error) {

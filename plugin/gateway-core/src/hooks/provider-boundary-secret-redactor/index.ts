@@ -11,6 +11,7 @@ import {
   type ProviderSecretRedactionLimits,
   type SecretRedactionLimits,
   type SecretRedactionStats,
+  type SecretRedactionWorkerFactory,
 } from "../shared/secret-redaction.js"
 
 export interface ProviderBoundarySecretFinalizer {
@@ -18,12 +19,12 @@ export interface ProviderBoundarySecretFinalizer {
     input?: { sessionID?: string }
     output?: { messages?: unknown }
     directory?: string
-  }): void
+  }): Promise<void>
   finalizeSystem(payload: {
     input?: { sessionID?: string }
     output?: { system?: unknown }
     directory?: string
-  }): void
+  }): Promise<void>
 }
 
 function messageSessionId(messages: unknown, maxMessages: number): string {
@@ -100,6 +101,9 @@ export function createProviderBoundarySecretFinalizer(options: {
   limits: SecretRedactionLimits
   providerLimits: ProviderSecretRedactionLimits
   omittableOpaqueAttachmentPatternIndex?: number | null
+  isolateCustomPatterns?: boolean
+  workerFactory?: SecretRedactionWorkerFactory
+  workerTimeoutMs?: number
 }): ProviderBoundarySecretFinalizer {
   const redactor = createSecretRedactor(options)
 
@@ -134,7 +138,7 @@ export function createProviderBoundarySecretFinalizer(options: {
   }
 
   return {
-    finalizeMessages(payload): void {
+    async finalizeMessages(payload): Promise<void> {
       const messages = payload.output?.messages
       if (messages === undefined) {
         return
@@ -148,14 +152,16 @@ export function createProviderBoundarySecretFinalizer(options: {
         if (!sessionId) {
           sessionId = messageSessionId(messages, options.providerLimits.maxMessages)
         }
-        const stats = redactor.redactProviderMessages(messages)
+        const stats = redactor.usesIsolatedPatterns
+          ? await redactor.redactProviderMessagesAsync(messages)
+          : redactor.redactProviderMessages(messages)
         auditOpaqueAttachmentOmission(directory, "messages", sessionId, stats)
         auditRedaction(directory, "messages", sessionId, stats)
       } catch (error) {
         blockAudit(directory, "messages", sessionId, error)
       }
     },
-    finalizeSystem(payload): void {
+    async finalizeSystem(payload): Promise<void> {
       const system = payload.output?.system
       if (system === undefined) {
         return
@@ -166,7 +172,9 @@ export function createProviderBoundarySecretFinalizer(options: {
         if (!Array.isArray(system)) {
           throw new SecretRedactionError("malformed_provider_object")
         }
-        const stats = redactor.redactProviderSystem(system)
+        const stats = redactor.usesIsolatedPatterns
+          ? await redactor.redactProviderSystemAsync(system)
+          : redactor.redactProviderSystem(system)
         auditRedaction(directory, "system", sessionId, stats)
       } catch (error) {
         blockAudit(directory, "system", sessionId, error)

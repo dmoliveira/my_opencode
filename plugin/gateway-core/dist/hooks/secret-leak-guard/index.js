@@ -1,4 +1,4 @@
-import { gatewayAuditSessionFields, writeGatewayEventAudit, } from "../../audit/event-audit.js";
+import { gatewayAuditSessionFields, writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { createSecretRedactor, } from "../shared/secret-redaction.js";
 function mergeStats(target, source) {
     target.matches += source.matches;
@@ -33,14 +33,18 @@ export function createSecretLeakGuardHook(options) {
             };
             const outputShape = typeof rawOutput === "string" ? "string" : "structured";
             if (typeof rawOutput === "string") {
-                const result = redactor.redactText(rawOutput);
+                const result = redactor.usesIsolatedPatterns
+                    ? await redactor.redactTextAsync(rawOutput)
+                    : redactor.redactText(rawOutput);
                 mergeStats(stats, result.stats);
                 if (result.text !== rawOutput) {
                     mutableOutput.output = result.text;
                 }
             }
             else if (rawOutput && typeof rawOutput === "object") {
-                mergeStats(stats, redactor.redactMutableValue(rawOutput));
+                mergeStats(stats, redactor.usesIsolatedPatterns
+                    ? await redactor.redactMutableValueAsync(rawOutput)
+                    : redactor.redactMutableValue(rawOutput));
             }
             else {
                 return;

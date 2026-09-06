@@ -26,6 +26,7 @@ import {
   createSecretRedactor,
   SecretRedactionError,
   type SecretRedactor,
+  type SecretRedactionWorkerFactory,
 } from "../shared/secret-redaction.js";
 
 const ENVELOPE_VERSION = 1;
@@ -105,6 +106,9 @@ interface HookOptions {
     maxDepth: number;
     maxNodes: number;
   };
+  isolateCustomPatterns?: boolean;
+  workerFactory?: SecretRedactionWorkerFactory;
+  workerTimeoutMs?: number;
 }
 
 interface BuildResult {
@@ -735,11 +739,11 @@ export function compareIntentIngressEnvelopes(
   );
 }
 
-function buildEnvelope(
+async function buildEnvelope(
   payload: ChatPayload,
   options: HookOptions,
   redactor: SecretRedactor,
-): BuildResult {
+): Promise<BuildResult> {
   const sessionId = normalizedIdentifier(
     payload.properties?.sessionID ??
       payload.properties?.sessionId ??
@@ -777,7 +781,9 @@ function buildEnvelope(
   let redactionFailed = false;
   if (options.captureContent) {
     try {
-      const redacted = redactor.redactText(prompt);
+      const redacted = redactor.usesIsolatedPatterns
+        ? await redactor.redactTextAsync(prompt)
+        : redactor.redactText(prompt);
       const normalized = redacted.text.replace(/\s+/g, " ").trim();
       const maxContentChars = Math.max(
         1,
@@ -825,6 +831,9 @@ export function createIntentIngressOutboxHook(
       maxNodes: options.secretLimits.maxNodes,
       maxChars: Math.max(1, options.maxInputChars),
     },
+    isolateCustomPatterns: options.isolateCustomPatterns,
+    workerFactory: options.workerFactory,
+    workerTimeoutMs: options.workerTimeoutMs,
   });
   const stateDir = configuredStateDir(options.stateDir, options.directory);
 
@@ -865,7 +874,7 @@ export function createIntentIngressOutboxHook(
           : options.directory;
       let built: BuildResult;
       try {
-        built = buildEnvelope(payload, options, redactor);
+        built = await buildEnvelope(payload, options, redactor);
       } catch {
         audit(
           directory,

@@ -1175,6 +1175,7 @@ function configuredHooks(
             enabled: true,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
+            isolateCustomPatterns: true,
             limits: {
               maxDepth: cfg.secretLeakGuard.maxDepth,
               maxNodes: cfg.secretLeakGuard.maxNodes,
@@ -1378,6 +1379,7 @@ function configuredHooks(
           cfg.intentIngressOutbox.softMaxPendingEntries,
         redactionToken: cfg.secretLeakGuard.redactionToken,
         secretPatterns: cfg.secretLeakGuard.patterns,
+        isolateCustomPatterns: true,
         secretLimits: {
           maxDepth: cfg.secretLeakGuard.maxDepth,
           maxNodes: cfg.secretLeakGuard.maxNodes,
@@ -1468,6 +1470,7 @@ export default function GatewayCorePlugin(
           directory,
           redactionToken: cfg.secretLeakGuard.redactionToken,
           patterns: cfg.secretLeakGuard.patterns,
+          isolateCustomPatterns: true,
           omittableOpaqueAttachmentPatternIndex:
             cfg.secretLeakGuard.patterns ===
             DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
@@ -2084,7 +2087,7 @@ export default function GatewayCorePlugin(
     }
 
     unwrapAutoSlashCommandMessages(output.messages);
-    providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
+    await providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
   }
 
   async function chatSystemTransform(
@@ -2148,7 +2151,7 @@ export default function GatewayCorePlugin(
         });
       }
     }
-    providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
+    await providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
     if (Array.isArray(output.system)) {
       const observation = cacheableSystemPrefixObservation(output.system);
       writeGatewayEventAudit(directory, {

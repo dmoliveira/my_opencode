@@ -743,6 +743,7 @@ function configuredHooks(ctx, runtime, resolveTaskerAgent = () => undefined, res
                 enabled: true,
                 redactionToken: cfg.secretLeakGuard.redactionToken,
                 patterns: cfg.secretLeakGuard.patterns,
+                isolateCustomPatterns: true,
                 limits: {
                     maxDepth: cfg.secretLeakGuard.maxDepth,
                     maxNodes: cfg.secretLeakGuard.maxNodes,
@@ -893,6 +894,7 @@ function configuredHooks(ctx, runtime, resolveTaskerAgent = () => undefined, res
             softMaxPendingEntries: cfg.intentIngressOutbox.softMaxPendingEntries,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             secretPatterns: cfg.secretLeakGuard.patterns,
+            isolateCustomPatterns: true,
             secretLimits: {
                 maxDepth: cfg.secretLeakGuard.maxDepth,
                 maxNodes: cfg.secretLeakGuard.maxNodes,
@@ -916,6 +918,7 @@ export default function GatewayCorePlugin(ctx, options) {
             directory,
             redactionToken: cfg.secretLeakGuard.redactionToken,
             patterns: cfg.secretLeakGuard.patterns,
+            isolateCustomPatterns: true,
             omittableOpaqueAttachmentPatternIndex: cfg.secretLeakGuard.patterns ===
                 DEFAULT_GATEWAY_CONFIG.secretLeakGuard.patterns
                 ? cfg.secretLeakGuard.patterns.indexOf("AIza[0-9A-Za-z\\-_]{20,}")
@@ -1440,7 +1443,7 @@ export default function GatewayCorePlugin(ctx, options) {
             }
         }
         unwrapAutoSlashCommandMessages(output.messages);
-        providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
+        await providerBoundaryFinalizer?.finalizeMessages({ input, output, directory });
     }
     async function chatSystemTransform(input, output) {
         const eventType = "experimental.chat.system.transform";
@@ -1491,7 +1494,7 @@ export default function GatewayCorePlugin(ctx, options) {
                 });
             }
         }
-        providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
+        await providerBoundaryFinalizer?.finalizeSystem({ input, output, directory });
         if (Array.isArray(output.system)) {
             const observation = cacheableSystemPrefixObservation(output.system);
             writeGatewayEventAudit(directory, {
