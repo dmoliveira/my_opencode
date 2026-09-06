@@ -7,6 +7,7 @@ import test from "node:test"
 import { DEFAULT_GATEWAY_CONFIG } from "../dist/config/schema.js"
 import GatewayCorePlugin from "../dist/index.js"
 import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
+import { MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS } from "../dist/hooks/shared/provider-attachment-data-url.js"
 import {
   attachmentCollisionFixtures,
   collisionBase64Payload,
@@ -161,6 +162,19 @@ function directUserFileMessage(fixture) {
   }
 }
 
+function maximumSizeDirectUserPdfFixture() {
+  const prefix = "data:application/pdf;base64,"
+  const payloadChars = MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS - prefix.length
+  assert.equal(payloadChars % 4, 0)
+  const bytes = Buffer.alloc((payloadChars / 4) * 3 - 1, 0x41)
+  const collisionBytes = Buffer.from(GOOGLE_KEY_COLLISION, "base64")
+  collisionBytes.copy(bytes, bytes.length - collisionBytes.length - 2)
+  const url = `${prefix}${bytes.toString("base64")}`
+  assert.equal(url.length, MAX_OPAQUE_ATTACHMENT_DATA_URL_CHARS)
+  assert.equal(url.includes(GOOGLE_KEY_COLLISION), true)
+  return { id: "pdf-max-size", mime: "application/pdf", url }
+}
+
 function toolPathMessage(path) {
   const sessionID = "ses_detector_compatibility"
   const messageID = "msg_detector_tool_path"
@@ -256,6 +270,22 @@ test("default detector does not mistake ordinary task paths for secrets", async 
     const message = toolPathMessage(path)
     await plugin["experimental.chat.messages.transform"]({}, { messages: [message] })
     assert.equal(message.parts[0].state.input.path, path)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("assembled provider finalizer accepts a maximum-size canonical attachment", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-detector-max-attachment-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: { hooks: { enabled: false, order: [], disabled: [] } },
+    })
+    const message = directUserFileMessage(maximumSizeDirectUserPdfFixture())
+    await assert.doesNotReject(
+      plugin["experimental.chat.messages.transform"]({}, { messages: [message] }),
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
