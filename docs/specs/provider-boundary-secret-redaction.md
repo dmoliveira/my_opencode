@@ -154,7 +154,7 @@ tool result:
 - `providerMaxMessages`: `20,000`
 - `providerMaxNodes`: `1,000,000`
 - `providerMaxChars`: `134,217,728`
-- `providerMaxMessageChars`: `16,777,216`
+- `providerMaxMessageChars`: `33,554,432`
 
 `providerMaxChars` and `providerMaxMessageChars` include traversed regex-scanned
 text, preserved ciphertext, and qualified attachment URLs. Local UI-only tool
@@ -165,6 +165,11 @@ detector still checks it. Provider traversal revisits shared objects at each
 path, so a
 qualified-path visit cannot hide an unqualified alias; every revisit is charged
 to the same bounded call.
+
+The 32 MiB per-message default leaves room for the charged message metadata
+around a maximum-size canonical attachment URL while retaining the 128 MiB
+call-wide bound. Explicit legacy `maxChars` values still seed both provider
+character limits until provider-specific keys are configured.
 
 For backward compatibility, explicitly configured legacy limits seed all
 corresponding provider limits until the new keys opt in. Legacy `maxNodes`

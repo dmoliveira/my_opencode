@@ -55,7 +55,7 @@ function directRedactor({ limits = {}, providerLimits = {} } = {}) {
       maxMessages: 20000,
       maxNodes: 1000000,
       maxChars: 134217728,
-      maxMessageChars: 16777216,
+      maxMessageChars: 33554432,
       ...providerLimits,
     },
   })
@@ -313,7 +313,7 @@ test("assembled provider finalizer accepts the resumed-history regression fixtur
       files: [{ patch: "sk-ui-only-patch-collision-1234567890" }],
       preview: "token=UiOnlyPreviewSecret_123456",
     }
-    const largeHistory = `resume-history-control:${"H".repeat(2_097_152)}`
+    const largeHistory = `resume-history-control:${"H".repeat(16 * 1024 * 1024)}`
     const messages = [
       {
         info: { role: "user", sessionID: "session-resume-regression" },

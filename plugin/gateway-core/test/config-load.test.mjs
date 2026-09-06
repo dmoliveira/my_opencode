@@ -22,7 +22,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.secretLeakGuard.providerMaxMessages, 20000)
   assert.equal(config.secretLeakGuard.providerMaxNodes, 1000000)
   assert.equal(config.secretLeakGuard.providerMaxChars, 134217728)
-  assert.equal(config.secretLeakGuard.providerMaxMessageChars, 16777216)
+  assert.equal(config.secretLeakGuard.providerMaxMessageChars, 33554432)
   assert.equal(config.prBodyEvidenceGuard.requireSummarySection, true)
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
   assert.equal(config.postMergeSyncGuard.requireDeleteBranch, true)
@@ -272,6 +272,11 @@ test("loadGatewayConfig preserves legacy provider limits until new limits opt in
   assert.equal(mixed.providerMaxNodes, 800)
   assert.equal(mixed.providerMaxChars, 900)
   assert.equal(mixed.providerMaxMessageChars, 850)
+
+  const invalidProvider = loadGatewayConfig({
+    secretLeakGuard: { providerMaxMessageChars: 0 },
+  }).secretLeakGuard
+  assert.equal(invalidProvider.providerMaxMessageChars, 33554432)
 
   const invalid = loadGatewayConfig({
     secretLeakGuard: {
