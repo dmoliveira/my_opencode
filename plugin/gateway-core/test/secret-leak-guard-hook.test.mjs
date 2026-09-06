@@ -6,6 +6,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import GatewayCorePlugin from "../dist/index.js"
+import { createProviderBoundarySecretFinalizer } from "../dist/hooks/provider-boundary-secret-redactor/index.js"
 import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
 import {
   attachmentCollisionFixtures,
@@ -412,6 +413,13 @@ test("redaction expansion is budgeted and contextual residual matches fail close
       }).redactText("secretsecretsecretsecret"),
     (error) => error.code === "unexpected_failure",
   )
+  assert.throws(
+    () =>
+      directRedactor({
+        patterns: ["(?<=token=)\\[REDACTED\\]"],
+      }).redactText("token=[REDACTED]"),
+    (error) => error.code === "unexpected_failure",
+  )
 })
 
 test("immutable provider provenance remains sticky below protocol fields", () => {
@@ -604,6 +612,26 @@ test("provider finalizer redacts system context after generic hooks are disabled
   }
 })
 
+test("provider system traversal keeps prompt strings mutable and unknown objects blocking", () => {
+  const secret = `sk-${"A".repeat(10)}`
+  const directText = [secret]
+  const textStats = directRedactor().redactProviderSystem(directText)
+  assert.equal(directText[0], "[REDACTED]")
+  assert.equal(textStats.matches, 1)
+
+  const typedText = [{ type: "text", text: secret }]
+  directRedactor().redactProviderSystem(typedText)
+  assert.equal(typedText[0].text, "[REDACTED]")
+
+  assert.throws(
+    () => directRedactor().redactProviderSystem([{ future: secret }]),
+    (error) =>
+      error.code === "immutable_match" &&
+      error.matchTarget === "value" &&
+      error.locationCode === "unknown_field",
+  )
+})
+
 test("explicit provider-boundary opt-out leaves transform content unchanged", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-secret-optout-"))
   try {
@@ -699,6 +727,24 @@ test("provider finalizers reject present malformed message and system roots", as
         (error) => error.code === "malformed_provider_object",
       )
     }
+    const oversizedMessages = []
+    oversizedMessages.length = 4_000_000_000
+    const finalizer = createProviderBoundarySecretFinalizer({
+      directory,
+      patterns: secretConfig().patterns,
+      redactionToken: secretConfig().redactionToken,
+      limits: { maxDepth: 12, maxNodes: 20_000, maxChars: 2_097_152 },
+      providerLimits: {
+        maxMessages: 20_000,
+        maxNodes: 1_000_000,
+        maxChars: 134_217_728,
+        maxMessageChars: 33_554_432,
+      },
+    })
+    assert.throws(
+      () => finalizer.finalizeMessages({ output: { messages: oversizedMessages } }),
+      (error) => error.code === "node_limit",
+    )
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
