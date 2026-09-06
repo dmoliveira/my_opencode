@@ -11,6 +11,7 @@ import { DEFAULT_GATEWAY_CONFIG } from "../dist/config/schema.js"
 import { createProviderBoundarySecretFinalizer } from "../dist/hooks/provider-boundary-secret-redactor/index.js"
 import { createSecretLeakGuardHook } from "../dist/hooks/secret-leak-guard/index.js"
 import { createSecretRedactor } from "../dist/hooks/shared/secret-redaction.js"
+import { SECRET_REDACTION_WORKER_PROTOCOL_VERSION } from "../dist/hooks/shared/secret-redaction-worker-protocol.js"
 import {
   attachmentCollisionFixtures,
   collisionBase64Payload,
@@ -114,6 +115,123 @@ function malformedWorkerFactory(response) {
       },
     }
   }
+}
+
+function successfulWorkerResponse(request) {
+  return {
+    version: request.version,
+    requestId: request.requestId,
+    ok: true,
+    results: request.operations.map((operation) => {
+      if (operation.kind === "match") {
+        return {
+          operationIndex: operation.operationIndex,
+          kind: "match",
+          firstPatternIndex: null,
+        }
+      }
+      if (operation.kind === "apply") {
+        return {
+          operationIndex: operation.operationIndex,
+          kind: "apply",
+          inputLength: operation.text.length,
+          steps: request.patterns.map((pattern) => ({
+            patternIndex: pattern.index,
+            matches: [],
+          })),
+          firstPatternIndex: null,
+          matchCount: 0,
+          positiveExpansion: 0,
+          residualPatternIndex: null,
+          finalLength: operation.text.length,
+          finalSha256: createHash("sha256")
+            .update(operation.text, "utf8")
+            .digest("hex"),
+        }
+      }
+      throw new Error(`unsupported test operation: ${operation.kind}`)
+    }),
+  }
+}
+
+function controlledWorkerFactory({
+  postMessageFailureIndex = null,
+  terminateFailureIndex = null,
+} = {}) {
+  const records = []
+  const factory = () => {
+    const listeners = new Map()
+    const recordIndex = records.length
+    const record = {
+      request: null,
+      terminated: false,
+      emit(event, value) {
+        listeners.get(event)?.(value)
+      },
+      respond() {
+        record.emit("message", successfulWorkerResponse(record.request))
+      },
+    }
+    records.push(record)
+    return {
+      once(event, listener) {
+        listeners.set(event, listener)
+        return this
+      },
+      postMessage(request) {
+        record.request = request
+        if (recordIndex === postMessageFailureIndex) {
+          throw new Error("postMessage failure")
+        }
+      },
+      terminate() {
+        record.terminated = true
+        if (recordIndex === terminateFailureIndex) {
+          return Promise.reject(new Error("terminate failure"))
+        }
+        return Promise.resolve(0)
+      },
+    }
+  }
+  factory.records = records
+  return factory
+}
+
+function runWorkerRequest(request) {
+  const worker = new Worker(
+    new URL("../dist/hooks/shared/secret-redaction-worker.js", import.meta.url),
+    { type: "module" },
+  )
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (error, response) => {
+      if (settled) return
+      settled = true
+      void worker.terminate().then(() => {
+        if (error) reject(error)
+        else resolve(response)
+      })
+    }
+    worker.once("message", (response) => finish(null, response))
+    worker.once("error", (error) => finish(error))
+    worker.once("exit", (code) => {
+      if (code !== 0) finish(new Error(`worker exited with code ${code}`))
+      else if (!settled) finish(new Error("worker exited without response"))
+    })
+    worker.postMessage(request)
+  })
+}
+
+function safeValueArray(count) {
+  return Array.from({ length: count }, () => "safe")
+}
+
+function safeKeyValueBoundaryObject(arrayValueCount) {
+  const value = Object.fromEntries(
+    Array.from({ length: 4_094 }, (_, index) => [`field_${index}`, "safe"]),
+  )
+  value.extra = safeValueArray(arrayValueCount)
+  return value
 }
 
 function reasoningMessage(ciphertext) {
@@ -343,6 +461,279 @@ test("isolated worker caps match spans across batched operations", async () => {
     }),
     (error) => error.code === "unexpected_failure",
   )
+})
+
+test("isolated worker accepts the exact aggregate match-span boundary", async () => {
+  const redactor = directRedactor({
+    patterns: ["x"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+  })
+  const result = await redactor.redactTextAsync("x".repeat(100_000))
+  assert.equal(result.stats.matches, 100_000)
+  assert.equal(result.text.length, 600_000)
+})
+
+test("isolated worker rejects one match span over the request-wide boundary", async () => {
+  const redactor = directRedactor({
+    patterns: ["x"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+  })
+  await assert.rejects(
+    redactor.redactTextAsync("x".repeat(100_001)),
+    (error) => error.code === "unexpected_failure",
+  )
+})
+
+test("isolated batches accept exact operation and input limits", async () => {
+  const operationRedactor = directRedactor({
+    patterns: ["CUSTOM_[A-Z]+"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+  })
+  const operationResult = await operationRedactor.redactMutableValueAsync(
+    safeValueArray(8_191),
+  )
+  assert.equal(operationResult.redactedFields, 0)
+  const keyValueResult = await operationRedactor.redactMutableValueAsync(
+    safeKeyValueBoundaryObject(2),
+  )
+  assert.equal(keyValueResult.redactedFields, 0)
+
+  const batchChars = 8 * 1024 * 1024
+  const inputRedactor = directRedactor({
+    patterns: ["CUSTOM_[A-Z]+"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+    limits: { maxChars: batchChars + 16 },
+  })
+  const result = await inputRedactor.redactTextAsync(
+    "x".repeat(batchChars - "[MASK]".length),
+  )
+  assert.equal(result.text.length, batchChars - "[MASK]".length)
+})
+
+test("isolated batches reject one operation or input over its limit before spawning", async () => {
+  let workerCalls = 0
+  const workerFactory = () => {
+    workerCalls += 1
+    throw new Error("worker should not be created")
+  }
+  const operationRedactor = directRedactor({
+    patterns: ["CUSTOM_[A-Z]+"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+    workerFactory,
+  })
+  await assert.rejects(
+    operationRedactor.redactMutableValueAsync(safeValueArray(8_192)),
+    (error) => error.code === "regex_batch_limit",
+  )
+  await assert.rejects(
+    operationRedactor.redactMutableValueAsync(safeKeyValueBoundaryObject(3)),
+    (error) => error.code === "regex_batch_limit",
+  )
+
+  const batchChars = 8 * 1024 * 1024
+  const inputRedactor = directRedactor({
+    patterns: ["CUSTOM_[A-Z]+"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+    workerFactory,
+    limits: { maxChars: batchChars + 16 },
+  })
+  await assert.rejects(
+    inputRedactor.redactTextAsync("x".repeat(batchChars - "[MASK]".length + 1)),
+    (error) => error.code === "regex_batch_limit",
+  )
+  assert.equal(workerCalls, 0)
+})
+
+test("isolated worker enforces the exact and one-over output allocation boundary", async () => {
+  const maxOutputChars = 64 * 1024 * 1024
+  const outputExpansion = "[MASK]".length - 1
+  const request = (text) => ({
+    version: SECRET_REDACTION_WORKER_PROTOCOL_VERSION,
+    requestId: `output-boundary-${text.length}`,
+    redactionToken: "[MASK]",
+    patterns: [{ index: 0, source: "^x", flags: "g" }],
+    operations: [
+      {
+        operationIndex: 0,
+        kind: "apply",
+        text,
+        inputOperationIndex: null,
+      },
+    ],
+  })
+
+  const exactResponse = await runWorkerRequest(
+    request("x".repeat(maxOutputChars - outputExpansion)),
+  )
+  assert.equal(exactResponse.ok, true)
+  assert.equal(exactResponse.results[0].finalLength, maxOutputChars)
+
+  const overResponse = await runWorkerRequest(
+    request("x".repeat(maxOutputChars - outputExpansion + 1)),
+  )
+  assert.equal(overResponse.ok, false)
+  assert.equal(overResponse.errorCode, "unexpected_failure")
+})
+
+test("isolated worker capacity rejects a third request and recovers after completion", async () => {
+  const workerFactory = controlledWorkerFactory()
+  const redactor = directRedactor({
+    patterns: ["CUSTOM_[A-Z]+"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+    workerFactory,
+  })
+  const first = redactor.redactTextAsync("held")
+  const second = redactor.redactTextAsync("held")
+  assert.equal(workerFactory.records.length, 2)
+  await assert.rejects(
+    redactor.redactTextAsync("rejected"),
+    (error) => error.code === "regex_capacity",
+  )
+  workerFactory.records[0].respond()
+  workerFactory.records[1].respond()
+  await Promise.all([first, second])
+
+  const replacement = redactor.redactTextAsync("replacement")
+  assert.equal(workerFactory.records.length, 3)
+  workerFactory.records[2].respond()
+  await replacement
+})
+
+test("isolated worker slots release on every terminal path", async () => {
+  const cases = [
+    {
+      name: "success",
+      expectedCode: null,
+      settle(record) {
+        record.respond()
+      },
+    },
+    {
+      name: "malformed response",
+      expectedCode: "unexpected_failure",
+      settle(record) {
+        record.emit("message", {
+          version: SECRET_REDACTION_WORKER_PROTOCOL_VERSION,
+          requestId: "wrong-request",
+          ok: true,
+          results: [],
+        })
+      },
+    },
+    {
+      name: "worker error",
+      expectedCode: "unexpected_failure",
+      settle(record) {
+        record.emit("error", new Error("worker failure"))
+      },
+    },
+    {
+      name: "nonzero exit",
+      expectedCode: "unexpected_failure",
+      settle(record) {
+        record.emit("exit", 1)
+      },
+    },
+    {
+      name: "zero exit without response",
+      expectedCode: "unexpected_failure",
+      settle(record) {
+        record.emit("exit", 0)
+      },
+    },
+    {
+      name: "timeout",
+      expectedCode: "regex_timeout",
+      settle() {},
+    },
+    {
+      name: "postMessage failure",
+      expectedCode: "unexpected_failure",
+      factoryOptions: { postMessageFailureIndex: 1 },
+      settle() {},
+    },
+    {
+      name: "terminate failure",
+      expectedCode: null,
+      factoryOptions: { terminateFailureIndex: 1 },
+      settle(record) {
+        record.respond()
+      },
+    },
+  ]
+
+  for (const entry of cases) {
+    const workerFactory = controlledWorkerFactory(entry.factoryOptions)
+    const heldRedactor = directRedactor({
+      patterns: ["CUSTOM_[A-Z]+"],
+      redactionToken: "[MASK]",
+      isolateCustomPatterns: true,
+      workerFactory,
+      workerTimeoutMs: 1000,
+    })
+    const candidateRedactor = directRedactor({
+      patterns: ["CUSTOM_[A-Z]+"],
+      redactionToken: "[MASK]",
+      isolateCustomPatterns: true,
+      workerFactory,
+      workerTimeoutMs: entry.name === "timeout" ? 5 : 1000,
+    })
+    const held = heldRedactor.redactTextAsync("held")
+    const candidate = candidateRedactor.redactTextAsync("candidate")
+    assert.equal(workerFactory.records.length, 2, entry.name)
+
+    entry.settle(workerFactory.records[1])
+    if (entry.expectedCode) {
+      await assert.rejects(
+        candidate,
+        (error) => error.code === entry.expectedCode,
+        entry.name,
+      )
+    } else {
+      await candidate
+    }
+    assert.equal(workerFactory.records[1].terminated, true, entry.name)
+
+    const replacement = heldRedactor.redactTextAsync("replacement")
+    assert.equal(workerFactory.records.length, 3, entry.name)
+    workerFactory.records[2].respond()
+    await replacement
+    workerFactory.records[0].respond()
+    await held
+  }
+
+  const workerFactory = controlledWorkerFactory()
+  let factoryCalls = 0
+  const throwingFactory = (url) => {
+    factoryCalls += 1
+    if (factoryCalls === 2) throw new Error("constructor failure")
+    return workerFactory(url)
+  }
+  const redactor = directRedactor({
+    patterns: ["CUSTOM_[A-Z]+"],
+    redactionToken: "[MASK]",
+    isolateCustomPatterns: true,
+    workerFactory: throwingFactory,
+    workerTimeoutMs: 1000,
+  })
+  const held = redactor.redactTextAsync("held")
+  await assert.rejects(
+    redactor.redactTextAsync("constructor-failure"),
+    (error) => error.code === "unexpected_failure",
+  )
+  const replacement = redactor.redactTextAsync("replacement")
+  assert.equal(workerFactory.records.length, 2)
+  workerFactory.records[1].respond()
+  await replacement
+  workerFactory.records[0].respond()
+  await held
 })
 
 test("isolated redaction rejects graph mutation during worker execution", async () => {
