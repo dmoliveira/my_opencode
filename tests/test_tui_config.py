@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+import os
 import sys
 import tempfile
 import unittest
-
+from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -95,7 +96,8 @@ class TuiConfigTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = ensure_execution_sidebar(config, plugin)
+            with patch.dict(os.environ, {"HOME": str(tmp / "home")}):
+                result = ensure_execution_sidebar(config, plugin)
 
             self.assertTrue(result.changed)
             loaded = json.loads(config.read_text(encoding="utf-8"))
@@ -116,7 +118,8 @@ class TuiConfigTests(unittest.TestCase):
                 ],
             )
 
-            second = ensure_execution_sidebar(config, plugin)
+            with patch.dict(os.environ, {"HOME": str(tmp / "home")}):
+                second = ensure_execution_sidebar(config, plugin)
             self.assertFalse(second.changed)
 
     def test_rejects_non_array_plugin_configuration(self) -> None:

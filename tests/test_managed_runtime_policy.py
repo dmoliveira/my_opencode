@@ -22,12 +22,17 @@ class ManagedRuntimePolicyTest(unittest.TestCase):
 
     def test_managed_mcps_have_expected_defaults_and_playwright_is_exact_pinned(self) -> None:
         mcp = self._config()["mcp"]
-        hosted = {"context7", "gh_grep", "exa_search", "github"}
+        hosted = {"context7", "gh_grep", "exa_search", "github", "miro"}
         self.assertEqual(hosted | {"playwright", "google-drive"}, set(mcp))
         for name in hosted:
             with self.subTest(name=name):
                 self.assertEqual("remote", mcp[name]["type"])
                 self.assertIs(mcp[name]["enabled"], False)
+
+        miro = mcp["miro"]
+        self.assertEqual("remote", miro["type"])
+        self.assertEqual("https://mcp.miro.com/", miro["url"])
+        self.assertIs(miro["enabled"], False)
 
         google_drive = mcp["google-drive"]
         self.assertEqual("remote", google_drive["type"])

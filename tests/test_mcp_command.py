@@ -271,5 +271,77 @@ class McpGoogleDriveTest(unittest.TestCase):
         self.assertIn("/mcp disable google-drive", result.stdout)
 
 
+class McpMiroTest(unittest.TestCase):
+    def test_miro_enable_and_disable_use_the_canonical_remote(self) -> None:
+        with config_sandbox('{"mcp": {}}\n') as (config, env):
+            enabled = run_command(env, "enable", "miro")
+            self.assertEqual(0, enabled.returncode, enabled.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {
+                    "type": "remote",
+                    "url": "https://mcp.miro.com/",
+                    "enabled": True,
+                },
+                saved["mcp"]["miro"],
+            )
+
+            disabled = run_command(env, "disable", "miro")
+            self.assertEqual(0, disabled.returncode, disabled.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertIs(saved["mcp"]["miro"]["enabled"], False)
+            self.assertEqual("https://mcp.miro.com/", saved["mcp"]["miro"]["url"])
+
+    def test_miro_profile_is_standalone_and_minimal_turns_it_off(self) -> None:
+        with config_sandbox('{"mcp": {}}\n') as (config, env):
+            profile = run_command(env, "profile", "miro")
+            self.assertEqual(0, profile.returncode, profile.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertTrue(saved["mcp"]["miro"]["enabled"])
+            for name in mcp_command.ACTIVE_SERVERS:
+                self.assertEqual(name == "miro", saved["mcp"][name]["enabled"])
+
+            minimal = run_command(env, "profile", "minimal")
+            self.assertEqual(0, minimal.returncode, minimal.stderr)
+            saved = json.loads(config.read_text(encoding="utf-8"))
+            self.assertFalse(saved["mcp"]["miro"]["enabled"])
+
+    def test_miro_mutations_preserve_custom_fields(self) -> None:
+        custom = {
+            "type": "remote",
+            "url": "https://custom.example/miro",
+            "headers": {"Authorization": "Bearer {env:MIRO_TOKEN}"},
+            "options": {"timeout": 30, "nested": {"keep": True}},
+            "enabled": False,
+        }
+        for action, expected_enabled in (
+            (("enable", "miro"), True),
+            (("disable", "miro"), False),
+            (("profile", "miro"), True),
+            (("profile", "minimal"), False),
+        ):
+            with (
+                self.subTest(action=action),
+                config_sandbox(
+                    json.dumps({"mcp": {"miro": custom}}, indent=2) + "\n"
+                ) as (config, env),
+            ):
+                result = run_command(env, *action)
+                self.assertEqual(0, result.returncode, result.stderr)
+                saved = json.loads(config.read_text(encoding="utf-8"))
+                entry = saved["mcp"]["miro"]
+                for key in ("type", "url", "headers", "options"):
+                    self.assertEqual(custom[key], entry[key])
+                self.assertIs(entry["enabled"], expected_enabled)
+
+    def test_help_exposes_miro_profile_and_toggles(self) -> None:
+        with config_sandbox('{"mcp": {}}\n') as (_config, env):
+            result = run_command(env, "help")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("profile miro", result.stdout)
+        self.assertIn("/mcp enable miro", result.stdout)
+        self.assertIn("/mcp disable miro", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

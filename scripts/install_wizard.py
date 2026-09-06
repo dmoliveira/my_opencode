@@ -285,7 +285,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mcp-profile",
-        choices=["minimal", "research", "context7", "ghgrep", "google-drive"],
+        choices=["minimal", "research", "context7", "ghgrep", "google-drive", "miro"],
     )
     parser.add_argument("--policy-profile", choices=["strict", "balanced", "fast"])
     parser.add_argument(
@@ -349,7 +349,7 @@ def main(argv: list[str]) -> int:
 
     mcp_profile = args.mcp_profile or choose(
         "MCP profile",
-        ["google-drive", "minimal", "research", "context7", "ghgrep"],
+        ["google-drive", "miro", "minimal", "research", "context7", "ghgrep"],
         prev_profiles.get("mcp", "google-drive"),
         args.non_interactive,
     )
