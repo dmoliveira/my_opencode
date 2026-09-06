@@ -1,10 +1,8 @@
-import {
-  gatewayAuditSessionFields,
-  writeGatewayEventAudit,
-} from "../../audit/event-audit.js"
+import { gatewayAuditSessionFields, writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import {
   createSecretRedactor,
+  type SecretRedactionWorkerFactory,
   type SecretRedactionLimits,
   type SecretRedactionStats,
 } from "../shared/secret-redaction.js"
@@ -36,6 +34,9 @@ export function createSecretLeakGuardHook(options: {
   redactionToken: string
   patterns: string[]
   limits: SecretRedactionLimits
+  isolateCustomPatterns?: boolean
+  workerFactory?: SecretRedactionWorkerFactory
+  workerTimeoutMs?: number
 }): GatewayHook {
   const redactor = createSecretRedactor(options)
   return {
@@ -62,13 +63,20 @@ export function createSecretLeakGuardHook(options: {
       const outputShape = typeof rawOutput === "string" ? "string" : "structured"
 
       if (typeof rawOutput === "string") {
-        const result = redactor.redactText(rawOutput)
+        const result = redactor.usesIsolatedPatterns
+          ? await redactor.redactTextAsync(rawOutput)
+          : redactor.redactText(rawOutput)
         mergeStats(stats, result.stats)
         if (result.text !== rawOutput) {
           mutableOutput.output = result.text
         }
       } else if (rawOutput && typeof rawOutput === "object") {
-        mergeStats(stats, redactor.redactMutableValue(rawOutput))
+        mergeStats(
+          stats,
+          redactor.usesIsolatedPatterns
+            ? await redactor.redactMutableValueAsync(rawOutput)
+            : redactor.redactMutableValue(rawOutput),
+        )
       } else {
         return
       }
@@ -77,9 +85,7 @@ export function createSecretLeakGuardHook(options: {
         return
       }
       const directory = eventPayload.directory?.trim() || options.directory
-      const sessionId = String(
-        eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "",
-      )
+      const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "")
       writeGatewayEventAudit(directory, {
         hook: "secret-leak-guard",
         stage: "state",
