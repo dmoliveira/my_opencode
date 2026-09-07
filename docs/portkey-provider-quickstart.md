@@ -39,6 +39,8 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
 ## Added model sets (tested)
 
 - OpenAI (reliability-curated)
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.6-luna`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.6-terra`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.6-sol`
