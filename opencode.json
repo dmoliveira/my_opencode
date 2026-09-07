@@ -1,6 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "build",
+  "model": "portkey-openai/@azure-openai-useast2-nonprod/gpt-5.6-terra",
   "agent": {
     "executor": {
       "hidden": true
