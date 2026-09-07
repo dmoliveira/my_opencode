@@ -68,6 +68,11 @@ Task-graph-aware default:
 Read-only agents must keep write/edit disabled and must not be granted escalation via delegation loops.
 Canonical contract and per-agent deny lists: `docs/agent-tool-restrictions.md`.
 
+## Handoff Contract
+
+- The gateway adds one compact, idempotent reminder to delegated prompts: return findings, evidence, confidence, affected paths, next action, and validation; omit the child transcript.
+- This is best-effort guidance for context and token control, not a schema parser. Specialists keep role-specific deliverables while using the shared fields when applicable.
+
 ## Model Routing Contract
 
 Model allocation and fallback policy is documented in `docs/model-allocation-policy.md`.

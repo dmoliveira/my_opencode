@@ -15,7 +15,7 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | fast | `quick` | `openai/gpt-5.6-luna` | `low` | high-frequency discovery/verification loops |
 | standard | `balanced` | `openai/gpt-5.6-terra` | `medium` | normal implementation and planning |
 | standard | `visual` | `openai/gpt-5.6-terra` | `medium` | browser-first UX/UI audits and design-heavy refinement |
-| standard | `writing` | `openai/gpt-5.4` | `medium` | planning capture and writing-heavy artifact work |
+| standard | `writing` | `openai/gpt-5.6-terra` | `medium` | planning capture and writing-heavy artifact work |
 | complex | `deep` | `openai/gpt-5.6-sol` | `medium` | multi-module architecture/debug work |
 | critical | `critical` | `openai/gpt-5.6-sol` | `medium` | final risk review, release/security sign-off |
 
@@ -36,7 +36,7 @@ This policy keeps OpenAI Codex as the default path and uses Copilot-provided non
 | `oracle` | critical | `critical` |
 | `plan-critic` | critical | `critical` |
 
-Agent specs explicitly pin category models when a fixed model is required. The primary `orchestrator` pins `openai/gpt-5.6-terra` to match `balanced`; `tasker` remains unpinned and inherits `openai/gpt-5.4` from `writing`.
+Agent specs explicitly pin category models when a fixed model is required. The primary `orchestrator` pins `openai/gpt-5.6-terra` to match `balanced`; `tasker` remains unpinned and inherits `openai/gpt-5.6-terra` from `writing`.
 
 ## Fallback Guidance
 
@@ -54,7 +54,7 @@ Agent specs explicitly pin category models when a fixed model is required. The p
 | `deep` | `openai/gpt-5.6-sol` (`medium`) | Copilot high-reasoning model | Copilot balanced reasoning model |
 | `critical` | `openai/gpt-5.6-sol` (`medium`) | Copilot highest-reasoning available model | Copilot high-reasoning model |
 | `visual` | `openai/gpt-5.6-terra` (`medium`) | Copilot visual-capable reasoning model | Copilot balanced model |
-| `writing` | `openai/gpt-5.4` (`medium`) | Copilot strong writing/reasoning model | Copilot balanced model |
+| `writing` | `openai/gpt-5.6-terra` (`medium`) | Copilot strong writing/reasoning model | Copilot balanced model |
 
 ## Provider Outage Behavior
 

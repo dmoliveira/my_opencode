@@ -128,7 +128,7 @@ function isGeneratedPromptBlock(paragraph: string, marker: string, block: string
   }
   const escapedMarker = escapeRegExp(marker)
   const compact = new RegExp(
-    `^${escapedMarker}: one objective, then return; prioritize: ${FOCUS_VALUE_PATTERN}; avoid: ${FOCUS_VALUE_PATTERN}; report extras as follow-ups\\.$`,
+    `^${escapedMarker}: one objective, then return; prioritize: ${FOCUS_VALUE_PATTERN}; avoid: ${FOCUS_VALUE_PATTERN}; report extras as follow-ups(?:; handoff: findings, evidence, confidence, affected paths, next action, validation; omit transcript)?\\.$`,
   )
   const legacy = new RegExp(
     `^${escapedMarker}\n- execute one delegated objective for this task call before returning control\n- prioritize: ${FOCUS_VALUE_PATTERN}\n- avoid: ${FOCUS_VALUE_PATTERN}\n- if you uncover extra work, report it as a follow-up instead of expanding scope in the same delegation$`,

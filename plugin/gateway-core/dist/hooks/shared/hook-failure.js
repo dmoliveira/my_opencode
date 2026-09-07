@@ -1,6 +1,7 @@
 export const CRITICAL_GATEWAY_HOOK_IDS = new Set([
     "agent-denied-tool-enforcer",
     "agent-reservation-guard",
+    "tasker-command-gateway",
     "branch-freshness-guard",
     "dangerous-command-guard",
     "dependency-risk-guard",

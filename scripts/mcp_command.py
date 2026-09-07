@@ -28,6 +28,7 @@ ACTIVE_SERVERS = (
     "playwright",
     "exa_search",
     "github",
+    "miro",
     "google-drive",
 )
 RETIRED_SERVERS = {
@@ -47,6 +48,7 @@ SERVER_DEFAULTS = {
     },
     "exa_search": {"type": "remote", "url": "https://mcp.exa.ai/mcp"},
     "github": {"type": "remote", "url": "https://api.githubcopilot.com/mcp/"},
+    "miro": {"type": "remote", "url": "https://mcp.miro.com/"},
     "google-drive": {
         "type": "remote",
         "url": "https://drivemcp.googleapis.com/mcp/v1",
@@ -60,6 +62,7 @@ PROFILE_MAP = {
     "playwright": ["playwright"],
     "exa": ["exa_search"],
     "github": ["github"],
+    "miro": ["miro"],
     "google-drive": ["google-drive"],
     "web": ["playwright", "exa_search"],
     "all": list(ACTIVE_SERVERS),
@@ -157,6 +160,9 @@ def print_next_steps() -> None:
     print("- /mcp enable gh_grep")
     print("- /mcp enable exa_search")
     print("- /mcp enable github")
+    print("- /mcp enable miro")
+    print("- /mcp disable miro")
+    print("- /mcp profile miro")
     print("- /mcp enable google-drive")
     print("- /mcp disable google-drive")
     print("- /mcp profile google-drive")

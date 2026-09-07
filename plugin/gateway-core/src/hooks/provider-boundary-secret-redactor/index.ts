@@ -1,12 +1,17 @@
 import { isProxy } from "node:util/types"
 
-import { writeGatewayEventAudit } from "../../audit/event-audit.js"
+import {
+  gatewayAuditSessionFields,
+  normalizeGatewayAuditSessionId,
+  writeGatewayEventAudit,
+} from "../../audit/event-audit.js"
 import {
   createSecretRedactor,
   SecretRedactionError,
   type ProviderSecretRedactionLimits,
   type SecretRedactionLimits,
   type SecretRedactionStats,
+  type SecretRedactionWorkerFactory,
 } from "../shared/secret-redaction.js"
 
 export interface ProviderBoundarySecretFinalizer {
@@ -14,25 +19,28 @@ export interface ProviderBoundarySecretFinalizer {
     input?: { sessionID?: string }
     output?: { messages?: unknown }
     directory?: string
-  }): void
+  }): Promise<void>
   finalizeSystem(payload: {
     input?: { sessionID?: string }
     output?: { system?: unknown }
     directory?: string
-  }): void
+  }): Promise<void>
 }
 
-function messageSessionId(messages: unknown): string {
+function messageSessionId(messages: unknown, maxMessages: number): string {
   if (!Array.isArray(messages) || isProxy(messages)) {
     return ""
   }
-  for (let index = 0; index < messages.length; index += 1) {
+  const limit = Number.isFinite(maxMessages) && maxMessages > 0 ? Math.floor(maxMessages) : 0
+  if (limit === 0 || messages.length > limit) {
+    return ""
+  }
+  for (let index = 0; index < messages.length && index < limit; index += 1) {
     const message = ownDataValue(messages, index)
     const info = ownDataValue(message, "info")
     const sessionID = ownDataValue(info, "sessionID")
-    if (typeof sessionID === "string" && sessionID.trim()) {
-      return sessionID
-    }
+    const normalized = normalizeGatewayAuditSessionId(sessionID)
+    if (normalized) return normalized
   }
   return ""
 }
@@ -61,7 +69,7 @@ function auditRedaction(
     stage: "state",
     reason_code: "provider_boundary_secrets_redacted",
     surface,
-    session_id: sessionId,
+    ...gatewayAuditSessionFields(sessionId),
     match_count: stats.matches,
     redacted_field_count: stats.redactedFields,
     scanned_chars: stats.scannedChars,
@@ -81,7 +89,7 @@ function auditOpaqueAttachmentOmission(
     stage: "state",
     reason_code: "provider_boundary_opaque_attachment_collision_omitted",
     surface,
-    session_id: sessionId,
+    ...gatewayAuditSessionFields(sessionId),
     omitted_match_count: stats.omittedOpaqueAttachmentMatches,
   })
 }
@@ -93,6 +101,9 @@ export function createProviderBoundarySecretFinalizer(options: {
   limits: SecretRedactionLimits
   providerLimits: ProviderSecretRedactionLimits
   omittableOpaqueAttachmentPatternIndex?: number | null
+  isolateCustomPatterns?: boolean
+  workerFactory?: SecretRedactionWorkerFactory
+  workerTimeoutMs?: number
 }): ProviderBoundarySecretFinalizer {
   const redactor = createSecretRedactor(options)
 
@@ -116,7 +127,7 @@ export function createProviderBoundarySecretFinalizer(options: {
       stage: "guard",
       reason_code: "provider_boundary_secret_dispatch_blocked",
       surface,
-      session_id: sessionId,
+      ...gatewayAuditSessionFields(sessionId),
       error_code: code,
       ...matchDiagnostics,
     })
@@ -127,30 +138,43 @@ export function createProviderBoundarySecretFinalizer(options: {
   }
 
   return {
-    finalizeMessages(payload): void {
+    async finalizeMessages(payload): Promise<void> {
       const messages = payload.output?.messages
-      if (!Array.isArray(messages)) {
+      if (messages === undefined) {
         return
       }
       const directory = payload.directory?.trim() || options.directory
-      const sessionId = payload.input?.sessionID?.trim() || messageSessionId(messages)
+      let sessionId = normalizeGatewayAuditSessionId(payload.input?.sessionID)
       try {
-        const stats = redactor.redactProviderMessages(messages)
+        if (!Array.isArray(messages)) {
+          throw new SecretRedactionError("malformed_provider_object")
+        }
+        if (!sessionId) {
+          sessionId = messageSessionId(messages, options.providerLimits.maxMessages)
+        }
+        const stats = redactor.usesIsolatedPatterns
+          ? await redactor.redactProviderMessagesAsync(messages)
+          : redactor.redactProviderMessages(messages)
         auditOpaqueAttachmentOmission(directory, "messages", sessionId, stats)
         auditRedaction(directory, "messages", sessionId, stats)
       } catch (error) {
         blockAudit(directory, "messages", sessionId, error)
       }
     },
-    finalizeSystem(payload): void {
+    async finalizeSystem(payload): Promise<void> {
       const system = payload.output?.system
-      if (!Array.isArray(system)) {
+      if (system === undefined) {
         return
       }
       const directory = payload.directory?.trim() || options.directory
-      const sessionId = payload.input?.sessionID?.trim() || ""
+      const sessionId = normalizeGatewayAuditSessionId(payload.input?.sessionID)
       try {
-        const stats = redactor.redactProviderSystem(system)
+        if (!Array.isArray(system)) {
+          throw new SecretRedactionError("malformed_provider_object")
+        }
+        const stats = redactor.usesIsolatedPatterns
+          ? await redactor.redactProviderSystemAsync(system)
+          : redactor.redactProviderSystem(system)
         auditRedaction(directory, "system", sessionId, stats)
       } catch (error) {
         blockAudit(directory, "system", sessionId, error)

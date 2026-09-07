@@ -26,7 +26,7 @@ REQUIRED_AGENT_DOCS: dict[str, list[str]] = {
         "## Effort-Band Fallback Chains",
         "## Provider Outage Behavior",
         "The primary `orchestrator` pins `openai/gpt-5.6-terra` to match `balanced`",
-        "`tasker` remains unpinned and inherits `openai/gpt-5.4` from `writing`.",
+        "`tasker` remains unpinned and inherits `openai/gpt-5.6-terra` from `writing`.",
     ],
     "docs/agent-architecture.md": [
         "## Inventory",

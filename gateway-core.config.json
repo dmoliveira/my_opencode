@@ -7,9 +7,25 @@
       "auto-slash-command": "disabled"
     }
   },
+  "delegationConcurrencyGuard": {
+    "enabled": true,
+    "maxTotalConcurrent": 2,
+    "maxExpensiveConcurrent": 2,
+    "maxDeepConcurrent": 2,
+    "maxCriticalConcurrent": 1
+  },
   "executionStatus": {
     "enabled": true,
     "maxSessions": 16,
     "maxLabelChars": 80
+  },
+  "directoryReadmeInjector": {
+    "enabled": false
+  },
+  "keywordDetector": {
+    "enabled": false
+  },
+  "thinkMode": {
+    "enabled": false
   }
 }

@@ -1,4 +1,5 @@
 import type { GatewayHook } from "../registry.js";
+import { type SecretRedactionWorkerFactory } from "../shared/secret-redaction.js";
 interface EnvelopeContent {
     mode: "metadata" | "redacted_preview";
     char_count: number;
@@ -51,6 +52,9 @@ interface HookOptions {
         maxDepth: number;
         maxNodes: number;
     };
+    isolateCustomPatterns?: boolean;
+    workerFactory?: SecretRedactionWorkerFactory;
+    workerTimeoutMs?: number;
 }
 export declare function persistIntentIngressEnvelope(envelope: IntentIngressEnvelope, options: PersistOptions): Promise<PersistResult>;
 export declare function compareIntentIngressEnvelopes(left: IntentIngressEnvelope, right: IntentIngressEnvelope): number;

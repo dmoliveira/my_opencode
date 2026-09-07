@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -11,6 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import agent_doctor
+import build_agents
 
 
 class AgentDoctorPromptBudgetTest(unittest.TestCase):
@@ -130,7 +133,7 @@ class AgentDoctorTaskerPromptTest(unittest.TestCase):
         self.assertNotIn("model", self.spec)
         self.assertEqual("writing", policy["category"])
         self.assertTrue(policy["inherits_category"])
-        self.assertEqual("openai/gpt-5.4", policy["effective_model"])
+        self.assertEqual("openai/gpt-5.6-terra", policy["effective_model"])
         self.assertFalse(
             any(line.startswith("model:") for line in generated_header.splitlines())
         )
@@ -139,7 +142,7 @@ class AgentDoctorTaskerPromptTest(unittest.TestCase):
 class AgentDoctorModelPolicyTest(unittest.TestCase):
     ROUTING_CATEGORIES = {
         "balanced": {"model": "openai/gpt-5.6-terra"},
-        "writing": {"model": "openai/gpt-5.4"},
+        "writing": {"model": "openai/gpt-5.6-terra"},
     }
 
     def check(self, spec: dict) -> dict:
@@ -181,7 +184,7 @@ class AgentDoctorModelPolicyTest(unittest.TestCase):
         self.assertTrue(check["ok"])
         self.assertTrue(check["inherits_category"])
         self.assertIsNone(check["pinned_model"])
-        self.assertEqual("openai/gpt-5.4", check["effective_model"])
+        self.assertEqual("openai/gpt-5.6-terra", check["effective_model"])
 
     def test_unknown_category_fails(self) -> None:
         check = self.check(
@@ -235,6 +238,72 @@ class AgentDoctorModelPolicyTest(unittest.TestCase):
             all(check["ok"] for check in model_checks),
             [check for check in model_checks if not check["ok"]],
         )
+
+
+class BuildAgentsCheckTest(unittest.TestCase):
+    def write_spec(self, specs_dir: Path) -> None:
+        (specs_dir / "source-name.json").write_text(
+            json.dumps(
+                {
+                    "name": "rendered-name",
+                    "mode": "subagent",
+                    "description_template": "A test agent.",
+                    "tools": {"read": True},
+                    "body_template": "Return concise evidence.",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_check_detects_orphan_without_deleting_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            specs_dir = root / "specs"
+            output_dir = root / "agent"
+            specs_dir.mkdir()
+            output_dir.mkdir()
+            self.write_spec(specs_dir)
+            orphan = output_dir / "orphan.md"
+            orphan.write_text(
+                f"{build_agents.GENERATED_AGENT_MARKER_PREFIX}orphan.json -->\nstale",
+                encoding="utf-8",
+            )
+
+            with patch.object(build_agents, "SPEC_DIR", specs_dir), patch.object(
+                build_agents, "OUTPUT_DIR", output_dir
+            ):
+                self.assertEqual(0, build_agents.build_agents("balanced"))
+                self.assertEqual(
+                    1, build_agents.build_agents("balanced", check_only=True)
+                )
+                self.assertTrue(orphan.exists())
+                manual = output_dir / "README.md"
+                manual.write_text("manual agent documentation", encoding="utf-8")
+                self.assertEqual(
+                    0, build_agents.build_agents("balanced", prune_stale=True)
+                )
+
+            self.assertFalse(orphan.exists())
+            self.assertTrue(manual.exists())
+
+    def test_check_uses_rendered_spec_name_for_expected_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            specs_dir = root / "specs"
+            output_dir = root / "agent"
+            specs_dir.mkdir()
+            output_dir.mkdir()
+            self.write_spec(specs_dir)
+
+            with patch.object(build_agents, "SPEC_DIR", specs_dir), patch.object(
+                build_agents, "OUTPUT_DIR", output_dir
+            ):
+                self.assertEqual(0, build_agents.build_agents("balanced"))
+                self.assertTrue((output_dir / "rendered-name.md").exists())
+                self.assertFalse((output_dir / "source-name.md").exists())
+                self.assertEqual(
+                    0, build_agents.build_agents("balanced", check_only=True)
+                )
 
 
 if __name__ == "__main__":

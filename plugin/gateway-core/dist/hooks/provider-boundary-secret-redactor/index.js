@@ -1,17 +1,21 @@
 import { isProxy } from "node:util/types";
-import { writeGatewayEventAudit } from "../../audit/event-audit.js";
+import { gatewayAuditSessionFields, normalizeGatewayAuditSessionId, writeGatewayEventAudit, } from "../../audit/event-audit.js";
 import { createSecretRedactor, SecretRedactionError, } from "../shared/secret-redaction.js";
-function messageSessionId(messages) {
+function messageSessionId(messages, maxMessages) {
     if (!Array.isArray(messages) || isProxy(messages)) {
         return "";
     }
-    for (let index = 0; index < messages.length; index += 1) {
+    const limit = Number.isFinite(maxMessages) && maxMessages > 0 ? Math.floor(maxMessages) : 0;
+    if (limit === 0 || messages.length > limit) {
+        return "";
+    }
+    for (let index = 0; index < messages.length && index < limit; index += 1) {
         const message = ownDataValue(messages, index);
         const info = ownDataValue(message, "info");
         const sessionID = ownDataValue(info, "sessionID");
-        if (typeof sessionID === "string" && sessionID.trim()) {
-            return sessionID;
-        }
+        const normalized = normalizeGatewayAuditSessionId(sessionID);
+        if (normalized)
+            return normalized;
     }
     return "";
 }
@@ -35,7 +39,7 @@ function auditRedaction(directory, surface, sessionId, stats) {
         stage: "state",
         reason_code: "provider_boundary_secrets_redacted",
         surface,
-        session_id: sessionId,
+        ...gatewayAuditSessionFields(sessionId),
         match_count: stats.matches,
         redacted_field_count: stats.redactedFields,
         scanned_chars: stats.scannedChars,
@@ -50,7 +54,7 @@ function auditOpaqueAttachmentOmission(directory, surface, sessionId, stats) {
         stage: "state",
         reason_code: "provider_boundary_opaque_attachment_collision_omitted",
         surface,
-        session_id: sessionId,
+        ...gatewayAuditSessionFields(sessionId),
         omitted_match_count: stats.omittedOpaqueAttachmentMatches,
     });
 }
@@ -70,7 +74,7 @@ export function createProviderBoundarySecretFinalizer(options) {
             stage: "guard",
             reason_code: "provider_boundary_secret_dispatch_blocked",
             surface,
-            session_id: sessionId,
+            ...gatewayAuditSessionFields(sessionId),
             error_code: code,
             ...matchDiagnostics,
         });
@@ -80,15 +84,23 @@ export function createProviderBoundarySecretFinalizer(options) {
         throw new SecretRedactionError("unexpected_failure");
     }
     return {
-        finalizeMessages(payload) {
+        async finalizeMessages(payload) {
             const messages = payload.output?.messages;
-            if (!Array.isArray(messages)) {
+            if (messages === undefined) {
                 return;
             }
             const directory = payload.directory?.trim() || options.directory;
-            const sessionId = payload.input?.sessionID?.trim() || messageSessionId(messages);
+            let sessionId = normalizeGatewayAuditSessionId(payload.input?.sessionID);
             try {
-                const stats = redactor.redactProviderMessages(messages);
+                if (!Array.isArray(messages)) {
+                    throw new SecretRedactionError("malformed_provider_object");
+                }
+                if (!sessionId) {
+                    sessionId = messageSessionId(messages, options.providerLimits.maxMessages);
+                }
+                const stats = redactor.usesIsolatedPatterns
+                    ? await redactor.redactProviderMessagesAsync(messages)
+                    : redactor.redactProviderMessages(messages);
                 auditOpaqueAttachmentOmission(directory, "messages", sessionId, stats);
                 auditRedaction(directory, "messages", sessionId, stats);
             }
@@ -96,15 +108,20 @@ export function createProviderBoundarySecretFinalizer(options) {
                 blockAudit(directory, "messages", sessionId, error);
             }
         },
-        finalizeSystem(payload) {
+        async finalizeSystem(payload) {
             const system = payload.output?.system;
-            if (!Array.isArray(system)) {
+            if (system === undefined) {
                 return;
             }
             const directory = payload.directory?.trim() || options.directory;
-            const sessionId = payload.input?.sessionID?.trim() || "";
+            const sessionId = normalizeGatewayAuditSessionId(payload.input?.sessionID);
             try {
-                const stats = redactor.redactProviderSystem(system);
+                if (!Array.isArray(system)) {
+                    throw new SecretRedactionError("malformed_provider_object");
+                }
+                const stats = redactor.usesIsolatedPatterns
+                    ? await redactor.redactProviderSystemAsync(system)
+                    : redactor.redactProviderSystem(system);
                 auditRedaction(directory, "system", sessionId, stats);
             }
             catch (error) {

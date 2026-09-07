@@ -744,6 +744,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     enabled: true,
     disabled: [],
     order: [
+      "tasker-command-gateway",
       "codememory-milestone-bridge",
       "intent-ingress-outbox",
       "execution-status",
@@ -1275,7 +1276,7 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
     providerMaxMessages: 20000,
     providerMaxNodes: 1000000,
     providerMaxChars: 134217728,
-    providerMaxMessageChars: 16777216,
+    providerMaxMessageChars: 33554432,
   },
   primaryWorktreeGuard: {
     enabled: true,

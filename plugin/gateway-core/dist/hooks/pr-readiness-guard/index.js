@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { isGitHubPrCreateCommand } from "../shared/github-pr-commands.js";
+import { isGitHubPrCreateCommand, resolveGitHubPrCreateEvidenceDirectory, } from "../shared/github-pr-commands.js";
 import { validationEvidenceStatus } from "../validation-evidence-ledger/evidence.js";
 // Returns true when git worktree has no pending tracked or untracked changes.
 function isWorktreeClean(directory) {
@@ -14,7 +14,7 @@ function isWorktreeClean(directory) {
         return output.length === 0;
     }
     catch {
-        return true;
+        return false;
     }
 }
 // Creates PR readiness guard that blocks creation when validation gates are missing.
@@ -40,8 +40,19 @@ export function createPrReadinessGuardHook(options) {
                 ? eventPayload.directory
                 : options.directory;
             const sessionId = String(eventPayload.input?.sessionID ?? eventPayload.input?.sessionId ?? "").trim();
-            if (options.requireCleanWorktree && !isWorktreeClean(directory)) {
-                writeGatewayEventAudit(directory, {
+            const evidenceDirectory = resolveGitHubPrCreateEvidenceDirectory(command, directory);
+            const prDirectory = evidenceDirectory ?? directory;
+            if (options.requireCleanWorktree && !evidenceDirectory) {
+                writeGatewayEventAudit(prDirectory, {
+                    hook: "pr-readiness-guard",
+                    stage: "skip",
+                    reason_code: "pr_create_unresolved_worktree",
+                    session_id: sessionId,
+                });
+                throw new Error("[pr-readiness-guard] Unable to resolve a unique local PR worktree for clean-worktree enforcement.");
+            }
+            if (options.requireCleanWorktree && evidenceDirectory && !isWorktreeClean(evidenceDirectory)) {
+                writeGatewayEventAudit(prDirectory, {
                     hook: "pr-readiness-guard",
                     stage: "skip",
                     reason_code: "pr_create_dirty_worktree",
@@ -49,14 +60,16 @@ export function createPrReadinessGuardHook(options) {
                 });
                 throw new Error("[pr-readiness-guard] Worktree is dirty. Commit/stash changes before creating PR.");
             }
-            if (!options.requireValidationEvidence || !sessionId || required.length === 0) {
+            if (!options.requireValidationEvidence || required.length === 0) {
                 return;
             }
-            const status = validationEvidenceStatus(sessionId, required, directory);
+            const status = sessionId && evidenceDirectory
+                ? validationEvidenceStatus(sessionId, required, evidenceDirectory)
+                : { missing: required };
             if (status.missing.length === 0) {
                 return;
             }
-            writeGatewayEventAudit(directory, {
+            writeGatewayEventAudit(prDirectory, {
                 hook: "pr-readiness-guard",
                 stage: "skip",
                 reason_code: "pr_create_missing_validation",

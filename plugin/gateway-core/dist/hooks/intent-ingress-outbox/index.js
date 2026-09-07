@@ -520,7 +520,7 @@ export function compareIntentIngressEnvelopes(left, right) {
     return (left.observed_at.localeCompare(right.observed_at) ||
         left.envelope_id.localeCompare(right.envelope_id));
 }
-function buildEnvelope(payload, options, redactor) {
+async function buildEnvelope(payload, options, redactor) {
     const sessionId = normalizedIdentifier(payload.properties?.sessionID ??
         payload.properties?.sessionId ??
         payload.output?.message?.sessionID);
@@ -552,7 +552,9 @@ function buildEnvelope(payload, options, redactor) {
     let redactionFailed = false;
     if (options.captureContent) {
         try {
-            const redacted = redactor.redactText(prompt);
+            const redacted = redactor.usesIsolatedPatterns
+                ? await redactor.redactTextAsync(prompt)
+                : redactor.redactText(prompt);
             const normalized = redacted.text.replace(/\s+/g, " ").trim();
             const maxContentChars = Math.max(1, Math.min(options.maxContentChars, options.maxInputChars));
             content.mode = "redacted_preview";
@@ -595,6 +597,9 @@ export function createIntentIngressOutboxHook(options) {
             maxNodes: options.secretLimits.maxNodes,
             maxChars: Math.max(1, options.maxInputChars),
         },
+        isolateCustomPatterns: options.isolateCustomPatterns,
+        workerFactory: options.workerFactory,
+        workerTimeoutMs: options.workerTimeoutMs,
     });
     const stateDir = configuredStateDir(options.stateDir, options.directory);
     function audit(directory, reasonCode, envelope, startedAt, extra = {}) {
@@ -626,7 +631,7 @@ export function createIntentIngressOutboxHook(options) {
                 : options.directory;
             let built;
             try {
-                built = buildEnvelope(payload, options, redactor);
+                built = await buildEnvelope(payload, options, redactor);
             }
             catch {
                 audit(directory, "intent_ingress_envelope_failed", undefined, startedAt);

@@ -39,6 +39,20 @@ Purpose: keep a single, explicit record of intentional differences so parity aud
 | `anthropic-effort` | `intentional-divergence` | Local model-routing controls own effort/category policy (`/model-routing`). |
 | `auto-update-checker` | `intentional-divergence` | Use OpenCode native `autoupdate: "notify"` for operator-visible availability while keeping installation explicit; no custom runtime auto-update hook. |
 
+## External agent feature review (2026-08-22)
+
+This review checked official documentation for high-value capabilities that are not direct local imports:
+
+| Capability | Local status | Local mapping / rationale |
+| --- | --- | --- |
+| OpenAI hosted multi-agent tree (`spawn_agent`, messaging, waiting, bounded concurrency) | `intentional-divergence` | Local `task` delegation, lifecycle telemetry, retry controls, and the project two-worker cap cover the safe bounded-fan-out pattern; hosted mailbox semantics and arbitrary tree depth are not exposed. Source: <https://developers.openai.com/api/docs/guides/responses-multi-agent>. |
+| OpenAI server-side Responses compaction | `local-equivalent` | Local preemptive compaction, context preservation, and session recovery provide the same operational goal, but not the opaque Responses compaction item. Source: <https://developers.openai.com/api/docs/guides/compaction>. |
+| Claude Code isolated subagent summaries and cheap-model routing | `local-equivalent` | Local hidden specialists, per-agent tool restrictions, category routing, and the compact handoff reminder preserve parent context; Claude-specific runtime behavior is not imported. Source: <https://code.claude.com/docs/en/sub-agents>. |
+| Claude lifecycle hooks for subagent start/stop, task completion, permission denial, and compaction | `intentional-divergence` | Gateway lifecycle, permission, validation, telemetry, and compaction hooks cover the local event goals; Claude hook payload compatibility is intentionally not provided. Source: <https://code.claude.com/docs/en/hooks>. |
+| Native model aliases/effort variants and least-privilege permission rules | `deferred` | OpenCode supports per-agent variants and granular permissions, but this repo's category router and generated tool booleans remain the canonical contract. Adopt native variants only after provider availability is measured. Sources: <https://opencode.ai/docs/models/> and <https://opencode.ai/docs/permissions/>. |
+
+The highest-value local gaps remain hosted cross-session messaging and provider-native compaction/effort semantics. They require runtime/provider integration rather than more prompt prose and are intentionally deferred.
+
 ## Plugin and command surface
 
 | Capability | Local status | Evidence |

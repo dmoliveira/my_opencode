@@ -275,6 +275,23 @@ function buildRoutingDecisionMeaning(inferredSubagent: string, explicitSubagent:
   return meaning
 }
 
+function compactRoutingText(value: string, maxChars: number): string {
+  const limit = Number.isFinite(maxChars) && maxChars > 0 ? Math.floor(maxChars) : 2400
+  const normalized = value.replace(/\s+/g, " ").trim() || "(empty)"
+  if (normalized.length <= limit) {
+    return normalized
+  }
+  const marker = " ... "
+  if (limit <= marker.length) {
+    return normalized.slice(0, limit)
+  }
+  const budget = Math.max(0, limit - marker.length)
+  const headLength = Math.ceil(budget / 2)
+  const tailLength = Math.max(0, budget - headLength)
+  const tail = tailLength > 0 ? normalized.slice(-tailLength).trimStart() : ""
+  return `${normalized.slice(0, headLength).trimEnd()}${marker}${tail}`
+}
+
 function buildRoutingContext(
   prompt: string,
   description: string,
@@ -282,17 +299,20 @@ function buildRoutingContext(
   inferredSubagent: string,
   inferredScore: number,
   explicitScore: number,
+  maxChars: number,
 ): string {
-  return [
+  const safeMaxChars = Number.isFinite(maxChars) && maxChars > 0 ? Math.floor(maxChars) : 2400
+  const raw = [
     `explicit_subagent=${explicitSubagent || "none"}`,
     `heuristic_inferred=${inferredSubagent || "none"}`,
     `heuristic_inferred_score=${String(inferredScore)}`,
     `heuristic_explicit_score=${String(explicitScore)}`,
     "prompt:",
-    prompt.trim() || "(empty)",
+    compactRoutingText(prompt, Math.max(64, Math.floor(safeMaxChars * 0.55))),
     "description:",
-    description.trim() || "(empty)",
+    compactRoutingText(description, Math.max(32, Math.floor(safeMaxChars * 0.15))),
   ].join("\n")
+  return compactRoutingText(raw, safeMaxChars)
 }
 
 function policyForAgent(
@@ -406,33 +426,28 @@ export function createAgentModelResolverHook(options: {
           (!hadExplicitSubagent || explicitScore <= policy.intentThreshold),
       )
       if (shouldRunLlmDecision && options.decisionRuntime && aiInferred) {
+        const routingContext = buildRoutingContext(
+          originalPrompt,
+          originalDescription,
+          originalExplicitSubagent,
+          aiInferred.name,
+          aiInferred.score,
+          explicitScore,
+          options.decisionRuntime.config.maxContextChars,
+        )
         const decision = await options.decisionRuntime.decide({
           hookId: "agent-model-resolver",
           sessionId: sid,
           traceId,
           templateId: "delegation-route-v1",
           instruction: buildRoutingInstruction(aiInferred.name, originalExplicitSubagent),
-          context: buildRoutingContext(
-            originalPrompt,
-            originalDescription,
-            originalExplicitSubagent,
-            aiInferred.name,
-            aiInferred.score,
-            explicitScore,
-          ),
+          context: routingContext,
           allowedChars: alphabet,
           decisionMeaning: buildRoutingDecisionMeaning(aiInferred.name, originalExplicitSubagent),
           cacheKey: buildCompactDecisionCacheKey({
             prefix: "route",
             parts: [originalExplicitSubagent || "none", aiInferred.name],
-            text: buildRoutingContext(
-              originalPrompt,
-              originalDescription,
-              originalExplicitSubagent,
-              aiInferred.name,
-              aiInferred.score,
-              explicitScore,
-            ),
+            text: routingContext,
           }),
         })
         if (decision.accepted) {

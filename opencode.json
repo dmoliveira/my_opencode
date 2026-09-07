@@ -187,6 +187,11 @@
       "url": "https://api.githubcopilot.com/mcp/",
       "enabled": false
     },
+    "miro": {
+      "type": "remote",
+      "url": "https://mcp.miro.com/",
+      "enabled": false
+    },
     "google-drive": {
       "type": "remote",
       "url": "https://drivemcp.googleapis.com/mcp/v1",

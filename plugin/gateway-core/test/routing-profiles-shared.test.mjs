@@ -13,7 +13,7 @@ test("routing profiles use the intended GPT-5.6 tiers", () => {
   assert.equal(routingModelForCategory("deep"), "openai/gpt-5.6-sol")
   assert.equal(routingModelForCategory("critical"), "openai/gpt-5.6-sol")
   assert.equal(routingModelForCategory("visual"), "openai/gpt-5.6-terra")
-  assert.equal(routingModelForCategory("writing"), "openai/gpt-5.4")
+  assert.equal(routingModelForCategory("writing"), "openai/gpt-5.6-terra")
 })
 
 test("routing downgrade policy moves between GPT-5.6 tiers", () => {
@@ -21,5 +21,5 @@ test("routing downgrade policy moves between GPT-5.6 tiers", () => {
   assert.equal(downgradeRoutingCategory("deep"), "balanced")
   assert.equal(downgradeRoutingModel("openai/gpt-5.6-sol", "critical"), "openai/gpt-5.6-terra")
   assert.equal(downgradeRoutingModel("openai/gpt-5.6-terra", "balanced"), "openai/gpt-5.6-luna")
-  assert.equal(downgradeRoutingModel("openai/gpt-5.4", "writing"), "openai/gpt-5.6-terra")
+  assert.equal(downgradeRoutingModel("openai/gpt-5.6-terra", "writing"), "openai/gpt-5.6-terra")
 })

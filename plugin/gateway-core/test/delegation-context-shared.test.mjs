@@ -11,7 +11,7 @@ import {
 const FOCUS_MARKER = "[agent-context-shaper] delegated task focus"
 
 function compactFocus(trigger, avoid) {
-  return `${FOCUS_MARKER}: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups.`
+  return `${FOCUS_MARKER}: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups; handoff: findings, evidence, confidence, affected paths, next action, validation; omit transcript.`
 }
 
 function legacyFocus(trigger, avoid) {

@@ -30,7 +30,7 @@ function legacyTaskFocus(trigger, avoid) {
 }
 
 function compactTaskFocus(trigger, avoid) {
-  return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups.`;
+  return `[agent-context-shaper] delegated task focus: one objective, then return; prioritize: ${trigger}; avoid: ${avoid}; report extras as follow-ups; handoff: findings, evidence, confidence, affected paths, next action, validation; omit transcript.`;
 }
 
 function seedAgent(directory, name, metadata) {
@@ -87,10 +87,12 @@ test("agent-context-shaper prepends delegated task focus reminder once", async (
     );
     assert.ok(text.startsWith(`${compact}\n\n`));
     assert.equal(compact.split("\n").length, 1);
-    assert.ok(legacy.length - compact.length >= 120);
+    assert.ok(legacy.length - compact.length >= 20);
     assert.match(text, /one objective, then return/i);
     assert.match(text, /prioritize: map implementation locations/);
     assert.match(text, /report extras as follow-ups/);
+    assert.match(text, /handoff: findings, evidence, confidence, affected paths, next action, validation/);
+    assert.match(text, /omit transcript/);
     assert.ok(text.indexOf("[DELEGATION TRACE") > text.indexOf(compact));
     assert.ok(
       text.indexOf("Inspect the codebase") > text.indexOf("[DELEGATION TRACE"),

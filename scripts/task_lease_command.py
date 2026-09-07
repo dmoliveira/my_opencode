@@ -1239,9 +1239,10 @@ def heartbeat_lease(
     ttl_seconds: int,
     state_path: Path = DEFAULT_STATE_PATH,
     clock: Callable[[], int] = _now_ms,
+    lock_timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     ttl_ms = _ttl_ms(ttl_seconds)
-    with _locked_store(state_path) as store:
+    with _locked_store(state_path, timeout_seconds=lock_timeout_seconds) as store:
         if store.state is None:
             raise TaskLeaseError("task_lease_not_found", "task lease store is empty")
         now_ms = clock()
@@ -1309,13 +1310,14 @@ def guarded_local_commit(
     *,
     state_path: Path = DEFAULT_STATE_PATH,
     clock: Callable[[], int] = _now_ms,
+    lock_timeout_seconds: float | None = None,
 ) -> T:
     """Run one short local idempotent commit while the exact lease remains locked."""
     if getattr(_CALLBACK_STATE, "active", False):
         raise TaskLeaseError(
             "task_lease_reentry", "guarded lease commits must not re-enter"
         )
-    with _locked_store(state_path) as store:
+    with _locked_store(state_path, timeout_seconds=lock_timeout_seconds) as store:
         if store.state is None:
             raise TaskLeaseError("task_lease_not_found", "task lease store is empty")
         now_ms = clock()

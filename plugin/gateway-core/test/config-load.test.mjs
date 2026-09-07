@@ -22,7 +22,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.secretLeakGuard.providerMaxMessages, 20000)
   assert.equal(config.secretLeakGuard.providerMaxNodes, 1000000)
   assert.equal(config.secretLeakGuard.providerMaxChars, 134217728)
-  assert.equal(config.secretLeakGuard.providerMaxMessageChars, 16777216)
+  assert.equal(config.secretLeakGuard.providerMaxMessageChars, 33554432)
   assert.equal(config.prBodyEvidenceGuard.requireSummarySection, true)
   assert.equal(config.parallelWriterConflictGuard.maxConcurrentWriters, 2)
   assert.equal(config.postMergeSyncGuard.requireDeleteBranch, true)
@@ -35,6 +35,7 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.preemptiveCompaction.guardVerbosity, "normal")
   assert.equal(config.compactionContextInjector.enabled, true)
   assert.equal(config.preemptiveCompaction.defaultContextLimitTokens, 128000)
+  assert.equal(config.globalProcessPressure.enabled, true)
   assert.equal(config.globalProcessPressure.checkCooldownToolCalls, 3)
   assert.equal(config.globalProcessPressure.warningContinueSessions, 5)
   assert.equal(config.globalProcessPressure.criticalMaxRssMb, 10240)
@@ -120,6 +121,10 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.providerModelBudgetEnforcer.maxDelegationsPerWindow, 24)
   assert.equal(config.providerModelBudgetEnforcer.maxEstimatedTokensPerWindow, 24000)
   assert.equal(config.providerModelBudgetEnforcer.maxPerModelDelegationsPerWindow, 16)
+  assert.equal(config.delegationConcurrencyGuard.maxTotalConcurrent, 8)
+  assert.equal(config.delegationConcurrencyGuard.maxExpensiveConcurrent, 2)
+  assert.equal(config.delegationConcurrencyGuard.maxDeepConcurrent, 3)
+  assert.equal(config.delegationConcurrencyGuard.maxCriticalConcurrent, 1)
   assert.equal(config.subagentLifecycleSupervisor.enabled, true)
   assert.equal(config.subagentLifecycleSupervisor.maxRetriesPerSession, 3)
   assert.equal(config.subagentLifecycleSupervisor.staleRunningMs, 300000)
@@ -147,6 +152,26 @@ test("loadGatewayConfig keeps defaults for new safety guard knobs", () => {
   assert.equal(config.noninteractiveShellGuard.injectEnvPrefix, true)
   assert.equal(Array.isArray(config.noninteractiveShellGuard.envPrefixes), true)
   assert.equal(config.noninteractiveShellGuard.prefixCommands.includes("git"), true)
+})
+
+test("loadGatewayConfig accepts the project two-worker delegation overlay", () => {
+  const config = loadGatewayConfig({
+    delegationConcurrencyGuard: {
+      enabled: true,
+      maxTotalConcurrent: 2,
+      maxExpensiveConcurrent: 2,
+      maxDeepConcurrent: 2,
+      maxCriticalConcurrent: 1,
+    },
+  })
+
+  assert.deepEqual(config.delegationConcurrencyGuard, {
+    enabled: true,
+    maxTotalConcurrent: 2,
+    maxExpensiveConcurrent: 2,
+    maxDeepConcurrent: 2,
+    maxCriticalConcurrent: 1,
+  })
 })
 
 test("hook dispatch latency config is typed and bounded", () => {
@@ -247,6 +272,11 @@ test("loadGatewayConfig preserves legacy provider limits until new limits opt in
   assert.equal(mixed.providerMaxNodes, 800)
   assert.equal(mixed.providerMaxChars, 900)
   assert.equal(mixed.providerMaxMessageChars, 850)
+
+  const invalidProvider = loadGatewayConfig({
+    secretLeakGuard: { providerMaxMessageChars: 0 },
+  }).secretLeakGuard
+  assert.equal(invalidProvider.providerMaxMessageChars, 33554432)
 
   const invalid = loadGatewayConfig({
     secretLeakGuard: {
@@ -714,6 +744,32 @@ test("loadGatewayConfigSource merges sidecar config with runtime source", () => 
       "auto-slash-command": "assist",
       "provider-error-classifier": "assist",
     })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("loadGatewayConfigSource preserves process pressure while disabling optional hooks", () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-config-optional-hooks-"))
+  try {
+    mkdirSync(join(directory, ".opencode"), { recursive: true })
+    writeFileSync(
+      join(directory, ".opencode", "gateway-core.config.json"),
+      JSON.stringify({
+        directoryReadmeInjector: { enabled: false },
+        keywordDetector: { enabled: false },
+        thinkMode: { enabled: false },
+      }),
+      "utf-8",
+    )
+
+    const loaded = loadGatewayConfigSourceWithMeta(directory, {})
+    const config = loadGatewayConfig(loaded.source)
+
+    assert.equal(config.globalProcessPressure.enabled, true)
+    assert.equal(config.directoryReadmeInjector.enabled, false)
+    assert.equal(config.keywordDetector.enabled, false)
+    assert.equal(config.thinkMode.enabled, false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

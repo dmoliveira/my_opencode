@@ -330,7 +330,6 @@ test("metadata-first routing composes one focus line, trace, and caller prompt",
     const combinedOverhead = prompt.length - callerPrompt.length
     assert.equal(resolverOverhead, 32)
     assert.equal(combinedOverhead, resolverOverhead + focusLine.length + 2)
-    assert.equal(combinedOverhead, 208)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

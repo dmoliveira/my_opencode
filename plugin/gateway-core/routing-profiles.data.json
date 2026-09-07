@@ -38,7 +38,7 @@
     },
     "writing": {
       "description": "Documentation and communication with richer language style",
-      "model": "openai/gpt-5.4",
+      "model": "openai/gpt-5.6-terra",
       "temperature": 0.6,
       "reasoning": "medium",
       "verbosity": "high"

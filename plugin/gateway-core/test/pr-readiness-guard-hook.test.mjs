@@ -41,6 +41,37 @@ test("pr-readiness-guard blocks PR creation when worktree is dirty", async () =>
   }
 })
 
+test("pr-readiness-guard blocks when worktree cleanliness cannot be determined", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
+  try {
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["pr-readiness-guard"],
+          disabled: [],
+        },
+        prReadinessGuard: {
+          enabled: true,
+          requireCleanWorktree: true,
+          requireValidationEvidence: false,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-pr-no-git" },
+        { args: { command: "gh pr create --title x --body y" } },
+      ),
+      /Worktree is dirty/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test("pr-readiness-guard blocks PR creation when validation evidence is missing", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
   try {
@@ -67,20 +98,27 @@ test("pr-readiness-guard blocks PR creation when validation evidence is missing"
       },
     })
 
-    await assert.rejects(
-      plugin["tool.execute.before"](
-        { tool: "bash", sessionID: "session-pr-validation" },
-        { args: { command: "gh pr create --title x --body y" } },
-      ),
-      /Missing validation evidence/,
-    )
+    for (const command of [
+      "gh pr create --title x --body y",
+      "command -p gh pr create --title x --body y",
+      "command -p -- gh pr create --title x --body y",
+    ]) {
+      await assert.rejects(
+        plugin["tool.execute.before"](
+          { tool: "bash", sessionID: "session-pr-validation" },
+          { args: { command } },
+        ),
+        /Missing validation evidence/,
+        command,
+      )
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
 })
 
 
-test("pr-readiness-guard applies gh api PR creation to the same readiness checks", async () => {
+test("pr-readiness-guard fails closed when an API PR target cannot be resolved", async () => {
   const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
   try {
     execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
@@ -107,7 +145,49 @@ test("pr-readiness-guard applies gh api PR creation to the same readiness checks
         { tool: "bash", sessionID: "session-pr-api-dirty" },
         { args: { command: "gh api repos/foo/bar/pulls -X POST -f title=x -f head=feature -f base=main" } },
       ),
-      /Worktree is dirty/,
+      /Unable to resolve a unique local PR worktree/,
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test("pr-readiness-guard recognizes opaque wrapped API PR creation", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "gateway-pr-readiness-"))
+  try {
+    execSync("git init -b feature", { cwd: directory, stdio: ["ignore", "pipe", "pipe"] })
+    const plugin = GatewayCorePlugin({
+      directory,
+      config: {
+        hooks: {
+          enabled: true,
+          order: ["pr-readiness-guard"],
+          disabled: [],
+        },
+        doneProofEnforcer: {
+          enabled: true,
+          requiredMarkers: ["test"],
+          requireLedgerEvidence: true,
+          allowTextFallback: false,
+        },
+        prReadinessGuard: {
+          enabled: true,
+          requireCleanWorktree: false,
+          requireValidationEvidence: true,
+        },
+      },
+    })
+
+    await assert.rejects(
+      plugin["tool.execute.before"](
+        { tool: "bash", sessionID: "session-pr-wrapped-api" },
+        {
+          args: {
+            command: "bash -c 'gh api repos/owner/repo/pulls -X POST -f head=feature -f base=main'",
+          },
+        },
+      ),
+      /Missing validation evidence/,
     )
   } finally {
     rmSync(directory, { recursive: true, force: true })

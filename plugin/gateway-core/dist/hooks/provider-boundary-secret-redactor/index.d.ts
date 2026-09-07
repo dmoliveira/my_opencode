@@ -1,4 +1,4 @@
-import { type ProviderSecretRedactionLimits, type SecretRedactionLimits } from "../shared/secret-redaction.js";
+import { type ProviderSecretRedactionLimits, type SecretRedactionLimits, type SecretRedactionWorkerFactory } from "../shared/secret-redaction.js";
 export interface ProviderBoundarySecretFinalizer {
     finalizeMessages(payload: {
         input?: {
@@ -8,7 +8,7 @@ export interface ProviderBoundarySecretFinalizer {
             messages?: unknown;
         };
         directory?: string;
-    }): void;
+    }): Promise<void>;
     finalizeSystem(payload: {
         input?: {
             sessionID?: string;
@@ -17,7 +17,7 @@ export interface ProviderBoundarySecretFinalizer {
             system?: unknown;
         };
         directory?: string;
-    }): void;
+    }): Promise<void>;
 }
 export declare function createProviderBoundarySecretFinalizer(options: {
     directory: string;
@@ -26,4 +26,7 @@ export declare function createProviderBoundarySecretFinalizer(options: {
     limits: SecretRedactionLimits;
     providerLimits: ProviderSecretRedactionLimits;
     omittableOpaqueAttachmentPatternIndex?: number | null;
+    isolateCustomPatterns?: boolean;
+    workerFactory?: SecretRedactionWorkerFactory;
+    workerTimeoutMs?: number;
 }): ProviderBoundarySecretFinalizer;

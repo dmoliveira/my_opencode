@@ -8,6 +8,12 @@ redacted in place. Except for the bounded opaque envelopes defined below,
 secret-pattern matches in protocol identifiers, URLs, metadata, unknown fields,
 or object keys block dispatch without logging the matched value.
 
+The configured redaction token must be non-empty, contain non-whitespace text,
+fit within 256 UTF-8 bytes, and match none of the configured detectors. Positive
+replacement expansion consumes the same character budget as the scanned input.
+After mutable replacement, the final value is checked again without mutation;
+any residual detector match blocks dispatch.
+
 The built-in OpenAI-key detector is left-token-bounded as
 `\bsk-[A-Za-z0-9_\-]{20,}`. It detects keys at the start of a value or after
 punctuation or whitespace, but does not mistake an `sk-...` suffix inside an
@@ -15,7 +21,18 @@ ordinary identifier such as `task-validation-accounting` for a secret. Explicit
 custom patterns are not boundary-rewritten and can intentionally retain broader
 matching.
 
-Provider messages and system values must be JSON-shaped data: records use the
+The exact built-in detector profile is recognized by its ordered normalized source and
+flags, not by array identity, and remains on the synchronous compatibility path. Any
+other configured profile is executed through a one-shot `worker_threads` boundary.
+Descriptor-safe traversal and mutation stay on the main thread; only bounded primitive
+text operations cross the worker boundary. The worker returns replacement spans,
+statistics, and digests rather than logging input, pattern, or match text. The parent
+terminates the worker on timeout, crash, malformed response, or capacity exhaustion and
+blocks dispatch with a generic redaction error.
+
+Provider message and system roots must be arrays at both the public redactor API
+and finalizer boundary; a present non-array root blocks as
+`malformed_provider_object`. Their contents must be JSON-shaped data: records use the
 ordinary or null prototype, arrays use the standard array prototype, the global
 `Object.prototype` has its standard unextended key set, and every traversed child
 is an own enumerable data property. Proxies, functions/callable proxies, custom
@@ -25,7 +42,19 @@ array properties, `undefined`, bigint, and non-finite numbers block as
 than invoking getters, preventing a value from changing between validation and
 dispatch scanning.
 Audit fallback session-ID extraction uses the same proxy-safe own-data
-descriptor rule and never invokes message accessors before validation.
+descriptor rule and never invokes message accessors before validation. Session IDs
+are normalized only when they fit within 256 UTF-8 bytes; oversized or blank IDs
+are omitted from audit fields.
+Boundary audit events emit only `has_session_id` and a SHA-256
+`session_id_hash`; they never persist the raw session ID.
+
+Provider traversal starts in root scan mode so protocol fields block while
+recognized mutable content fields can be redacted. Once an immutable field is
+entered, nested descendants remain in blocking scan mode, except for the
+explicitly qualified projections described below.
+System roots retain direct string entries as mutable prompt text; object entries
+begin in root scan mode so unknown system fields block while recognized content
+fields remain redactable.
 
 OpenAI reasoning replay is one narrow exception. The gateway preserves
 `parts[index].metadata.openai.reasoningEncryptedContent` without regex scanning
@@ -154,10 +183,23 @@ tool result:
 - `providerMaxMessages`: `20,000`
 - `providerMaxNodes`: `1,000,000`
 - `providerMaxChars`: `134,217,728`
-- `providerMaxMessageChars`: `16,777,216`
+- `providerMaxMessageChars`: `33,554,432`
+
+Custom detector execution has additional worker bounds:
+
+- 64 patterns;
+- 16 KiB per normalized pattern and 128 KiB total pattern source;
+- 8,192 queued text operations and 8 MiB of input text per worker batch;
+- 64 MiB maximum intermediate worker output;
+- two active workers per process;
+- a one-second parent deadline by default.
+
+Custom profiles that exceed these bounds fail closed. The parent snapshots traversed
+objects and preflights all replacements before committing mutations, so graph changes
+during worker execution cannot overwrite newer values or partially dispatch.
 
 `providerMaxChars` and `providerMaxMessageChars` include traversed regex-scanned
-text, preserved ciphertext, and qualified attachment URLs. Local UI-only tool
+text, positive replacement expansion, preserved ciphertext, and qualified attachment URLs. Local UI-only tool
 metadata is not traversed or charged because the reviewed converter does not
 dispatch it. Public `scannedChars` telemetry counts each qualified URL once
 because every configured detector except the one transport-incompatible Google
@@ -165,6 +207,11 @@ detector still checks it. Provider traversal revisits shared objects at each
 path, so a
 qualified-path visit cannot hide an unqualified alias; every revisit is charged
 to the same bounded call.
+
+The 32 MiB per-message default leaves room for the charged message metadata
+around a maximum-size canonical attachment URL while retaining the 128 MiB
+call-wide bound. Explicit legacy `maxChars` values still seed both provider
+character limits until provider-specific keys are configured.
 
 For backward compatibility, explicitly configured legacy limits seed all
 corresponding provider limits until the new keys opt in. Legacy `maxNodes`
