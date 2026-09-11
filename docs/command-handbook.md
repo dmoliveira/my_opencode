@@ -163,15 +163,16 @@ Supported modes: `off`, `lite`, `full`, `ultra`, `review`, `commit`.
 Use these directly in OpenCode:
 
 ```text
-/models --json
-/connect --json
-/connect --name kvforge-gpt-5-4-mini --json
-/connect --model kvforge/gpt-5.4-mini --mode assist --json
+/kvforge-models --json
+/kvforge-connect --json
+/kvforge-connect --name kvforge-gpt-5-4-mini --json
+/kvforge-connect --model kvforge/gpt-5.4-mini --mode assist --json
 ```
 
-- `/models` lists the KVForge server records currently discovered from `~/.kvforge/server.json` and `~/.kvforge/servers/*.json`.
-- `/connect` writes the native OpenCode provider/model config plus gateway sidecar connection details for the selected KVForge server.
+- `/kvforge-models` lists the KVForge server records currently discovered from `~/.kvforge/server.json` and `~/.kvforge/servers/*.json`.
+- `/kvforge-connect` writes the native OpenCode provider/model config plus gateway sidecar connection details for the selected KVForge server.
 - Selection precedence is: explicit `--name` > explicit `--model` > current running singleton server.
+- Native OpenCode `/models` and `/connect` remain available for provider/model selection and authentication.
 
 Quick taxonomy:
 
