@@ -1,1 +1,16 @@
+__pycache__/
+*.pyc
+.DS_Store
+.beads/
+.codememory/config.yaml
+plugin/gateway-core/node_modules/
+plugin/gateway-core/*.tgz
+plugin/gateway-core@latest
+plugin/gateway-sidebar/node_modules/
+plugin/gateway-sidebar/*.tgz
+runtime/
+bg/
+.codememory/*.sqlite3
 .opencode/*
+!.opencode/skills/
+!.opencode/skills/**
