@@ -30,6 +30,31 @@
   "share": "manual",
   "small_model": "portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite",
   "provider": {
+    "openai": {
+      "models": {
+        "gpt-6-astra": {
+          "name": "GPT-6 Astra (ChatGPT)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        }
+      }
+    },
     "portkey-openai": {
       "name": "Portkey OpenAI",
       "npm": "@ai-sdk/openai",
