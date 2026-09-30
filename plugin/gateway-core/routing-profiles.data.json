@@ -3,7 +3,7 @@
   "profiles": {
     "quick": {
       "description": "Fast responses for routine operational tasks",
-      "model": "openai/gpt-5.6-luna",
+      "model": "openai/gpt-6-luna",
       "temperature": 0.1,
       "reasoning": "low",
       "verbosity": "low"
@@ -17,14 +17,14 @@
     },
     "deep": {
       "description": "Higher-reliability analysis for complex engineering work",
-      "model": "openai/gpt-5.6-sol",
+      "model": "openai/gpt-6.1-sol",
       "temperature": 0.1,
       "reasoning": "medium",
       "verbosity": "medium"
     },
     "critical": {
       "description": "Critical-risk analysis and final safety review",
-      "model": "openai/gpt-5.6-sol",
+      "model": "openai/gpt-6.1-sol",
       "temperature": 0.0,
       "reasoning": "medium",
       "verbosity": "medium"

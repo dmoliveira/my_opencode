@@ -1288,7 +1288,7 @@ test("session-recovery downgrades repeated provider header timeouts to a lighter
                   info: {
                     role: "user",
                     agent: "build",
-                    model: { providerID: "openai", modelID: "gpt-5.6-sol" },
+                    model: { providerID: "openai", modelID: "gpt-6.1-sol" },
                   },
                 },
               ],

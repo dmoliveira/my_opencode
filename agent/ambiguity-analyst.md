@@ -2,7 +2,7 @@
 description: >-
   Read-only planning analyst for uncovering assumptions, unknowns, and decision forks.
 mode: subagent
-model: openai/gpt-5.6-sol
+model: openai/gpt-6.1-sol
 tools:
   bash: false
   read: true

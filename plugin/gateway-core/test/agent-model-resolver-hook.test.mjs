@@ -69,7 +69,7 @@ test("agent-model-resolver keeps routing metadata out of the provider prompt", a
     assert.equal(prompt, `${traceMarker}\n\n${callerPrompt}`)
     assert.equal(prompt.length - callerPrompt.length, 32)
     const legacyPrompt = [
-      "[MODEL ROUTING] Preferred category=quick; model=openai/gpt-5.6-luna; reasoning=low; fallback_policy=openai-default-with-alt-fallback.",
+      "[MODEL ROUTING] Preferred category=quick; model=openai/gpt-6-luna; reasoning=low; fallback_policy=openai-default-with-alt-fallback.",
       "[TOOL SURFACE] subagent=explore; allowed=read,list,glob,grep; denied=bash,write,edit,webfetch,task,todowrite,todoread.",
       "",
       "[SESSION FLOW] parent_session_id=session-parent; trace_id=trace-fixed",
@@ -82,8 +82,8 @@ test("agent-model-resolver keeps routing metadata out of the provider prompt", a
     ].join("\n")
     const legacyOverhead = legacyPrompt.length - callerPrompt.length
     const resolverOverhead = prompt.length - callerPrompt.length
-    assert.equal(legacyOverhead, 497)
-    assert.equal(legacyOverhead - resolverOverhead, 465)
+    assert.equal(legacyOverhead, 495)
+    assert.equal(legacyOverhead - resolverOverhead, 463)
     assert.equal(output.metadata?.gateway?.delegation?.subagentType, "explore")
     assert.equal(output.metadata?.gateway?.delegation?.category, "quick")
     assert.equal(output.metadata?.gateway?.delegation?.traceId, "trace-fixed")
@@ -124,7 +124,7 @@ test("agent-model-resolver removes legacy provider context across reroutes", asy
           "Scout repository patterns",
         ].join("\n"),
         prompt: [
-          "[MODEL ROUTING] Preferred category=quick; model=openai/gpt-5.6-luna; reasoning=low; fallback_policy=openai-default-with-alt-fallback.",
+          "[MODEL ROUTING] Preferred category=quick; model=openai/gpt-6-luna; reasoning=low; fallback_policy=openai-default-with-alt-fallback.",
           "[DELEGATION ROUTER] inferred subagent_type=explore from delegation intent.",
           "[TOOL SURFACE] subagent=explore; allowed=read,list,glob,grep; denied=bash,write,edit,webfetch,task,todowrite,todoread.",
           "[SESSION FLOW] parent_session_id=session-parent; trace_id=trace-reroute",
@@ -264,7 +264,7 @@ test("agent-model-resolver emits metadata-first routing telemetry", { concurrenc
     assert.equal(resolved.tool_surface_injected, "false")
     assert.equal(resolved.tool_policy_source, "agent_spec")
     assert.equal(resolved.recommended_category, "quick")
-    assert.equal(resolved.model, "openai/gpt-5.6-luna")
+    assert.equal(resolved.model, "openai/gpt-6-luna")
     assert.equal(resolved.reasoning, "low")
     assert.equal(resolved.route_source, "explicit_subagent_type")
     assert.equal(

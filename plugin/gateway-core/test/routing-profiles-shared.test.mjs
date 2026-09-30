@@ -7,19 +7,19 @@ import {
   routingModelForCategory,
 } from "../dist/hooks/shared/routing-profiles.js"
 
-test("routing profiles use the intended GPT-5.6 tiers", () => {
-  assert.equal(routingModelForCategory("quick"), "openai/gpt-5.6-luna")
+test("routing profiles use the intended GPT-6 tiers", () => {
+  assert.equal(routingModelForCategory("quick"), "openai/gpt-6-luna")
   assert.equal(routingModelForCategory("balanced"), "openai/gpt-5.6-terra")
-  assert.equal(routingModelForCategory("deep"), "openai/gpt-5.6-sol")
-  assert.equal(routingModelForCategory("critical"), "openai/gpt-5.6-sol")
+  assert.equal(routingModelForCategory("deep"), "openai/gpt-6.1-sol")
+  assert.equal(routingModelForCategory("critical"), "openai/gpt-6.1-sol")
   assert.equal(routingModelForCategory("visual"), "openai/gpt-5.6-terra")
   assert.equal(routingModelForCategory("writing"), "openai/gpt-5.6-terra")
 })
 
-test("routing downgrade policy moves between GPT-5.6 tiers", () => {
+test("routing downgrade policy moves between GPT-6 tiers", () => {
   assert.equal(downgradeRoutingCategory("critical"), "balanced")
   assert.equal(downgradeRoutingCategory("deep"), "balanced")
-  assert.equal(downgradeRoutingModel("openai/gpt-5.6-sol", "critical"), "openai/gpt-5.6-terra")
-  assert.equal(downgradeRoutingModel("openai/gpt-5.6-terra", "balanced"), "openai/gpt-5.6-luna")
+  assert.equal(downgradeRoutingModel("openai/gpt-6.1-sol", "critical"), "openai/gpt-5.6-terra")
+  assert.equal(downgradeRoutingModel("openai/gpt-5.6-terra", "balanced"), "openai/gpt-6-luna")
   assert.equal(downgradeRoutingModel("openai/gpt-5.6-terra", "writing"), "openai/gpt-5.6-terra")
 })
