@@ -18414,7 +18414,7 @@ jobs:
             and "balanced" in routing_categories
             and "critical" in routing_categories
             and routing_categories.get("quick", {}).get("model")
-            == "openai/gpt-5.6-luna",
+            == "openai/gpt-6-luna",
             "model routing schema should define balanced/critical categories and quick Luna profile",
         )
         expect(
@@ -18423,25 +18423,25 @@ jobs:
             and routing_categories.get("visual", {}).get("model")
             == "openai/gpt-5.6-terra"
             and routing_categories.get("deep", {}).get("model")
-            == "openai/gpt-5.6-sol"
+            == "openai/gpt-6.1-sol"
             and routing_categories.get("critical", {}).get("model")
-            == "openai/gpt-5.6-sol"
+            == "openai/gpt-6.1-sol"
             and routing_categories.get("writing", {}).get("model")
             == "openai/gpt-5.6-terra",
-            "model routing schema should use current GPT-5.6 tiers for all categories",
+            "model routing schema should use current GPT-6 routing tiers for all categories",
         )
 
         expected_subagent_models = {
-            "ambiguity-analyst": ("deep", "openai/gpt-5.6-sol"),
+            "ambiguity-analyst": ("deep", "openai/gpt-6.1-sol"),
             "experience-designer": ("visual", "openai/gpt-5.6-terra"),
-            "explore": ("quick", "openai/gpt-5.6-luna"),
+            "explore": ("quick", "openai/gpt-6-luna"),
             "librarian": ("balanced", "openai/gpt-5.6-terra"),
-            "oracle": ("critical", "openai/gpt-5.6-sol"),
-            "plan-critic": ("critical", "openai/gpt-5.6-sol"),
-            "release-scribe": ("quick", "openai/gpt-5.6-luna"),
-            "reviewer": ("critical", "openai/gpt-5.6-sol"),
-            "strategic-planner": ("deep", "openai/gpt-5.6-sol"),
-            "verifier": ("quick", "openai/gpt-5.6-luna"),
+            "oracle": ("critical", "openai/gpt-6.1-sol"),
+            "plan-critic": ("critical", "openai/gpt-6.1-sol"),
+            "release-scribe": ("quick", "openai/gpt-6-luna"),
+            "reviewer": ("critical", "openai/gpt-6.1-sol"),
+            "strategic-planner": ("deep", "openai/gpt-6.1-sol"),
+            "verifier": ("quick", "openai/gpt-6-luna"),
         }
         subagent_specs = {}
         for spec_path in sorted((AGENT_DIR / "specs").glob("*.json")):
@@ -18450,7 +18450,7 @@ jobs:
                 subagent_specs[str(spec_payload.get("name") or "")] = spec_payload
         expect(
             set(subagent_specs) == set(expected_subagent_models),
-            "every custom subagent should be covered by the GPT-5.6 model matrix",
+            "every custom subagent should be covered by the GPT-6 routing model matrix",
         )
         for agent_name, (expected_category, expected_model) in expected_subagent_models.items():
             spec_payload = subagent_specs[agent_name]
@@ -18461,7 +18461,7 @@ jobs:
             )
             expect(
                 spec_payload.get("model") == expected_model,
-                f"{agent_name} should explicitly pin its expected GPT-5.6 model",
+                f"{agent_name} should explicitly pin its expected GPT-6 routing model",
             )
             expect(
                 routing_categories.get(expected_category, {}).get("model")
@@ -18613,8 +18613,8 @@ jobs:
         )
         expect(
             resolved_requested.get("settings", {}).get("model")
-            == "openai/gpt-5.6-sol",
-            "deep category should resolve to GPT-5.6 Sol by default",
+            == "openai/gpt-6.1-sol",
+            "deep category should resolve to GPT-6.1 Sol by default",
         )
 
         resolved_missing = resolve_category(routing_schema, "unknown")
@@ -18627,7 +18627,7 @@ jobs:
         resolved_unavailable = resolve_category(
             routing_schema,
             "deep",
-            available_models={"openai/gpt-5.6-luna"},
+            available_models={"openai/gpt-6-luna"},
         )
         expect(
             resolved_unavailable.get("category")
@@ -18647,14 +18647,14 @@ jobs:
                 "verbosity": "low",
             },
             available_models={
-                "openai/gpt-5.6-luna",
+                "openai/gpt-6-luna",
                 "openai/gpt-5.6-terra",
-                "openai/gpt-5.6-sol",
+                "openai/gpt-6.1-sol",
             },
         )
         expect(
             resolved_with_precedence.get("settings", {}).get("model")
-            == "openai/gpt-5.6-sol",
+            == "openai/gpt-6.1-sol",
             "model routing should fallback to available category/system model deterministically",
         )
         expect(
@@ -18693,7 +18693,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
+                "openai/gpt-6-luna,openai/gpt-5.6-terra,openai/gpt-6.1-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18719,7 +18719,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
+                "openai/gpt-6-luna,openai/gpt-5.6-terra,openai/gpt-6.1-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18844,7 +18844,7 @@ jobs:
                 "--override-model",
                 "openai/nonexistent",
                 "--available-models",
-                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
+                "openai/gpt-6-luna,openai/gpt-5.6-terra,openai/gpt-6.1-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18856,7 +18856,7 @@ jobs:
         expect(routing_explain.returncode == 0, "routing explain should succeed")
         routing_explain_report = parse_json_output(routing_explain.stdout)
         expect(
-            routing_explain_report.get("selected_model") == "openai/gpt-5.6-sol",
+            routing_explain_report.get("selected_model") == "openai/gpt-6.1-sol",
             "routing explain should expose selected model",
         )
         expect(
@@ -18877,7 +18877,7 @@ jobs:
                 "--category",
                 "quick",
                 "--available-models",
-                "openai/gpt-5.6-luna,openai/gpt-5.6-terra,openai/gpt-5.6-sol",
+                "openai/gpt-6-luna,openai/gpt-5.6-terra,openai/gpt-6.1-sol",
                 "--json",
             ],
             capture_output=True,
@@ -18973,9 +18973,9 @@ jobs:
                 "verbosity": "medium",
             },
             available_models={
-                "openai/gpt-5.6-luna",
+                "openai/gpt-6-luna",
                 "openai/gpt-5.6-terra",
-                "openai/gpt-5.6-sol",
+                "openai/gpt-6.1-sol",
             },
         )
         deterministic_trace_b = resolve_model_settings(
@@ -18989,9 +18989,9 @@ jobs:
                 "verbosity": "medium",
             },
             available_models={
-                "openai/gpt-5.6-luna",
+                "openai/gpt-6-luna",
                 "openai/gpt-5.6-terra",
-                "openai/gpt-5.6-sol",
+                "openai/gpt-6.1-sol",
             },
         )
         expect(

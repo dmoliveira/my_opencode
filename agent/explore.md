@@ -2,7 +2,7 @@
 description: >-
   Read-only internal codebase scout for fast discovery of implementation locations and local patterns.
 mode: subagent
-model: openai/gpt-5.6-luna
+model: openai/gpt-6-luna
 tools:
   bash: false
   read: true
