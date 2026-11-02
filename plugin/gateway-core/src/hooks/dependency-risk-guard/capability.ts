@@ -4,11 +4,27 @@ import { createServer, type Socket } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { PERMIT_MS } from "./protocol.js"
+import type { MetadataBinding } from "./protocol.js"
+import { createHash } from "node:crypto"
 
 export interface Capability { path: string; nonce: string; until: number; close: () => void }
 
 /** Private, one-shot host handshake. A CLI flag/receipt cannot mint a setup permit. */
 export async function capability(fingerprint: string, recheck: () => void): Promise<Capability> {
+  return privateCapability(fingerprint, recheck, "setup")
+}
+
+export function metadataCapabilityBinding(binding: MetadataBinding): string {
+  return createHash("sha256").update(JSON.stringify(["metadata-promotion-v1", binding.phase, binding.session, binding.call,
+    binding.issuer, binding.root, binding.fingerprint, binding.nonce, binding.original, binding.candidate])).digest("hex")
+}
+
+export async function metadataCapability(binding: MetadataBinding, recheck: () => void): Promise<Capability> {
+  if (binding.phase !== "migrate") throw new Error("metadata_capability_invalid")
+  return privateCapability(metadataCapabilityBinding(binding), recheck, "metadata-promotion-v1")
+}
+
+async function privateCapability(fingerprint: string, recheck: () => void, operation: "setup" | "metadata-promotion-v1"): Promise<Capability> {
   const directory = realpathSync(mkdtempSync(join(tmpdir(), "dependency-authority-")))
   const path = join(directory, "permit.sock")
   const nonce = randomBytes(32).toString("hex")
@@ -29,7 +45,8 @@ export async function capability(fingerprint: string, recheck: () => void): Prom
       if (spent) { client.destroy(); return }
       spent = true
       try {
-        if (data !== JSON.stringify({ nonce, fingerprint }) + "\n") throw new Error("capability_invalid")
+        const request = operation === "setup" ? { nonce, fingerprint } : { operation, nonce, fingerprint }
+        if (data !== JSON.stringify(request) + "\n") throw new Error("capability_invalid")
         recheck()
         client.end("authorized\n")
         server.close()

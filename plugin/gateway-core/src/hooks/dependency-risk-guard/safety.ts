@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { execFileSync } from "node:child_process"
-import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync } from "node:fs"
+import { constants, closeSync, fchmodSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -322,6 +322,243 @@ export function capture(directory: string): Snapshot {
 
 export function captureMetadata(directory: string): Snapshot {
   return capturePolicy(directory, METADATA_POLICY)
+}
+
+export interface MetadataFile extends DirectoryIdentity {
+  uid: string
+  mode: number
+  size: number
+  sha256: string
+}
+export interface MetadataContext {
+  v: 1
+  policy: "one-key-metadata-promotion-v1"
+  snapshot: Snapshot
+  original: MetadataFile
+  common: DirectoryIdentity
+  pointer: { kind: "absent" } | { kind: "file"; file: MetadataFile; target: string }
+  fingerprint: string
+}
+
+/** Identity plus bytes; timestamps deliberately are not authority fields. */
+export function metadataFile(path: string): MetadataFile {
+  const before = lstatSync(path, { bigint: true })
+  const data = safeRead(path)
+  const after = lstatSync(path, { bigint: true })
+  if (!before.isFile() || before.nlink !== 1n || before.dev !== after.dev || before.ino !== after.ino ||
+      before.uid !== after.uid || before.mode !== after.mode || before.size !== after.size ||
+      before.ctimeNs !== after.ctimeNs || before.mtimeNs !== after.mtimeNs ||
+      typeof process.getuid !== "function" || before.uid !== BigInt(process.getuid()) ||
+      (Number(before.mode) & 0o7333) !== 0o200 || data.length !== Number(before.size)) throw new Error("metadata_file_unsafe")
+  return { path, dev: before.dev.toString(), ino: before.ino.toString(), uid: before.uid.toString(),
+    mode: Number(before.mode) & 0o7777, size: data.length, sha256: digest(data) }
+}
+
+function validMetadataFile(file: MetadataFile): void {
+  exactKeys(file, ["path", "dev", "ino", "uid", "mode", "size", "sha256"])
+  validDirectory({ path: file.path, dev: file.dev, ino: file.ino })
+  validFile({ path: file.path, sha256: file.sha256 })
+  if (typeof file.uid !== "string" || !/^(?:0|[1-9][0-9]{0,39})$/.test(file.uid) ||
+      !Number.isSafeInteger(file.mode) || file.mode < 0 || file.mode > 0o777 || (file.mode & 0o333) !== 0o200 ||
+      !Number.isSafeInteger(file.size) || file.size < 0 || file.size > LIMIT) throw new Error("metadata_file_invalid")
+}
+
+function metadataPointer(git: string): MetadataContext["pointer"] {
+  const path = join(git, "commondir")
+  if (!exists(path)) return { kind: "absent" }
+  const file = metadataFile(path)
+  const bytes = safeRead(path)
+  if (digest(bytes) !== file.sha256) throw new Error("metadata_pointer_changed")
+  const raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  // Git removes one final LF only. Spaces, including final spaces, are path bytes.
+  const value = raw.endsWith("\n") ? raw.slice(0, -1) : raw
+  if (!value || /[\u0000-\u001f\u007f]/.test(value)) throw new Error("metadata_pointer_invalid")
+  const target = realpathSync(resolve(git, value))
+  directoryIdentity(target)
+  return { kind: "file", file, target }
+}
+
+export function metadataFingerprint(context: Omit<MetadataContext, "fingerprint"> | MetadataContext): string {
+  const tuple = (f: MetadataFile): unknown[] => [f.path, f.dev, f.ino, f.uid, f.mode, f.size, f.sha256]
+  return digest(JSON.stringify([context.v, context.policy, context.snapshot.fingerprint, tuple(context.original),
+    [context.common.path, context.common.dev, context.common.ino], context.pointer.kind === "absent" ? ["absent"] :
+      ["file", tuple(context.pointer.file), context.pointer.target]]))
+}
+
+function validateMetadataContext(value: unknown): asserts value is MetadataContext {
+  exactKeys(value, ["v", "policy", "snapshot", "original", "common", "pointer", "fingerprint"])
+  const c = value as MetadataContext
+  validateSnapshot(c.snapshot)
+  validMetadataFile(c.original); validDirectory(c.common)
+  if (c.pointer?.kind === "absent") exactKeys(c.pointer, ["kind"])
+  else if (c.pointer?.kind === "file") {
+    exactKeys(c.pointer, ["kind", "file", "target"]); validMetadataFile(c.pointer.file); validPath(c.pointer.target)
+    if (c.pointer.file.path !== join(c.snapshot.directories.git.path, "commondir") || c.pointer.target !== c.common.path) throw new Error("metadata_context_invalid")
+  } else throw new Error("metadata_context_invalid")
+  if (c.v !== 1 || c.policy !== "one-key-metadata-promotion-v1" || c.snapshot.policy !== METADATA_POLICY ||
+      c.original.path !== join(c.snapshot.root, "uv.lock") || c.original.sha256 !== c.snapshot.inputs["uv.lock"] ||
+      (c.pointer.kind === "absent" && c.common.path !== c.snapshot.directories.git.path) ||
+      c.fingerprint !== metadataFingerprint(c)) throw new Error("metadata_context_invalid")
+}
+
+export function encodeMetadataContext(context: MetadataContext): string {
+  validateMetadataContext(context)
+  const text = canonical(context)
+  if (Buffer.byteLength(text) > 32_768) throw new Error("metadata_context_limit")
+  return Buffer.from(text).toString("base64url")
+}
+
+export function decodeMetadataContext(encoded: string): MetadataContext {
+  if (!/^[A-Za-z0-9_-]{1,43691}$/.test(encoded)) throw new Error("metadata_context_invalid")
+  const text = Buffer.from(encoded, "base64url").toString("utf8")
+  if (Buffer.from(text).toString("base64url") !== encoded) throw new Error("metadata_context_invalid")
+  const value: unknown = JSON.parse(text)
+  validateMetadataContext(value)
+  if (canonical(value) !== text) throw new Error("metadata_context_noncanonical")
+  return value
+}
+
+export function captureMetadataContext(directory: string): MetadataContext {
+  const snapshot = captureMetadata(directory)
+  // Only bootstrap executes Git, after verifying the bound executable and all inputs.
+  recapture(snapshot)
+  const output = run(snapshot.git, ["-C", snapshot.root, "rev-parse", "--path-format=absolute", "--git-common-dir"], snapshot.root)
+  const path = output.endsWith("\n") ? output.slice(0, -1) : output
+  if (/[\u0000-\u001f\u007f]/.test(path)) throw new Error("metadata_common_invalid")
+  const common = directoryIdentity(realpathSync(path))
+  const value: Omit<MetadataContext, "fingerprint"> = { v: 1, policy: "one-key-metadata-promotion-v1", snapshot,
+    original: metadataFile(join(snapshot.root, "uv.lock")), common, pointer: metadataPointer(snapshot.directories.git.path) }
+  return recaptureMetadataContext({ ...value, fingerprint: metadataFingerprint(value) })
+}
+
+function metadataNonLock(context: MetadataContext): void {
+  if (canonical(directoryIdentity(context.common.path)) !== canonical(context.common) ||
+      canonical(metadataPointer(context.snapshot.directories.git.path)) !== canonical(context.pointer)) throw new Error("metadata_git_changed")
+  const target = context.pointer.kind === "file" ? context.pointer.target : context.snapshot.directories.git.path
+  if (target !== context.common.path) throw new Error("metadata_common_invalid")
+}
+
+export function recaptureMetadataContext(context: MetadataContext): MetadataContext {
+  validateMetadataContext(context)
+  recapture(context.snapshot)
+  metadataNonLock(context)
+  if (canonical(metadataFile(context.original.path)) !== canonical(context.original)) throw new Error("metadata_original_changed")
+  return context
+}
+
+/** The sole permitted post-state: this prepared inode, not identical replacement bytes. */
+export function verifyMetadataTransition(context: MetadataContext, prepared: MetadataFile, candidateHash: string): void {
+  validateMetadataContext(context); validMetadataFile(prepared)
+  if (!SHA256.test(candidateHash) || prepared.sha256 !== candidateHash || candidateHash === context.original.sha256 ||
+      prepared.uid !== context.original.uid || prepared.mode !== context.original.mode || prepared.dev !== context.original.dev ||
+      prepared.ino === context.original.ino || prepared.size !== context.original.size - 1) throw new Error("metadata_transition_invalid")
+  metadataNonLock(context)
+  const snapshot = { ...context.snapshot, inputs: { ...context.snapshot.inputs, "uv.lock": candidateHash } }
+  snapshot.fingerprint = snapshotFingerprint(snapshot)
+  recapture(snapshot)
+  if (canonical(metadataFile(context.original.path)) !== canonical({ ...prepared, path: context.original.path })) throw new Error("metadata_transition_invalid")
+}
+
+export interface MetadataPreparation {
+  namespace: DirectoryIdentity
+  job: DirectoryIdentity
+  backup: MetadataFile
+  candidate: MetadataFile
+  descriptors: number[]
+}
+
+export function metadataPaths(context: MetadataContext, nonce: string): { namespace: string; job: string; backup: string; candidate: string } {
+  validateMetadataContext(context)
+  if (!SHA256.test(nonce)) throw new Error("metadata_nonce_invalid")
+  const namespace = join(context.common.path, "dependency-metadata-backups")
+  const job = join(namespace, nonce)
+  return { namespace, job, backup: join(job, "original.lock"), candidate: join(context.snapshot.root, `.dependency-metadata-${nonce}.candidate`) }
+}
+
+function privateDirectory(path: string): DirectoryIdentity {
+  const proof = directoryIdentity(path), stat = lstatSync(path)
+  if (typeof process.getuid !== "function" || stat.uid !== process.getuid() || (stat.mode & 0o7777) !== 0o700) throw new Error("metadata_private_directory_invalid")
+  return proof
+}
+
+function retainFile(file: MetadataFile): number {
+  const fd = openSync(file.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+  try {
+    const st = fstatSync(fd, { bigint: true })
+    if (!st.isFile() || st.dev.toString() !== file.dev || st.ino.toString() !== file.ino || st.nlink !== 1n ||
+        st.uid.toString() !== file.uid || Number(st.size) !== file.size || (Number(st.mode) & 0o7777) !== file.mode) throw new Error("metadata_prepared_changed")
+    return fd
+  } catch (error) { closeSync(fd); throw error }
+}
+
+/** Called independently by the helper and live host callback, with no caller paths. */
+export function inspectMetadataPreparation(context: MetadataContext, nonce: string, candidateHash: string): MetadataPreparation {
+  recaptureMetadataContext(context)
+  const paths = metadataPaths(context, nonce)
+  const namespace = privateDirectory(paths.namespace), job = privateDirectory(paths.job)
+  const backup = metadataFile(paths.backup), candidate = metadataFile(paths.candidate)
+  if (backup.mode !== 0o600 || backup.sha256 !== context.original.sha256 || backup.size !== context.original.size ||
+      candidate.sha256 !== candidateHash || candidateHash === context.original.sha256 || !SHA256.test(candidateHash) ||
+      candidate.mode !== context.original.mode || candidate.uid !== context.original.uid || candidate.dev !== context.original.dev ||
+      candidate.ino === context.original.ino || candidate.size !== context.original.size - 1) throw new Error("metadata_preparation_invalid")
+  const descriptors: number[] = []
+  try {
+    descriptors.push(retainFile(backup))
+    descriptors.push(retainFile(candidate))
+    return { namespace, job, backup, candidate, descriptors }
+  } catch (error) { for (const fd of descriptors) closeSync(fd); throw error }
+}
+
+export function verifyMetadataPreparation(context: MetadataContext, nonce: string, candidateHash: string, prepared: MetadataPreparation): void {
+  const actual = inspectMetadataPreparation(context, nonce, candidateHash)
+  try {
+    for (const key of ["namespace", "job", "backup", "candidate"] as const) {
+      if (canonical(actual[key]) !== canonical(prepared[key])) throw new Error("metadata_prepared_changed")
+    }
+  } finally { closeMetadataPreparation(actual) }
+}
+
+export function closeMetadataPreparation(prepared: MetadataPreparation, cleanup = false): void {
+  // No source path is ever a cleanup target. Completed and incomplete backup jobs stay.
+  if (cleanup) {
+    try { if (canonical(metadataFile(prepared.candidate.path)) === canonical(prepared.candidate)) unlinkSync(prepared.candidate.path) } catch { /* replaced/absent files are never removed */ }
+  }
+  for (const fd of prepared.descriptors.splice(0)) closeSync(fd)
+}
+
+export function verifyMetadataRecovery(prepared: MetadataPreparation): void {
+  if (canonical(privateDirectory(prepared.namespace.path)) !== canonical(prepared.namespace) ||
+      canonical(privateDirectory(prepared.job.path)) !== canonical(prepared.job) ||
+      canonical(metadataFile(prepared.backup.path)) !== canonical(prepared.backup)) throw new Error("metadata_recovery_changed")
+}
+
+export function prepareMetadata(context: MetadataContext, nonce: string, expected: string): MetadataPreparation {
+  recaptureMetadataContext(context)
+  const paths = metadataPaths(context, nonce)
+  const common = lstatSync(context.common.path)
+  if (typeof process.getuid !== "function" || common.uid !== process.getuid() || (common.mode & 0o022)) throw new Error("metadata_common_unsafe")
+  if (!exists(paths.namespace)) mkdirSync(paths.namespace, { mode: 0o700 })
+  privateDirectory(paths.namespace)
+  mkdirSync(paths.job, { mode: 0o700 }) // Exclusive job; collision is never reused or deleted.
+  privateDirectory(paths.job)
+  const original = safeRead(context.original.path), candidate = metadataCandidate(original).candidate
+  if (digest(original) !== context.original.sha256 || digest(candidate) !== expected) throw new Error("metadata_candidate_mismatch")
+  writeFileSync(paths.backup, original, { mode: 0o600, flag: "wx" })
+  let fd: number | undefined
+  try {
+    fd = openSync(paths.candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600)
+    writeFileSync(fd, candidate)
+    fchmodSync(fd, context.original.mode)
+    return inspectMetadataPreparation(context, nonce, expected)
+  } catch (error) {
+    if (fd !== undefined) {
+      try {
+        const owned = fstatSync(fd, { bigint: true }), actual = lstatSync(paths.candidate, { bigint: true })
+        if (actual.isFile() && actual.dev === owned.dev && actual.ino === owned.ino && actual.nlink === 1n) unlinkSync(paths.candidate)
+      } catch { /* retain replacements */ }
+    }
+    throw error
+  } finally { if (fd !== undefined) closeSync(fd) }
 }
 
 function capturePolicy(directory: string, policy: Snapshot["policy"]): Snapshot {

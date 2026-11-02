@@ -131,5 +131,121 @@ conversion with an external record and root dependency/metadata edges unchanged;
 original-input and sentinel hashes remained identical. It prints bound tool
 identities, exact checker arguments, checked staging isolation/cleanup, span and before/candidate hashes. No network
 or process trace was collected. This narrowly establishes metadata feasibility;
-it grants no live-project write authority. Git-common backup/schema expansion and
-any promotion transition remain separate Phase B work.
+it grants no live-project write authority. The separate Phase B wrapper and
+promotion transition below do not expand the shared Snapshot schema.
+
+## Phase B: one-use metadata-only promotion
+
+The runtime source supports a separate check-to-migrate sequence for the same
+already-virtual, static/no-build manifest and exactly one old editable-dot lock
+root. This writer's validation is synthetic-only. Live application use remains
+gated on the parent workflow's clean-process checks, independent security/oracle
+review, normal delivery, reviewed artifact identity and fresh enabled native
+synthetic proof. Restart OpenCode after reviewed plugin deployment; existing
+processes retain their loaded code/configuration.
+
+The exact native Bash requests, in separate calls in the actual rooted session,
+are:
+
+```text
+dependency-security check-uv-lock-virtual
+dependency-security migrate-uv-lock-virtual
+```
+
+Only the mandatory actual-session prefix is preserved. Flags, paths, aliases,
+overrides, printed receipts and direct helpers cannot grant permission. Existing
+environments are preserved/ignored by these two metadata operations only. Neither
+operation audits vulnerabilities, verifies artifacts, regenerates a lock or
+authorizes installation. Normal audited setup still requires a fresh environment.
+
+### Context, frames and state
+
+The bounded canonical `one-key-metadata-promotion-v1` wrapper binds the unchanged
+read-only-policy Snapshot plus the original lock's canonical path, SHA-256,
+device/inode, UID, size and mode; canonical Git-common directory identity; and
+either absence or exact safe `commondir` pointer identity/bytes/target relationship.
+Pointers resolve relative to the Git directory, removing only one final LF.
+Trailing spaces are path bytes; embedded controls are rejected. Files must be
+regular, single-link, current-owner, owner-writable, non-executable and without
+special bits or group/world writes. Unsupported permissions fail rather than
+being repaired.
+
+The dedicated in-memory MetadataLedger has check-pending, one-use metadata-permit
+and migrate-pending transitions. Pending checks expire after 180 seconds; permits
+and live migration capabilities expire after 60 seconds. The ledger and native
+reservation bind phase, actual session/call, migration issuer call, root, context
+fingerprint, original/candidate hashes, nonce and exact final rewritten command.
+The final guard runs after ordinary before-hooks. Migration consumes authority
+synchronously before its first await; conflicting in-flight requests cancel and
+fail closed. Restart, expiry, cancellation, compaction/deletion, replay and
+unrelated Bash clear authority. Every metadata request revokes installation
+authority, including rejections; normal audit/setup requests revoke metadata
+authority, including rejections.
+
+Results are one canonical minimal frame containing only `v, phase, session, call,
+issuer, root, fingerprint, nonce, original, candidate`, in that order. Unknown or
+duplicate keys, extra output, wrong correlation and nonnumeric/nonzero exit codes
+fail closed. Raw checker reports, TOML, argv and inventories are not printed. The
+metadata grammar never enters the audit-success parser or issues an install permit.
+
+### Preparation, atomic replacement and recovery
+
+Migration independently repeats the accepted checker and requires its exact
+candidate hash. Before redeeming its domain-separated private host capability it
+creates these deterministic, nonce-bound paths:
+
+- `<canonical-Git-common>/dependency-metadata-backups/<nonce>/original.lock`:
+  exclusive original-byte backup, mode 0600, inside current-owner 0700 namespace
+  and exclusive job directories. Linked worktrees use common metadata, not their
+  disposable worktree Git directory. Collisions are never overwritten/reused.
+- `<source-root>/.dependency-metadata-<nonce>.candidate`: exclusive candidate on
+  the source filesystem, preserving the supported original mode/owner.
+
+Both helper and live final-checked host callback independently verify the paths,
+parent identities, ownership, permissions, original/candidate hashes and prepared
+file identities. Both retain descriptors so inode reuse cannot masquerade as the
+prepared candidate. After redemption the helper performs only pure filesystem,
+source/pointer/common/tool continuity checks, then atomically renames that candidate
+onto the predetermined lock path. There is **no subprocess after redemption**.
+Native completion independently requires that exact prepared inode/device,
+candidate size/hash, owner/mode and single-link status at the original target, with
+all non-lock bindings unchanged. Identical-byte unrelated replacements fail.
+
+The guarantee covers atomic replacement and private recovery evidence across
+**process failure**, not power-loss durability. Completed original backups are
+retained; incomplete job directories are also retained and must never be treated
+as verified originals or reused. Before rename, cleanup removes only the owned
+identity-matched temporary candidate. It never removes a replacement or backup
+history. After rename, there is no source cleanup, rollback or automatic audit/setup.
+Missing/malformed completion, verification failure or cancellation racing after
+redemption can be **indeterminate**. Do not infer “no write,” assume success, or
+retry over promoted/newer work. Inspect the predetermined source and retained
+private recovery evidence independently; runtime failures expose no raw report.
+
+### Synthetic validation
+
+The default adversarial tests require no resolver or network. Runner fault
+injection is an explicitly synthetic in-process boundary unavailable to the CLI.
+The opt-in proof creates only fresh random temporary Git fixtures, exercises the
+production checker/runner and full plugin with enforcement enabled, and uses
+asynchronous children so the host capability server can respond. It covers normal
+and linked Git metadata, existing/absent environment sentinels, native correlation,
+final-gate/cancellation failures and lost completion. Setup denial is asserted
+before execution; no installer is launched, even as a negative test.
+
+```sh
+npm --prefix plugin/gateway-core run build
+npm --prefix plugin/gateway-core run lint
+node --test plugin/gateway-core/test/dependency-metadata-authority.test.mjs plugin/gateway-core/test/dependency-metadata.test.mjs plugin/gateway-core/test/dependency-authorization.test.mjs plugin/gateway-core/test/dependency-risk-guard-hook.test.mjs
+node plugin/gateway-core/test/dependency-metadata-promotion-smoke.mjs
+```
+
+The opt-in promotion smoke requires `MY_OPENCODE_GATEWAY_CONFIG_PATH` to select
+the documented `enforced-config.json` sidecar, with `hooks.enabled: true`,
+`hooks.disabled: []` and `dependencyRiskGuard.enabled: true`. It verifies those
+values and preserves tracked/user settings. Its three checker subprocesses per
+native child are isolated Python parsing, UV version and offline lock check;
+bootstrap Git/tool discovery is separate. Temporary fixtures are removed only
+after backup/source/environment assertions; the smoke restores its temporary
+directory environment variables. These tests are evidence for parent review,
+not authorization for live application work.

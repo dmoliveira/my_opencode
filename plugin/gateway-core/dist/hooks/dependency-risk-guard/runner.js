@@ -1,9 +1,12 @@
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { connect } from "node:net";
 import { fileURLToPath } from "node:url";
 import { recapture, captureAuditor, discoverAuditor, decodeSnapshot, directoryIdentity, digest, exists, run, safeRead, METADATA_POLICY, metadataCandidate, proveMetadataConversion } from "./safety.js";
+import { decodeMetadataInvocation, encodeMetadataInvocation, metadataFrame } from "./protocol.js";
+import { metadataCapabilityBinding } from "./capability.js";
+import { decodeMetadataContext, recaptureMetadataContext, prepareMetadata, verifyMetadataPreparation, closeMetadataPreparation, verifyMetadataTransition } from "./safety.js";
 const normalize = (name) => name.toLowerCase().replace(/[-_.]+/g, "-");
 /** No URLs, includes, arbitrary options or extras. Markers require trusted host evaluation. */
 export function requirements(text, evaluate, collecting = false) {
@@ -172,7 +175,7 @@ function scanner(auditor, args, cwd, subprocess) {
     const script = "import sys,runpy;sys.path.extend(" + JSON.stringify(auditor.libraries) + ");sys.argv=['pip-audit']+sys.argv[1:];runpy.run_module('pip_audit',run_name='__main__')";
     return subprocess(auditor.python, ["-I", "-S", "-B", "-c", script, ...args], cwd, 60_000);
 }
-async function redeem(socket, nonce, fingerprint) {
+async function redeem(socket, nonce, fingerprint, metadata = false) {
     if (!socket.startsWith(join(realpathSync(tmpdir()), "dependency-authority-")))
         throw new Error("capability_invalid");
     await new Promise((resolve, reject) => {
@@ -180,11 +183,55 @@ async function redeem(socket, nonce, fingerprint) {
         let result = "";
         client.setTimeout(5000, () => client.destroy(new Error("capability_timeout")));
         client.on("error", reject);
-        client.on("connect", () => client.end(JSON.stringify({ nonce, fingerprint }) + "\n"));
+        client.on("connect", () => client.end(JSON.stringify(metadata ? { operation: "metadata-promotion-v1", nonce, fingerprint } : { nonce, fingerprint }) + "\n"));
         client.on("data", (chunk) => { result += chunk.toString(); if (result.length > 16)
             client.destroy(new Error("capability_invalid")); });
         client.on("end", () => result === "authorized\n" ? resolve() : reject(new Error("capability_invalid")));
     });
+}
+/** Dedicated CLI/authority domain; the read-only checker remains the only subprocess path. */
+export async function executeMetadata(invocation, boundary = {
+    check: checkMetadata, redeem, rename: renameSync,
+}) {
+    encodeMetadataInvocation(invocation);
+    const context = decodeMetadataContext(invocation.context);
+    if (context.snapshot.root !== invocation.root || context.fingerprint !== invocation.fingerprint ||
+        context.original.sha256 !== invocation.original)
+        throw new Error("metadata_invocation_mismatch");
+    recaptureMetadataContext(context);
+    const checked = boundary.check(context.snapshot, [], {
+        inspect: (snapshot) => { recaptureMetadataContext(context); return recapture(snapshot); },
+        subprocess: (...args) => { recaptureMetadataContext(context); return run(...args); },
+    });
+    recaptureMetadataContext(context);
+    if (checked.original !== invocation.original || invocation.phase === "migrate" && checked.candidate !== invocation.candidate)
+        throw new Error("metadata_candidate_mismatch");
+    const result = metadataFrame({ ...invocation, candidate: checked.candidate });
+    if (invocation.phase === "check")
+        return result;
+    let prepared;
+    let redeemed = false, renamed = false;
+    try {
+        prepared = prepareMetadata(context, invocation.nonce, checked.candidate);
+        verifyMetadataPreparation(context, invocation.nonce, checked.candidate, prepared);
+        await boundary.redeem(invocation.socket, invocation.capability, metadataCapabilityBinding(invocation), true);
+        redeemed = true;
+        // Pure filesystem/tool hashing only beyond redemption. No tool execution follows.
+        verifyMetadataPreparation(context, invocation.nonce, checked.candidate, prepared);
+        boundary.rename(prepared.candidate.path, context.original.path);
+        renamed = true;
+        verifyMetadataTransition(context, prepared.candidate, checked.candidate);
+        return result;
+    }
+    catch (error) {
+        if (redeemed)
+            throw new Error("metadata_outcome_indeterminate");
+        throw error;
+    }
+    finally {
+        if (prepared)
+            closeMetadataPreparation(prepared, !renamed);
+    }
 }
 /** Every setup repeats the real audit; no receipt or supplied package list is accepted. */
 export async function execute(mode, root, nonce, fingerprint, socket, auditorRoot = "", auditorFingerprint = "", boundSnapshot = undefined, boundary = {
@@ -291,11 +338,16 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const timer = setTimeout(() => process.exit(1), 150_000);
     const args = process.argv.slice(2);
     const result = Promise.resolve().then(() => {
+        if (args[0] === "metadata") {
+            if (args.length !== 2)
+                throw new Error("metadata_invocation_invalid");
+            return executeMetadata(decodeMetadataInvocation(args[1]));
+        }
         if (args.length !== 8)
             throw new Error("invocation_invalid");
         return execute(...args.slice(0, 7), decodeSnapshot(args[7]));
     });
     result
         .then((frame) => { clearTimeout(timer); process.stdout.write(JSON.stringify(frame) + "\n"); })
-        .catch(() => { clearTimeout(timer); process.stderr.write("dependency_security_refused\n"); process.exitCode = 1; });
+        .catch((error) => { clearTimeout(timer); process.stderr.write(error instanceof Error && error.message === "metadata_outcome_indeterminate" ? "metadata_outcome_indeterminate\n" : "dependency_security_refused\n"); process.exitCode = 1; });
 }
