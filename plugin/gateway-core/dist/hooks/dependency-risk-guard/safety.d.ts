@@ -27,9 +27,10 @@ interface MarkerIdentity extends DirectoryIdentity {
 declare const EXECUTABLES: readonly ["node", "git", "uv", "python"];
 declare const DIRECTORIES: readonly ["root", "cache", "git"];
 declare const POLICY = "virtual-wheel-only-v3";
+export declare const METADATA_POLICY = "read-only-editable-dot-metadata-v1";
 export interface Snapshot {
     v: 1;
-    policy: typeof POLICY;
+    policy: typeof POLICY | typeof METADATA_POLICY;
     root: string;
     fingerprint: string;
     node: string;
@@ -53,7 +54,18 @@ export declare function directoryIdentity(path: string): DirectoryIdentity;
 /** Pure continuity check: never execute Git, UV, Python, Node or scanner code. */
 export declare function recapture(snapshot: Snapshot): Snapshot;
 export declare function validateProject(project: Record<string, unknown>, lock: Record<string, unknown>): void;
+/** Informational policy only: never accepted by audit/setup or scanner discovery. */
+export declare function validateMetadataProject(project: Record<string, unknown>, lock: Record<string, unknown>): void;
+/** Conservative byte edit; trusted TOML proof is separately required before UV runs. */
+export declare function metadataCandidate(original: Buffer): {
+    candidate: Buffer;
+    start: number;
+    end: number;
+};
+/** Both strict parsed documents must agree outside the single matching root source. */
+export declare function proveMetadataConversion(project: Record<string, unknown>, original: Buffer, candidate: Buffer, lock: Record<string, unknown>, converted: Record<string, unknown>): void;
 export declare function capture(directory: string): Snapshot;
+export declare function captureMetadata(directory: string): Snapshot;
 export interface Auditor {
     root: string;
     fingerprint: string;

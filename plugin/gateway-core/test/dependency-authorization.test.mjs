@@ -333,6 +333,23 @@ test("canonical bounded snapshots round-trip and reject malformed or substituted
   } finally { f.close() }
 })
 
+test("metadata policy retains snapshot binding but cannot enter normal audit/setup", async () => {
+  const f = syntheticSnapshot()
+  try {
+    const draft = { ...f.snapshot, policy: "read-only-editable-dot-metadata-v1" }
+    const metadata = { ...draft, fingerprint: snapshotFingerprint(draft) }
+    assert.deepEqual(decodeSnapshot(encodeSnapshot(metadata)), metadata)
+    assert.equal(recapture(metadata), metadata)
+    const never = () => assert.fail("normal authority path reached")
+    for (const mode of ["audit", "setup"]) await assert.rejects(execute(mode, f.root, hash, metadata.fingerprint, "", "", "", metadata,
+      { inspect: never, subprocess: never, auditor: never, inspectAuditor: never }), /metadata_snapshot_not_authorized/)
+    assert.throws(() => runnerCommand(metadata, "audit", hash), /metadata_snapshot_not_authorized/)
+    writeFileSync(metadata.uv, "changed")
+    assert.throws(() => recapture(metadata), /bound_file_changed/)
+    assert.equal(exists(join(f.base, "executed")), false)
+  } finally { f.close() }
+})
+
 for (const name of ["node", "git", "uv", "python"]) {
   test(`pure recapture rejects changed ${name} without executing its replacement`, () => {
     const f = syntheticSnapshot()

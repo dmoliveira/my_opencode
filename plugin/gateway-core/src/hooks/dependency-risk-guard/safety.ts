@@ -71,11 +71,12 @@ const INPUTS = ["pyproject.toml", "uv.lock", ".python-version"] as const
 const EXECUTABLES = ["node", "git", "uv", "python"] as const
 const DIRECTORIES = ["root", "cache", "git"] as const
 const POLICY = "virtual-wheel-only-v3"
+export const METADATA_POLICY = "read-only-editable-dot-metadata-v1"
 const SHA256 = /^[a-f0-9]{64}$/
 
 export interface Snapshot {
   v: 1
-  policy: typeof POLICY
+  policy: typeof POLICY | typeof METADATA_POLICY
   root: string
   fingerprint: string
   node: string
@@ -117,7 +118,7 @@ function validFile(value: FileIdentity): void {
 function validateSnapshot(value: unknown): asserts value is Snapshot {
   exactKeys(value, ["v", "policy", "root", "fingerprint", "node", "git", "uv", "python", "cache", "version", "inputs", "executables", "helpers", "directories", "marker", "absent"])
   const s = value as Snapshot
-  if (s.v !== 1 || s.policy !== POLICY || typeof s.version !== "string" || !/^3\.(?:1[1-4])\.\d{1,3}$/.test(s.version) ||
+  if (s.v !== 1 || ![POLICY, METADATA_POLICY].includes(s.policy) || typeof s.version !== "string" || !/^3\.(?:1[1-4])\.\d{1,3}$/.test(s.version) ||
       typeof s.fingerprint !== "string" || !SHA256.test(s.fingerprint) ||
       JSON.stringify(s.absent) !== '["uv.toml"]') throw new Error("snapshot_invalid")
   validPath(s.root); validPath(s.cache)
@@ -246,6 +247,51 @@ export function validateProject(project: Record<string, unknown>, lock: Record<s
   if (roots !== 1) throw new Error("workspace_unsupported")
 }
 
+/** Informational policy only: never accepted by audit/setup or scanner discovery. */
+export function validateMetadataProject(project: Record<string, unknown>, lock: Record<string, unknown>): void {
+  const manifest = project.project as Record<string, unknown> | undefined
+  if (!manifest || typeof manifest.name !== "string" || typeof manifest.version !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.name) || !manifest.version ||
+      Object.keys(project).some((key) => !["project", "tool", "dependency-groups"].includes(key)) ||
+      Object.keys((project.tool ?? {}) as object).some((key) => key !== "uv") ||
+      Object.keys(manifest).some((key) => !["name", "version", "requires-python", "dependencies", "description"].includes(key)) ||
+      Object.keys((project["dependency-groups"] ?? {}) as object).some((key) => key !== "dev")) throw new Error("metadata_manifest_unsupported")
+  const dependencies = [manifest.dependencies ?? [], ((project["dependency-groups"] ?? {}) as Record<string, unknown>).dev ?? []]
+  for (const group of dependencies) if (!Array.isArray(group) || group.some((item) => typeof item !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9,._-]+\])?\s*(?:[<>=!~][A-Za-z0-9.*+!,<>=~ -]+)?$/.test(item))) throw new Error("metadata_dependency_unsupported")
+  const packages = lock.package
+  if (!Array.isArray(packages)) throw new Error("lock_unsupported")
+  const roots = packages.filter((pkg) => canonical(pkg.source) === '{"editable":"."}')
+  if (roots.length !== 1 || roots[0].name !== manifest.name || roots[0].version !== manifest.version ||
+      new Set(packages.map((pkg) => canonical([pkg.name, pkg.version, pkg.source]))).size !== packages.length) throw new Error("metadata_root_unsupported")
+  const virtual = packages.map((pkg) => pkg === roots[0] ? { ...pkg, source: { virtual: "." } } : pkg)
+  validateProject(project, { ...lock, package: virtual })
+}
+
+/** Conservative byte edit; trusted TOML proof is separately required before UV runs. */
+export function metadataCandidate(original: Buffer): { candidate: Buffer; start: number; end: number } {
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(original)
+  if (!Buffer.from(text).equals(original)) throw new Error("metadata_utf8_invalid")
+  const matches = [...text.matchAll(/^source = \{ (editable) = "\." \}[^\S\r\n]*(?:#[^\r\n]*)?\r?$/gm)]
+  if (matches.length !== 1) throw new Error("metadata_span_unsupported")
+  const match = matches[0]
+  const start = Buffer.byteLength(text.slice(0, match.index! + 'source = { '.length))
+  const end = start + Buffer.byteLength("editable")
+  return { candidate: Buffer.concat([original.subarray(0, start), Buffer.from("virtual"), original.subarray(end)]), start, end }
+}
+
+/** Both strict parsed documents must agree outside the single matching root source. */
+export function proveMetadataConversion(project: Record<string, unknown>, original: Buffer, candidate: Buffer,
+  lock: Record<string, unknown>, converted: Record<string, unknown>): void {
+  const expected = metadataCandidate(original)
+  if (!candidate.equals(expected.candidate)) throw new Error("metadata_bytes_changed")
+  validateMetadataProject(project, lock)
+  const packages = lock.package as Record<string, unknown>[]
+  const mapped = packages.map((pkg) => canonical(pkg.source) === '{"editable":"."}' ? { ...pkg, source: { virtual: "." } } : pkg)
+  if (canonical({ ...lock, package: mapped }) !== canonical(converted)) throw new Error("metadata_semantics_changed")
+  validateProject(project, converted)
+}
+
 /** Hash installed scanner code too, not merely its launcher/version string. */
 function libraryDigest(paths: string[]): string {
   const entries: string[] = []
@@ -271,6 +317,14 @@ function libraryDigest(paths: string[]): string {
 }
 
 export function capture(directory: string): Snapshot {
+  return capturePolicy(directory, POLICY)
+}
+
+export function captureMetadata(directory: string): Snapshot {
+  return capturePolicy(directory, METADATA_POLICY)
+}
+
+function capturePolicy(directory: string, policy: Snapshot["policy"]): Snapshot {
   const root = resolve(directory)
   if (realpathSync(root) !== root || !lstatSync(root).isDirectory()) throw new Error("unsafe_worktree")
   if (modules.some((path, index) => digest(safeRead(path)) !== loadedIdentity[index])) throw new Error("runner_changed")
@@ -298,10 +352,11 @@ export function capture(directory: string): Snapshot {
   const pythonFile = fileIdentity(python)
   const inspected = JSON.parse(bootstrap(pythonFile, ["-I", "-S", "-B", "-c", INSPECT, inputs[0].toString(), inputs[1].toString()]))
   if (inputs[2].toString().trim() !== inspected.version) throw new Error("interpreter_unsupported")
-  validateProject(inspected.project, inspected.lock)
+  if (policy === METADATA_POLICY) validateMetadataProject(inspected.project, inspected.lock)
+  else validateProject(inspected.project, inspected.lock)
   const gitDirectory = realpathSync(bootstrap(gitFile, ["-C", root, "rev-parse", "--absolute-git-dir"]).trim())
   const bound: Omit<Snapshot, "fingerprint"> = {
-    v: 1, policy: POLICY, root, node, git: gitFile.path, uv, python, cache, version: inspected.version, inputs: inputHashes,
+    v: 1, policy, root, node, git: gitFile.path, uv, python, cache, version: inspected.version, inputs: inputHashes,
     executables: { node: nodeFile, git: gitFile, uv: uvFile, python: pythonFile },
     helpers: modules.map((path, i) => ({ path, sha256: loadedIdentity[i] })),
     directories: { root: directoryIdentity(root), cache: directoryIdentity(cache), git: directoryIdentity(gitDirectory) },
@@ -314,6 +369,7 @@ export interface Auditor { root: string; fingerprint: string; python: string; li
 
 /** Non-executing verification: changed auditor code must not run before rejection. */
 export function captureAuditor(root: string, snapshot: Snapshot): Auditor {
+  if (snapshot.policy === METADATA_POLICY) throw new Error("metadata_snapshot_not_authorized")
   const cache = snapshot.cache
   if (resolve(cache) !== cache || realpathSync(cache) !== cache) throw new Error("auditor_path_invalid")
   if (resolve(root) !== root || realpathSync(root) !== root || !root.startsWith(cache + "/archive-v0/") ||
@@ -328,6 +384,7 @@ export function captureAuditor(root: string, snapshot: Snapshot): Auditor {
 
 /** Only the normal Bash runner calls this; offline fixed-tool discovery has no project inputs. */
 export function discoverAuditor(snapshot: Snapshot, subprocess: typeof run = run): Auditor {
+  if (snapshot.policy === METADATA_POLICY) throw new Error("metadata_snapshot_not_authorized")
   recapture(snapshot)
   const output = subprocess(snapshot.uv, ["tool", "run", "--offline", "--no-config", "--no-python-downloads", "--no-env-file", "--no-build",
     "--python", snapshot.python, "--from", "pip-audit==2.10.1", "python", "-I", "-S", "-B", "-c", "import sys;print(sys.executable)"], "/", 60_000).trim()
@@ -338,5 +395,6 @@ export function discoverAuditor(snapshot: Snapshot, subprocess: typeof run = run
 export function quote(value: string): string { return "'" + value.replace(/'/g, "'\\''") + "'" }
 
 export function runnerCommand(snapshot: Snapshot, mode: "audit" | "setup", nonce: string, socket = "", auditorRoot = "", auditorFingerprint = ""): string {
+  if (snapshot.policy === METADATA_POLICY) throw new Error("metadata_snapshot_not_authorized")
   return [snapshot.node, RUNNER, mode, snapshot.root, nonce, snapshot.fingerprint, socket, auditorRoot, auditorFingerprint, encodeSnapshot(snapshot)].map(quote).join(" ")
 }

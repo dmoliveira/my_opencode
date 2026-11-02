@@ -73,6 +73,7 @@ const INPUTS = ["pyproject.toml", "uv.lock", ".python-version"];
 const EXECUTABLES = ["node", "git", "uv", "python"];
 const DIRECTORIES = ["root", "cache", "git"];
 const POLICY = "virtual-wheel-only-v3";
+export const METADATA_POLICY = "read-only-editable-dot-metadata-v1";
 const SHA256 = /^[a-f0-9]{64}$/;
 function exactKeys(value, keys) {
     if (!value || typeof value !== "object" || Array.isArray(value) ||
@@ -99,7 +100,7 @@ function validFile(value) {
 function validateSnapshot(value) {
     exactKeys(value, ["v", "policy", "root", "fingerprint", "node", "git", "uv", "python", "cache", "version", "inputs", "executables", "helpers", "directories", "marker", "absent"]);
     const s = value;
-    if (s.v !== 1 || s.policy !== POLICY || typeof s.version !== "string" || !/^3\.(?:1[1-4])\.\d{1,3}$/.test(s.version) ||
+    if (s.v !== 1 || ![POLICY, METADATA_POLICY].includes(s.policy) || typeof s.version !== "string" || !/^3\.(?:1[1-4])\.\d{1,3}$/.test(s.version) ||
         typeof s.fingerprint !== "string" || !SHA256.test(s.fingerprint) ||
         JSON.stringify(s.absent) !== '["uv.toml"]')
         throw new Error("snapshot_invalid");
@@ -256,6 +257,56 @@ export function validateProject(project, lock) {
     if (roots !== 1)
         throw new Error("workspace_unsupported");
 }
+/** Informational policy only: never accepted by audit/setup or scanner discovery. */
+export function validateMetadataProject(project, lock) {
+    const manifest = project.project;
+    if (!manifest || typeof manifest.name !== "string" || typeof manifest.version !== "string" ||
+        !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(manifest.name) || !manifest.version ||
+        Object.keys(project).some((key) => !["project", "tool", "dependency-groups"].includes(key)) ||
+        Object.keys((project.tool ?? {})).some((key) => key !== "uv") ||
+        Object.keys(manifest).some((key) => !["name", "version", "requires-python", "dependencies", "description"].includes(key)) ||
+        Object.keys((project["dependency-groups"] ?? {})).some((key) => key !== "dev"))
+        throw new Error("metadata_manifest_unsupported");
+    const dependencies = [manifest.dependencies ?? [], (project["dependency-groups"] ?? {}).dev ?? []];
+    for (const group of dependencies)
+        if (!Array.isArray(group) || group.some((item) => typeof item !== "string" ||
+            !/^[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9,._-]+\])?\s*(?:[<>=!~][A-Za-z0-9.*+!,<>=~ -]+)?$/.test(item)))
+            throw new Error("metadata_dependency_unsupported");
+    const packages = lock.package;
+    if (!Array.isArray(packages))
+        throw new Error("lock_unsupported");
+    const roots = packages.filter((pkg) => canonical(pkg.source) === '{"editable":"."}');
+    if (roots.length !== 1 || roots[0].name !== manifest.name || roots[0].version !== manifest.version ||
+        new Set(packages.map((pkg) => canonical([pkg.name, pkg.version, pkg.source]))).size !== packages.length)
+        throw new Error("metadata_root_unsupported");
+    const virtual = packages.map((pkg) => pkg === roots[0] ? { ...pkg, source: { virtual: "." } } : pkg);
+    validateProject(project, { ...lock, package: virtual });
+}
+/** Conservative byte edit; trusted TOML proof is separately required before UV runs. */
+export function metadataCandidate(original) {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(original);
+    if (!Buffer.from(text).equals(original))
+        throw new Error("metadata_utf8_invalid");
+    const matches = [...text.matchAll(/^source = \{ (editable) = "\." \}[^\S\r\n]*(?:#[^\r\n]*)?\r?$/gm)];
+    if (matches.length !== 1)
+        throw new Error("metadata_span_unsupported");
+    const match = matches[0];
+    const start = Buffer.byteLength(text.slice(0, match.index + 'source = { '.length));
+    const end = start + Buffer.byteLength("editable");
+    return { candidate: Buffer.concat([original.subarray(0, start), Buffer.from("virtual"), original.subarray(end)]), start, end };
+}
+/** Both strict parsed documents must agree outside the single matching root source. */
+export function proveMetadataConversion(project, original, candidate, lock, converted) {
+    const expected = metadataCandidate(original);
+    if (!candidate.equals(expected.candidate))
+        throw new Error("metadata_bytes_changed");
+    validateMetadataProject(project, lock);
+    const packages = lock.package;
+    const mapped = packages.map((pkg) => canonical(pkg.source) === '{"editable":"."}' ? { ...pkg, source: { virtual: "." } } : pkg);
+    if (canonical({ ...lock, package: mapped }) !== canonical(converted))
+        throw new Error("metadata_semantics_changed");
+    validateProject(project, converted);
+}
 /** Hash installed scanner code too, not merely its launcher/version string. */
 function libraryDigest(paths) {
     const entries = [];
@@ -285,6 +336,12 @@ function libraryDigest(paths) {
     return digest(entries.join("\n"));
 }
 export function capture(directory) {
+    return capturePolicy(directory, POLICY);
+}
+export function captureMetadata(directory) {
+    return capturePolicy(directory, METADATA_POLICY);
+}
+function capturePolicy(directory, policy) {
     const root = resolve(directory);
     if (realpathSync(root) !== root || !lstatSync(root).isDirectory())
         throw new Error("unsafe_worktree");
@@ -320,10 +377,13 @@ export function capture(directory) {
     const inspected = JSON.parse(bootstrap(pythonFile, ["-I", "-S", "-B", "-c", INSPECT, inputs[0].toString(), inputs[1].toString()]));
     if (inputs[2].toString().trim() !== inspected.version)
         throw new Error("interpreter_unsupported");
-    validateProject(inspected.project, inspected.lock);
+    if (policy === METADATA_POLICY)
+        validateMetadataProject(inspected.project, inspected.lock);
+    else
+        validateProject(inspected.project, inspected.lock);
     const gitDirectory = realpathSync(bootstrap(gitFile, ["-C", root, "rev-parse", "--absolute-git-dir"]).trim());
     const bound = {
-        v: 1, policy: POLICY, root, node, git: gitFile.path, uv, python, cache, version: inspected.version, inputs: inputHashes,
+        v: 1, policy, root, node, git: gitFile.path, uv, python, cache, version: inspected.version, inputs: inputHashes,
         executables: { node: nodeFile, git: gitFile, uv: uvFile, python: pythonFile },
         helpers: modules.map((path, i) => ({ path, sha256: loadedIdentity[i] })),
         directories: { root: directoryIdentity(root), cache: directoryIdentity(cache), git: directoryIdentity(gitDirectory) },
@@ -333,6 +393,8 @@ export function capture(directory) {
 }
 /** Non-executing verification: changed auditor code must not run before rejection. */
 export function captureAuditor(root, snapshot) {
+    if (snapshot.policy === METADATA_POLICY)
+        throw new Error("metadata_snapshot_not_authorized");
     const cache = snapshot.cache;
     if (resolve(cache) !== cache || realpathSync(cache) !== cache)
         throw new Error("auditor_path_invalid");
@@ -349,6 +411,8 @@ export function captureAuditor(root, snapshot) {
 }
 /** Only the normal Bash runner calls this; offline fixed-tool discovery has no project inputs. */
 export function discoverAuditor(snapshot, subprocess = run) {
+    if (snapshot.policy === METADATA_POLICY)
+        throw new Error("metadata_snapshot_not_authorized");
     recapture(snapshot);
     const output = subprocess(snapshot.uv, ["tool", "run", "--offline", "--no-config", "--no-python-downloads", "--no-env-file", "--no-build",
         "--python", snapshot.python, "--from", "pip-audit==2.10.1", "python", "-I", "-S", "-B", "-c", "import sys;print(sys.executable)"], "/", 60_000).trim();
@@ -358,5 +422,7 @@ export function discoverAuditor(snapshot, subprocess = run) {
 }
 export function quote(value) { return "'" + value.replace(/'/g, "'\\''") + "'"; }
 export function runnerCommand(snapshot, mode, nonce, socket = "", auditorRoot = "", auditorFingerprint = "") {
+    if (snapshot.policy === METADATA_POLICY)
+        throw new Error("metadata_snapshot_not_authorized");
     return [snapshot.node, RUNNER, mode, snapshot.root, nonce, snapshot.fingerprint, socket, auditorRoot, auditorFingerprint, encodeSnapshot(snapshot)].map(quote).join(" ");
 }

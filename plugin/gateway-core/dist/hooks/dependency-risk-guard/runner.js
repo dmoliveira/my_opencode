@@ -1,9 +1,9 @@
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { connect } from "node:net";
 import { fileURLToPath } from "node:url";
-import { recapture, captureAuditor, discoverAuditor, decodeSnapshot, directoryIdentity, digest, exists, run, safeRead } from "./safety.js";
+import { recapture, captureAuditor, discoverAuditor, decodeSnapshot, directoryIdentity, digest, exists, run, safeRead, METADATA_POLICY, metadataCandidate, proveMetadataConversion } from "./safety.js";
 const normalize = (name) => name.toLowerCase().replace(/[-_.]+/g, "-");
 /** No URLs, includes, arbitrary options or extras. Markers require trusted host evaluation. */
 export function requirements(text, evaluate, collecting = false) {
@@ -81,6 +81,92 @@ function unchanged(snapshot, inspect) {
     if (inspect(snapshot).fingerprint !== snapshot.fingerprint)
         throw new Error("input_changed");
 }
+const METADATA_INSPECT = `import sys,json,tomllib
+p,a,b=map(tomllib.loads,sys.argv[1:])
+print(json.dumps(dict(project=p,original=a,candidate=b,version='.'.join(map(str,sys.version_info[:3])))))`;
+/** --no-config does not stop UV's ancestor project/workspace discovery. */
+function metadataAncestry(parent, root) {
+    if (parent.path === root || parent.path.startsWith(root.endsWith("/") ? root : root + "/"))
+        throw new Error("metadata_staging_inside_source");
+    const actual = directoryIdentity(parent.path);
+    if (actual.dev !== parent.dev || actual.ino !== parent.ino)
+        throw new Error("metadata_staging_parent_changed");
+    for (let path = parent.path;; path = dirname(path)) {
+        // lstat-based exists rejects files, directories, special files and dangling links.
+        if (["pyproject.toml", "uv.toml", ".python-version"].some((name) => exists(join(path, name))))
+            throw new Error("metadata_staging_ancestor_config");
+        if (dirname(path) === path)
+            break;
+    }
+}
+/** Informational consistency check only. No AuditFrame, scanner, capability or installer. */
+export function checkMetadata(snapshot, sentinels = [], boundary = { inspect: recapture, subprocess: run }) {
+    if (snapshot.policy !== METADATA_POLICY)
+        throw new Error("metadata_snapshot_required");
+    const recheck = () => {
+        unchanged(snapshot, boundary.inspect);
+        for (const file of sentinels)
+            if (digest(safeRead(file.path)) !== file.sha256)
+                throw new Error("metadata_sentinel_changed");
+    };
+    recheck();
+    const frozen = Object.fromEntries(["pyproject.toml", "uv.lock", ".python-version"].map((name) => {
+        const data = safeRead(join(snapshot.root, name));
+        if (digest(data) !== snapshot.inputs[name])
+            throw new Error("input_changed");
+        new TextDecoder("utf-8", { fatal: true }).decode(data);
+        return [name, data];
+    }));
+    if (frozen[".python-version"].toString().trim() !== snapshot.version)
+        throw new Error("interpreter_unsupported");
+    const { candidate, start, end } = metadataCandidate(frozen["uv.lock"]);
+    const parent = directoryIdentity(realpathSync(tmpdir()));
+    metadataAncestry(parent, snapshot.root);
+    const temporary = realpathSync(mkdtempSync(join(parent.path, "dependency-metadata-")));
+    const staging = directoryIdentity(temporary);
+    const commands = [];
+    const staged = { ...frozen, "uv.lock": candidate };
+    const stageCheck = () => {
+        recheck();
+        metadataAncestry(parent, snapshot.root);
+        const actual = directoryIdentity(temporary);
+        if (dirname(temporary) !== parent.path || actual.dev !== staging.dev || actual.ino !== staging.ino)
+            throw new Error("metadata_staging_changed");
+        for (const [name, data] of Object.entries(staged))
+            if (!safeRead(join(temporary, name)).equals(data))
+                throw new Error("metadata_stage_changed");
+        if (exists(join(temporary, ".venv")) || exists(join(temporary, "uv.toml")))
+            throw new Error("metadata_stage_changed");
+    };
+    const subprocess = (executable, args) => {
+        stageCheck();
+        commands.push({ executable, args });
+        return boundary.subprocess(executable, args, temporary, 60_000, { TMPDIR: temporary, TMP: temporary, TEMP: temporary, UV_CACHE_DIR: join(temporary, "cache") });
+    };
+    try {
+        for (const [name, data] of Object.entries(staged))
+            writeFileSync(join(temporary, name), data, { mode: 0o600, flag: "wx" });
+        const parsed = JSON.parse(subprocess(snapshot.python, ["-I", "-S", "-B", "-c", METADATA_INSPECT,
+            frozen["pyproject.toml"].toString(), frozen["uv.lock"].toString(), candidate.toString()]));
+        if (parsed.version !== snapshot.version)
+            throw new Error("interpreter_unsupported");
+        proveMetadataConversion(parsed.project, frozen["uv.lock"], candidate, parsed.original, parsed.candidate);
+        if (subprocess(snapshot.uv, ["--version"]).trim().split(" ").slice(0, 2).join(" ") !== "uv 0.13.6")
+            throw new Error("uv_version_unsupported");
+        subprocess(snapshot.uv, ["lock", "--check", "--offline", "--no-config", "--no-cache", "--no-build", "--no-python-downloads", "--python", snapshot.python, "--project", temporary]);
+        stageCheck();
+        return { policy: METADATA_POLICY, fingerprint: snapshot.fingerprint, original: digest(frozen["uv.lock"]), candidate: digest(candidate),
+            start, end, commands, sentinels };
+    }
+    finally {
+        try {
+            stageCheck();
+        }
+        finally {
+            rmSync(temporary, { recursive: true, force: true });
+        }
+    }
+}
 // -S suppresses executable .pth/sitecustomize; only the hashed scanner libraries are added.
 function scanner(auditor, args, cwd, subprocess) {
     const script = "import sys,runpy;sys.path.extend(" + JSON.stringify(auditor.libraries) + ");sys.argv=['pip-audit']+sys.argv[1:];runpy.run_module('pip_audit',run_name='__main__')";
@@ -104,6 +190,8 @@ async function redeem(socket, nonce, fingerprint) {
 export async function execute(mode, root, nonce, fingerprint, socket, auditorRoot = "", auditorFingerprint = "", boundSnapshot = undefined, boundary = {
     inspect: recapture, subprocess: run, auditor: discoverAuditor, inspectAuditor: captureAuditor,
 }) {
+    if (boundSnapshot?.policy === METADATA_POLICY)
+        throw new Error("metadata_snapshot_not_authorized");
     // The CLI accepts eight strings, never this unit-fixture subprocess boundary.
     const { inspect } = boundary;
     if (!["audit", "setup"].includes(mode) || !/^[a-f0-9]{64}$/.test(nonce) || !/^[a-f0-9]{64}$/.test(fingerprint) ||
