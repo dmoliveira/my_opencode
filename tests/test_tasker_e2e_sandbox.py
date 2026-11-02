@@ -16,6 +16,16 @@ import tasker_e2e_sandbox
 
 
 class TaskerShellBoundaryTest(unittest.TestCase):
+    def test_instruction_fallback_is_readable_without_the_sibling_agents_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "agent").mkdir()
+            fallback = root / "agent" / "tasker.md"
+            fallback.write_text("Planning-only fixture contract", encoding="utf-8")
+            (root / "AGENTS.md").symlink_to(root / "missing-shared-contract")
+            with patch.object(tasker_e2e_sandbox, "REPO_ROOT", root):
+                self.assertEqual(fallback, tasker_e2e_sandbox.sandbox_instruction_source())
+
     def test_allows_single_codememory_command(self) -> None:
         tasker_e2e_sandbox.validate_tasker_shell_command(
             'oc add task "planned work" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --kind chore --priority P2 --format json'

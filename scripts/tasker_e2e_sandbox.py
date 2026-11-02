@@ -250,6 +250,14 @@ def configure_tasker_runtime_launchers(
         )
 
 
+def sandbox_instruction_source() -> Path:
+    """Use the repo contract when readable; standalone CI may have a broken mirror."""
+    for source in (REPO_ROOT / "AGENTS.md", REPO_ROOT / "agent" / "tasker.md"):
+        if source.is_file():
+            return source
+    raise RuntimeError("tasker sandbox has no readable instruction source")
+
+
 def prepare_tasker_runtime(
     config_home: Path, *, model: str = TASKER_MODEL, scope: str = "tasker-e2e"
 ) -> dict[str, str]:
@@ -266,7 +274,7 @@ def prepare_tasker_runtime(
     workspace = config_home / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
     shutil.copytree(REPO_ROOT / "docs", workspace / "docs", symlinks=False)
-    shutil.copy2(REPO_ROOT / "AGENTS.md", workspace / "AGENTS.md", follow_symlinks=True)
+    shutil.copy2(sandbox_instruction_source(), workspace / "AGENTS.md", follow_symlinks=True)
     workspace_codememory = workspace / ".codememory"
     workspace_codememory.mkdir(mode=0o700)
     codememory_root = workspace_codememory
