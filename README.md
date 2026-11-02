@@ -159,6 +159,7 @@ Quickstart commands:
 ```text
 /doctor run
 /doctor sqlite --json
+/doctor sqlite status --json --redact
 /plugin status
 /mcp status
 /notify status
