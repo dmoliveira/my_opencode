@@ -144,6 +144,13 @@ A permissive corrupt index is not parsed or quarantined. First narrow it explici
 
 ## Sanitization and deletion
 
+The bounded offline planning slice is documented in `docs/local-data-lifecycle.md`.
+`python3 scripts/data_lifecycle_command.py preview --file <private-request.json>`
+emits owner-scoped workflow guidance but does not inspect sources or authorize
+apply. `summarize-export` emits counts-only support metadata, not a restorable
+sanitized export. Cross-store source mutation remains blocked pending the safety
+contracts described there.
+
 Treat local AI history as sensitive data. Before deleting or redacting any store, stop its owner, create a verified SQLite backup/export, and list the target path with `ls -l` or the owner status command. Prefer store-level operations that show scope and counts first; never recursively remove a parent configuration directory.
 
 For runtime history, use an isolated copy to test a query or restoration path before replacing the live database. For shared memory, export first and use lifecycle `--dry-run` before cleanup/compression. For session sidecars, preserve malformed files for recovery analysis rather than overwriting them. For Codememory, use `oc` state changes rather than direct SQLite edits.
