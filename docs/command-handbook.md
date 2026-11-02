@@ -540,8 +540,8 @@ Use these directly in OpenCode:
 Notes:
 - `/gateway enable` adds the direct built `gateway-core/dist/index.js` file entry to your config plugin list. It migrates older directory entries and preserves the first matching tuple's options.
 - `/gateway enable` runs a safety preflight (built dist + required hook capabilities) and leaves the existing plugin configuration unchanged when preflight fails.
-- use `/gateway enable --force` only if you intentionally want to bypass the preflight safeguard.
-- `install.sh` enables the direct plugin entry after building gateway-core. OpenCode `1.18.18` loads this entry without a standalone `bun` executable.
+- `/gateway enable --force` can bypass missing build or hook checks, but cannot bypass an unverified OpenCode version or the V1 gateway's incompatibility with OpenCode V2.
+- `install.sh` requires an identifiable OpenCode V1 executable and enables the direct plugin entry after building gateway-core; it refuses V2 before changing files. OpenCode `1.18.18` loads this entry without a standalone `bun` executable. The V2 migration is still in progress, and the V1 gateway does not protect V2 sessions.
 - `/gateway status` and `/gateway doctor` run orphan cleanup before reporting runtime loop state.
 - `/gateway watchdog status` shows the effective long-turn watchdog thresholds and any sidecar overrides.
 - `/gateway watchdog doctor` flags disabled pulse injection, overly aggressive thresholds, and missing cooldown protection with quick fix commands.

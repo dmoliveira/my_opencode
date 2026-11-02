@@ -3796,5 +3796,113 @@
     "destination": "victim_config",
     "count": 1,
     "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_context_live_smoke.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "plugin",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_context_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "plugin / 'index.ts'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_context_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "config_path",
+    "count": 2,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_shell_live_smoke.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "plugin",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_shell_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "plugin / 'index.ts'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_shell_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "project / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_shell_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "server.secret_file",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_worktree_live_smoke.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "plugin",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_worktree_live_smoke.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "project",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_worktree_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "plugin / 'index.ts'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_worktree_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "project / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_worktree_live_smoke.py",
+    "function": "main",
+    "kind": "path.write_text",
+    "destination": "project / 'seed.txt'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
   }
 ]

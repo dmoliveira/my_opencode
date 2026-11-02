@@ -402,6 +402,7 @@ def _runtime_store(session: dict[str, Any] | None) -> dict[str, Any]:
                 "runtime_db_journal_mode",
                 "runtime_db_sqlite_version",
                 "runtime_db_missing_tables",
+                "runtime_db_v2_detected",
                 "runtime_db_json1_available",
                 "runtime_permission_status",
                 "runtime_permission_reason_code",

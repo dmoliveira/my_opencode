@@ -21,6 +21,96 @@ import plugin_command
 
 
 class PluginConfigEntriesTest(unittest.TestCase):
+    def test_gateway_status_failure_uses_nonzero_exit(self) -> None:
+        module = importlib.import_module("gateway_command")
+        with (
+            patch.object(module, "load_config", return_value=({}, Path("test"))),
+            patch.object(module, "status_payload", return_value={"result": "FAIL"}),
+            patch.object(module, "emit"),
+        ):
+            self.assertEqual(1, module.command_status(True))
+
+    def test_gateway_v2_is_not_reported_as_ready(self) -> None:
+        module = importlib.import_module("gateway_command")
+        result = module.gateway_runtime_mode(
+            enabled=True,
+            bun_available=True,
+            hooks={name: True for name in (
+                "dist_index_exists", "dist_exposes_tool_execute_before",
+                "dist_exposes_command_execute_before", "dist_exposes_command_execute_after",
+                "dist_exposes_chat_message", "dist_exposes_messages_transform",
+                "dist_autopilot_handles_slashcommand", "dist_continuation_handles_session_idle",
+                "dist_safety_handles_session_deleted", "dist_safety_handles_session_error",
+                "dist_state_protocol_exists",
+            )},
+            opencode_major=2,
+        )
+        self.assertEqual("python_command_bridge", result["mode"])
+        self.assertEqual("gateway_plugin_incompatible_opencode_v2", result["reason_code"])
+        problems = module.enable_safety_problems({"runtime_reason_code": result["reason_code"]})
+        self.assertTrue(any("security hooks are not active" in problem for problem in problems))
+
+    def test_opencode_version_detection(self) -> None:
+        module = importlib.import_module("gateway_command")
+        with patch.object(module.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "opencode v2.2.5\n", "")
+            self.assertEqual(2, module.opencode_major_version())
+            run.return_value = subprocess.CompletedProcess([], 1, "v2.2.5", "")
+            self.assertIsNone(module.opencode_major_version())
+            run.return_value = subprocess.CompletedProcess([], 0, "other 1.2.3 v2.2.5", "")
+            self.assertIsNone(module.opencode_major_version())
+            run.side_effect = subprocess.TimeoutExpired("opencode", 5)
+            self.assertIsNone(module.opencode_major_version())
+
+    def test_unknown_opencode_runtime_is_not_reported_as_ready(self) -> None:
+        module = importlib.import_module("gateway_command")
+        hooks = {name: True for name in (
+            "dist_index_exists", "dist_exposes_tool_execute_before",
+            "dist_exposes_command_execute_before", "dist_exposes_command_execute_after",
+            "dist_exposes_chat_message", "dist_exposes_messages_transform",
+            "dist_autopilot_handles_slashcommand", "dist_continuation_handles_session_idle",
+            "dist_safety_handles_session_deleted", "dist_safety_handles_session_error",
+            "dist_state_protocol_exists",
+        )}
+        result = module.gateway_runtime_mode(enabled=True, bun_available=True, hooks=hooks)
+        self.assertEqual("python_command_bridge", result["mode"])
+        self.assertEqual("gateway_plugin_runtime_unavailable", result["reason_code"])
+        problems = module.enable_safety_problems({"runtime_reason_code": result["reason_code"]})
+        self.assertTrue(any("could not be verified" in problem for problem in problems))
+
+    def test_force_cannot_enable_v1_gateway_on_v2_or_unknown_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            home.mkdir()
+            config_path = root / "opencode.json"
+            original = '{"plugin": [["@scope/external", {"mode": "safe"}]]}\n'
+            config_path.write_text(original, encoding="utf-8")
+            binary_dir = root / "bin"
+            binary_dir.mkdir()
+            binary = binary_dir / "opencode"
+            env = os.environ.copy()
+            env.update({
+                "HOME": str(home), "OPENCODE_CONFIG_PATH": str(config_path),
+                "PATH": f"{binary_dir}{os.pathsep}{env['PATH']}",
+            })
+            for version, expected in (
+                ("opencode v2.2.5", "incompatible with OpenCode V2"),
+                ("unknown-runtime", "could not be verified"),
+            ):
+                with self.subTest(version=version):
+                    binary.write_text(f"#!/bin/sh\nprintf '%s\\n' '{version}'\n", encoding="utf-8")
+                    binary.chmod(0o700)
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPTS_DIR / "gateway_command.py"), "enable", "--force", "--json"],
+                        cwd=REPO_ROOT, env=env, capture_output=True, text=True, check=False, timeout=30,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+                    report = json.loads(result.stdout)
+                    self.assertTrue(any(expected in problem for problem in report["problems"]))
+                    self.assertFalse(any("--force" in item for item in report["quick_fixes"]))
+                    self.assertEqual(original, config_path.read_text(encoding="utf-8"))
+
     def test_gateway_tuple_detection_and_mutation_preserve_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -93,6 +183,7 @@ class PluginConfigEntriesTest(unittest.TestCase):
             enabled=True,
             bun_available=False,
             hooks=hooks,
+            opencode_major=1,
         )
 
         self.assertEqual("plugin_gateway", result["mode"])

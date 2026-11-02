@@ -8,12 +8,12 @@ PYTHON_MIN_VERSION := 3.11
 OPENCODE_BIN ?= opencode
 OPENCODE_RESUME_E2E_VERSION := 1.18.18
 
-.PHONY: python-check help data-lifecycle-help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke rolling-decomposition-live gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status install-test install-test-full release-check release
+.PHONY: python-check help data-lifecycle-help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke rolling-decomposition-live gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-v2-slice-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status install-test install-test-full release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-PYTHON_TARGETS := data-lifecycle-help validate build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke rolling-decomposition-live gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test install-test-full release-check release
+PYTHON_TARGETS := data-lifecycle-help validate build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke rolling-decomposition-live gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-v2-slice-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test install-test-full release-check release
 
 $(PYTHON_TARGETS): python-check
 
@@ -105,6 +105,12 @@ gateway-doctor: ## Run gateway plugin diagnostics
 gateway-secret-redaction-smoke: ## Verify provider-boundary redaction against localhost
 	$(PYTHON) scripts/gateway_secret_redaction_live_smoke.py --repo-root "$(CURDIR)" --json
 
+gateway-v2-slice-smoke: ## Test experimental V2 security adapters against localhost (not full gateway parity)
+	npm --prefix plugin/gateway-core run build
+	$(PYTHON) scripts/gateway_v2_context_live_smoke.py
+	$(PYTHON) scripts/gateway_v2_shell_live_smoke.py
+	$(PYTHON) scripts/gateway_v2_worktree_live_smoke.py
+
 gateway-resume-redaction-e2e: ## Build and gate large-session resume redaction on OpenCode $(OPENCODE_RESUME_E2E_VERSION)
 	npm --prefix plugin/gateway-core run build
 	$(MAKE) --no-print-directory gateway-resume-redaction-e2e-prebuilt OPENCODE_BIN="$(OPENCODE_BIN)"
@@ -168,15 +174,37 @@ hooks-install: ## Install pre-commit git hooks
 
 install-test install-test-full: SHELL := /bin/bash
 
-install-test: ## Run installer smoke test in temp HOME
+install-test: ## Run V2 refusal and legacy installer smoke tests in temp HOME
 	@set -euo pipefail; \
 	TMP_HOME="$$(mktemp -d)"; \
 	trap 'rm -rf "$$TMP_HOME"' EXIT HUP INT TERM; \
+	RUN_LIVE_RELAUNCH_SMOKE="$${MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE:-0}"; \
+	unset "$${!MY_OPENCODE_@}" "$${!OPENCODE_@}"; \
+	export XDG_CONFIG_HOME="$$TMP_HOME/.config" XDG_DATA_HOME="$$TMP_HOME/.local/share" XDG_CACHE_HOME="$$TMP_HOME/.cache" XDG_STATE_HOME="$$TMP_HOME/.local/state"; \
+	$(PYTHON) -m unittest discover -s tests -p test_install_v2_safety.py; \
+	SYNTHETIC_V1=0; \
+	if ! command -v opencode >/dev/null 2>&1; then SYNTHETIC_V1=1; \
+	elif OPENCODE_TEST_VERSION="$$(opencode --version 2>/dev/null)" && [[ "$$OPENCODE_TEST_VERSION" =~ (^|[^0-9])v?([0-9]+)\.[0-9]+\.[0-9]+ ]] && [ "$${BASH_REMATCH[2]}" -ge 2 ]; then SYNTHETIC_V1=1; fi; \
+	if [ "$$SYNTHETIC_V1" = 1 ]; then \
+	  if [ "$$RUN_LIVE_RELAUNCH_SMOKE" = "1" ]; then echo "A real V1 OpenCode is required for the legacy live relaunch smoke" >&2; exit 1; fi; \
+	  mkdir -p "$$TMP_HOME/test-bin"; \
+	  printf '%s\n' '#!/bin/sh' 'if [ "$${1-}" = "--version" ]; then echo "opencode v1.18.18"; else exit 1; fi' > "$$TMP_HOME/test-bin/opencode"; \
+	  chmod 700 "$$TMP_HOME/test-bin/opencode"; \
+	  export PATH="$$TMP_HOME/test-bin:$$PATH"; \
+	  echo "Legacy installer configuration test: using a V1 version fixture, not a live V1 runtime"; \
+	fi; \
 	SOURCE_REPO="$(PWD)"; \
-	SOURCE_REF="$$(git rev-parse --abbrev-ref HEAD)"; \
+	SOURCE_SNAPSHOT="$$TMP_HOME/install-source"; \
+	git clone --no-hardlinks "$$SOURCE_REPO" "$$SOURCE_SNAPSHOT" >/dev/null; \
+	git diff --binary HEAD > "$$TMP_HOME/install-source.patch"; \
+	if [ -s "$$TMP_HOME/install-source.patch" ]; then git -C "$$SOURCE_SNAPSHOT" apply --binary "$$TMP_HOME/install-source.patch"; fi; \
+	while IFS= read -r -d '' path; do mkdir -p "$$SOURCE_SNAPSHOT/$$(dirname "$$path")"; cp -pPR "$$path" "$$SOURCE_SNAPSHOT/$$path"; done < <(git ls-files --others --exclude-standard -z); \
+	git -C "$$SOURCE_SNAPSHOT" add -A; \
+	if ! git -C "$$SOURCE_SNAPSHOT" diff --cached --quiet; then git -C "$$SOURCE_SNAPSHOT" -c user.name=install-test -c user.email=install-test@example.invalid commit -qm install-test-snapshot; fi; \
+	SOURCE_REF="$$(git -C "$$SOURCE_SNAPSHOT" rev-parse HEAD)"; \
 	mkdir -p "$$TMP_HOME/.config/opencode"; \
 	printf '%s\n' '{"theme":"preserved","plugin":[["npm:existing-plugin",{}]]}' > "$$TMP_HOME/.config/opencode/tui.json"; \
-	HOME="$$TMP_HOME" REPO_URL="$$SOURCE_REPO" REPO_REF="$$SOURCE_REF" ./install.sh --self-check-profile core; \
+	HOME="$$TMP_HOME" REPO_URL="$$SOURCE_SNAPSHOT" REPO_REF="$$SOURCE_REF" ./install.sh --self-check-profile core; \
 	cd "$$TMP_HOME/.config/opencode/my_opencode"; \
 	HOME="$$TMP_HOME" $(PYTHON) -c 'import json; from pathlib import Path; root = Path.home() / ".config" / "opencode"; tui = json.loads((root / "tui.json").read_text()); config = json.loads((root / "opencode.json").read_text()); assert tui["theme"] == "preserved"; assert ["npm:existing-plugin", {}] in tui["plugin"]; assert any(isinstance(item, list) and item[0].endswith("/plugin/gateway-sidebar") for item in tui["plugin"]); assert config["plugin"] == ["file://{env:HOME}/.config/opencode/my_opencode/plugin/gateway-core/dist/index.js"]'; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/mcp_command.py" status; \
@@ -200,8 +228,12 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" status --json; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/quality_command.py" doctor --json; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" status --json; \
-	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" doctor --json; \
-	if [ "$${MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE:-0}" = "1" ]; then HOME="$$TMP_HOME" XDG_CACHE_HOME="$$TMP_HOME/.cache" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_live_relaunch_smoke.py" --home "$$TMP_HOME" --repo-root "$$TMP_HOME/.config/opencode/my_opencode" --sync-source-dist "$$SOURCE_REPO/plugin/gateway-core/dist" --output-dir "$$TMP_HOME/.config/opencode/my_opencode/runtime/live-relaunch-smoke" --json; else echo "gateway live relaunch smoke: SKIP (set MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE=1 for model-backed integration)"; fi; \
+	if [ "$$SYNTHETIC_V1" = 1 ]; then \
+	  if HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" doctor --json > "$$TMP_HOME/gateway-fixture-doctor.json"; then echo "synthetic V1 fixture unexpectedly passed the live gateway loader check" >&2; exit 1; fi; \
+	  $(PYTHON) -c 'import json,sys; p=json.load(open(sys.argv[1])); s=p["local_plugin_runtime_smoke"]; assert p["result"] == "FAIL" and p["problems"] == ["local gateway plugin runtime smoke failed; OpenCode could not reliably load the repo-local gateway plugin"]; assert s["reason"] == "local_plugin_runtime_loader_failed" and s["results"][0]["bootstrap_seen"] is False' "$$TMP_HOME/gateway-fixture-doctor.json"; \
+	  echo "gateway live loader smoke: SKIP (synthetic V1 version fixture; use a real V1 OpenCode on PATH)"; \
+	else HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_command.py" doctor --json; fi; \
+	if [ "$$RUN_LIVE_RELAUNCH_SMOKE" = "1" ]; then HOME="$$TMP_HOME" XDG_CACHE_HOME="$$TMP_HOME/.cache" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/gateway_live_relaunch_smoke.py" --home "$$TMP_HOME" --repo-root "$$TMP_HOME/.config/opencode/my_opencode" --sync-source-dist "$$SOURCE_REPO/plugin/gateway-core/dist" --output-dir "$$TMP_HOME/.config/opencode/my_opencode/runtime/live-relaunch-smoke" --json; else echo "gateway live relaunch smoke: SKIP (set MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE=1 for model-backed integration)"; fi; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" layers --json; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/config_command.py" backup --name install-test; \
@@ -210,7 +242,15 @@ install-test: ## Run installer smoke test in temp HOME
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/stack_profile_command.py" status; \
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" ]; then HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" status --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" profile agent-browser; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" doctor --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" profile playwright; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" status --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/browser_command.py" doctor --json; fi; \
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/tmux_command.py" ]; then HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/tmux_command.py" status --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/tmux_command.py" config enabled true; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/tmux_command.py" doctor --json; fi; \
-	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" ]; then HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" version; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" doctor --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" install --repo-url "$$SOURCE_REPO" --repo-ref "$$SOURCE_REF" --install-dir "$$TMP_HOME/.config/opencode/my_opencode-cli-test" --dry-run; fi; \
+	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" ]; then \
+	  HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" version; \
+	  if [ "$$SYNTHETIC_V1" = 1 ]; then \
+	    if HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" doctor --json > "$$TMP_HOME/fixture-cli-doctor.json"; then echo "synthetic V1 fixture unexpectedly passed the CLI doctor" >&2; exit 1; fi; \
+	    $(PYTHON) -c 'import json,sys; p=json.load(open(sys.argv[1])); failures=[c for c in p["checks"] if not c["ok"]]; assert p["result"] == "FAIL" and [c["name"] for c in failures] == ["gateway"]; assert failures[0]["report"]["local_plugin_runtime_smoke"]["reason"] == "local_plugin_runtime_loader_failed"' "$$TMP_HOME/fixture-cli-doctor.json"; \
+	    echo "CLI doctor: all non-loader checks passed; synthetic V1 loader check not validated"; \
+	  else HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" doctor --json; fi; \
+	  HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/my_opencode_cli.py" install --repo-url "$$SOURCE_SNAPSHOT" --repo-ref "$$SOURCE_REF" --install-dir "$$TMP_HOME/.config/opencode/my_opencode-cli-test" --dry-run; \
+	fi; \
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/start_work_command.py" ]; then PLAN_FILE="$$TMP_HOME/.config/opencode/my_opencode/.install-test-plan.md"; $(PYTHON) -c "from pathlib import Path; Path('$$PLAN_FILE').write_text('---\nid: install-test-plan\ntitle: Install Test Plan\nowner: install-test\ncreated_at: 2026-02-13T00:00:00Z\nversion: 1\n---\n\n# Plan\n\n- [ ] 1. Validate command availability\n- [ ] 2. Validate status persistence\n', encoding='utf-8')"; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/start_work_command.py" "$$PLAN_FILE" --deviation "install smoke" --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/start_work_command.py" "$$PLAN_FILE" --background --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/background_task_manager.py" run --max-jobs 1; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/start_work_command.py" status --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/start_work_command.py" deviations --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/start_work_command.py" doctor --json; fi; \
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/todo_command.py" ]; then HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/todo_command.py" status --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/todo_command.py" enforce --json; fi; \
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/task_graph_command.py" ]; then TASK_ID=$$(HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/task_graph_command.py" create --subject "install test task" --owner install-test --json | $(PYTHON) -c 'import json,sys; print((json.load(sys.stdin).get("task") or {}).get("id") or "")'); HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/task_graph_command.py" list --json; if [ -n "$$TASK_ID" ]; then HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/task_graph_command.py" update "$$TASK_ID" --status completed --json; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/task_graph_command.py" ready --json; fi; HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/task_graph_command.py" doctor --json; fi; \
@@ -229,12 +269,18 @@ install-test: ## Run installer smoke test in temp HOME
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/health_command.py" ]; then HEALTH_REPO="$$TMP_HOME/.config/opencode/my_opencode"; (cd "$$HEALTH_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$HEALTH_REPO/scripts/health_command.py" status --force-refresh --json); (cd "$$HEALTH_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$HEALTH_REPO/scripts/health_command.py" trend --limit 5 --json); (cd "$$HEALTH_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$HEALTH_REPO/scripts/health_command.py" drift --json); (cd "$$HEALTH_REPO" && HOME="$$TMP_HOME" $(PYTHON) -c "import json,pathlib; p=pathlib.Path('$$TMP_HOME/.config/opencode/opencode.json'); data=json.loads(p.read_text(encoding='utf-8')); runtime=data.get('budget_runtime', {}); runtime['profile']='extended'; data['budget_runtime']=runtime; p.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')"); (cd "$$HEALTH_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$HEALTH_REPO/scripts/health_command.py" drift --force-refresh --json); (cd "$$HEALTH_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$HEALTH_REPO/scripts/health_command.py" doctor --json); fi; \
 	if [ -f "$$TMP_HOME/.config/opencode/my_opencode/scripts/learn_command.py" ]; then LEARN_REPO="$$TMP_HOME/.config/opencode/my_opencode"; (cd "$$LEARN_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" capture --limit 5 --json); LEARN_ENTRIES_PATH="$$TMP_HOME/.config/opencode/my_opencode/runtime/knowledge_entries.json"; LEARN_ENTRIES_PATH="$$LEARN_ENTRIES_PATH" $(PYTHON) -c 'import json,os,pathlib; p=pathlib.Path(os.environ["LEARN_ENTRIES_PATH"]); entries=json.loads(p.read_text(encoding="utf-8")) if p.exists() else []; [entry.update({"evidence_sources": list(dict.fromkeys([*entry.get("evidence_sources", []), "install-test:second-source"]))}) for entry in entries]; p.write_text(json.dumps(entries, indent=2)+"\n", encoding="utf-8") if entries else None'; LEARN_ENTRY_ID=$$(cd "$$LEARN_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" search --limit 1 --json | $(PYTHON) -c 'import json,sys; payload=json.load(sys.stdin); entries=payload.get("entries", []); print(entries[0].get("entry_id", "") if entries else "")'); if [ -n "$$LEARN_ENTRY_ID" ]; then (cd "$$LEARN_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" review --entry-id "$$LEARN_ENTRY_ID" --summary "install-test review" --confidence 88 --risk high --json); (cd "$$LEARN_REPO" && if HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" publish --entry-id "$$LEARN_ENTRY_ID" --approved-by install-test --json; then echo "learn publish high-risk single approval unexpectedly passed" && exit 1; fi); (cd "$$LEARN_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" publish --entry-id "$$LEARN_ENTRY_ID" --approved-by install-test-2 --json); fi; (cd "$$LEARN_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" search --query release --json); (cd "$$LEARN_REPO" && HOME="$$TMP_HOME" $(PYTHON) "$$LEARN_REPO/scripts/learn_command.py" doctor --json); fi; \
 	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/install_wizard.py" --non-interactive --skip-extras --plugin-profile lean --mcp-profile research --policy-profile balanced --notify-profile skip --telemetry-profile local --post-session-profile manual-validate; \
-	HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json
+	if [ "$$SYNTHETIC_V1" = 1 ]; then \
+	  if HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json > "$$TMP_HOME/fixture-doctor.json"; then echo "synthetic V1 fixture unexpectedly passed the aggregate doctor" >&2; exit 1; fi; \
+	  $(PYTHON) -c 'import json,sys; p=json.load(open(sys.argv[1])); failures=[c for c in p["checks"] if not c["ok"]]; assert p["result"] == "FAIL" and [c["name"] for c in failures] == ["gateway"]; assert failures[0]["report"]["local_plugin_runtime_smoke"]["reason"] == "local_plugin_runtime_loader_failed"' "$$TMP_HOME/fixture-doctor.json"; \
+	  echo "aggregate doctor: all non-loader checks passed; synthetic V1 loader check not validated"; \
+	else HOME="$$TMP_HOME" $(PYTHON) "$$TMP_HOME/.config/opencode/my_opencode/scripts/doctor_command.py" run --json; fi
 
 install-test-full: ## Run the full installer self-check in disposable HOME
 	@set -eu; \
 	TMP_HOME="$$(mktemp -d)"; \
 	trap 'rm -rf "$$TMP_HOME"' EXIT HUP INT TERM; \
+	unset "$${!MY_OPENCODE_@}" "$${!OPENCODE_@}"; \
+	export XDG_CONFIG_HOME="$$TMP_HOME/.config" XDG_DATA_HOME="$$TMP_HOME/.local/share" XDG_CACHE_HOME="$$TMP_HOME/.cache" XDG_STATE_HOME="$$TMP_HOME/.local/state"; \
 	SOURCE_REPO="$(PWD)"; \
 	SOURCE_SNAPSHOT="$$TMP_HOME/install-source"; \
 	git clone --no-hardlinks "$$SOURCE_REPO" "$$SOURCE_SNAPSHOT" >/dev/null; \

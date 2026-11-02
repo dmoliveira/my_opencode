@@ -93,9 +93,9 @@ from config_layering import (  # type: ignore
 )
 from gateway_plugin_bridge import (  # type: ignore
     cleanup_orphan_loop,
-    gateway_plugin_entry_format,
     gateway_loop_state_path,
     gateway_plugin_entries,
+    gateway_plugin_entry_format,
     gateway_plugin_spec,
     load_gateway_loop_state,
     plugin_enabled,
@@ -104,8 +104,10 @@ from gateway_plugin_bridge import (  # type: ignore
 from gateway_reason_codes import (  # type: ignore
     BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE,
     GATEWAY_PLUGIN_DISABLED,
+    GATEWAY_PLUGIN_INCOMPATIBLE_V2,
     GATEWAY_PLUGIN_NOT_READY,
     GATEWAY_PLUGIN_READY,
+    GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE,
     LOOP_STATE_AVAILABLE,
 )
 from gateway_state_protocol import (  # type: ignore
@@ -1198,6 +1200,7 @@ def runtime_session_health_summary(
         "runtime_db_query_only": runtime.get("runtime_db_query_only"),
         "runtime_db_snapshot_started": runtime.get("runtime_db_snapshot_started"),
         "runtime_db_scan_complete": runtime.get("runtime_db_scan_complete"),
+        "runtime_db_v2_detected": runtime.get("runtime_db_v2_detected"),
         "runtime_permission_status": runtime.get("runtime_permission_status"),
         "runtime_permission_reason_code": runtime.get(
             "runtime_permission_reason_code"
@@ -2556,9 +2559,32 @@ def bun_runtime_available() -> bool:
     return shutil.which("bun") is not None
 
 
+def opencode_major_version() -> int | None:
+    """Detect the CLI version without assuming an unavailable binary is V1."""
+    try:
+        result = subprocess.run(
+            ["opencode", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    match = re.fullmatch(
+        r"(?:opencode\s+)?v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?",
+        result.stdout.strip(),
+    )
+    return int(match.group(1)) if result.returncode == 0 and match else None
+
+
 # Resolves active gateway runtime mode and deterministic reason code.
 def gateway_runtime_mode(
-    *, enabled: bool, bun_available: bool, hooks: dict[str, Any]
+    *,
+    enabled: bool,
+    bun_available: bool,
+    hooks: dict[str, Any],
+    opencode_major: int | None = None,
 ) -> dict[str, Any]:
     del bun_available
     required_dist_flags = [
@@ -2583,6 +2609,12 @@ def gateway_runtime_mode(
     reason_code = GATEWAY_PLUGIN_READY
     if not enabled:
         reason_code = GATEWAY_PLUGIN_DISABLED
+    elif opencode_major is None:
+        mode = "python_command_bridge"
+        reason_code = GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE
+    elif opencode_major >= 2:
+        mode = "python_command_bridge"
+        reason_code = GATEWAY_PLUGIN_INCOMPATIBLE_V2
     elif not plugin_ready:
         reason_code = GATEWAY_PLUGIN_NOT_READY
     return {
@@ -2644,10 +2676,12 @@ def status_payload(
     enabled = plugin_enabled(config, home)
     bun_available = bun_runtime_available()
     hooks = hook_diagnostics(pdir)
+    opencode_major = opencode_major_version()
     runtime_mode = gateway_runtime_mode(
         enabled=enabled,
         bun_available=bun_available,
         hooks=hooks,
+        opencode_major=opencode_major,
     )
     try:
         concise_mode = effective_concise_mode(cwd)
@@ -2669,8 +2703,12 @@ def status_payload(
     )
     gateway_entries = gateway_plugin_entries(config, home)
     payload = {
-        "result": "PASS",
+        "result": "FAIL"
+        if runtime_mode["reason_code"]
+        in {GATEWAY_PLUGIN_INCOMPATIBLE_V2, GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE}
+        else "PASS",
         "enabled": enabled,
+        "opencode_cli_major": opencode_major,
         "plugin_spec": gateway_plugin_spec(home),
         "plugin_entry_count": len(gateway_entries),
         "plugin_entries": gateway_entries,
@@ -2721,6 +2759,12 @@ def ensure_file_plugin_compat(home: Path, pdir: Path) -> dict[str, Any]:
 # Returns hard safety problems that should block non-forced enable.
 def enable_safety_problems(status: dict[str, Any]) -> list[str]:
     problems: list[str] = []
+    if status.get("runtime_reason_code") == GATEWAY_PLUGIN_INCOMPATIBLE_V2:
+        problems.append(
+            "gateway V1 plugin is incompatible with OpenCode V2; security hooks are not active"
+        )
+    if status.get("runtime_reason_code") == GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE:
+        problems.append("OpenCode version could not be verified; gateway security hooks are not verified")
     if status.get("plugin_dir_exists") is not True:
         problems.append("gateway plugin directory is missing")
     if status.get("plugin_dist_exists") is not True:
@@ -2757,7 +2801,11 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
     payload = status_payload(config, home, Path.cwd())
     payload["config"] = str(cfg_path)
     problems = enable_safety_problems(payload)
-    if problems and not force:
+    incompatible = payload.get("runtime_reason_code") in {
+        GATEWAY_PLUGIN_INCOMPATIBLE_V2,
+        GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE,
+    }
+    if problems and (not force or incompatible):
         fallback = status_payload(original_config, home, Path.cwd())
         fallback["result"] = "FAIL"
         fallback["reason_code"] = "gateway_enable_blocked_for_safety"
@@ -2766,8 +2814,9 @@ def command_enable(as_json: bool, *, force: bool = False) -> int:
         fallback["quick_fixes"] = [
             "run npm run build in plugin/gateway-core",
             "run /gateway doctor",
-            "run /gateway enable --force to bypass safeguard",
         ]
+        if not incompatible:
+            fallback["quick_fixes"].append("run /gateway enable --force to bypass safeguard")
         emit(fallback, as_json=as_json)
         return 1
     committed_config: dict[str, Any] = {}
@@ -2816,11 +2865,9 @@ def command_disable(as_json: bool) -> int:
 def command_status(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
-    emit(
-        status_payload(config, home, Path.cwd(), cleanup_orphans=True),
-        as_json=as_json,
-    )
-    return 0
+    payload = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
+    emit(payload, as_json=as_json)
+    return 1 if payload.get("result") == "FAIL" else 0
 
 
 # Runs gateway plugin diagnostics with quick fixes.
@@ -2834,6 +2881,12 @@ def command_doctor(
 
     problems: list[str] = []
     warnings: list[str] = []
+    if status.get("runtime_reason_code") == GATEWAY_PLUGIN_INCOMPATIBLE_V2:
+        problems.append(
+            "gateway V1 plugin is incompatible with OpenCode V2; security hooks are not active"
+        )
+    if status.get("runtime_reason_code") == GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE:
+        problems.append("OpenCode version could not be verified; gateway security hooks are not verified")
     if not status["plugin_dir_exists"]:
         warnings.append("gateway plugin directory is missing")
     if not status["plugin_dist_exists"]:
