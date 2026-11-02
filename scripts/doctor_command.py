@@ -546,7 +546,7 @@ CHECKS = [
 def usage() -> int:
     print(
         "usage: /doctor status | /doctor help | /doctor run [--json] [--profile <core|full>] | "
-        "/doctor sqlite [--json] | "
+        "/doctor sqlite [status [--redact]] [--json] | "
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 2
@@ -555,7 +555,7 @@ def usage() -> int:
 def print_help() -> int:
     print(
         "usage: /doctor status | /doctor help | /doctor run [--json] [--profile <core|full>] | "
-        "/doctor sqlite [--json] | "
+        "/doctor sqlite [status [--redact]] [--json] | "
         "/doctor reason-codes [--diff <path>] [--write <path>] [--json]"
     )
     return 0
@@ -947,6 +947,10 @@ def command_run(argv: list[str]) -> int:
 
 
 def command_sqlite(argv: list[str]) -> int:
+    if argv and argv[0] == "status":
+        from sqlite_status_command import main as sqlite_status_main
+
+        return sqlite_status_main(argv[1:])
     from sqlite_doctor_command import main as sqlite_doctor_main
 
     return sqlite_doctor_main(argv)
