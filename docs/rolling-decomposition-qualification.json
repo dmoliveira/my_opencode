@@ -1,0 +1,169 @@
+{
+  "result": "PASS",
+  "backend": "native-sqlite",
+  "scenarios": [
+    {
+      "size": 50,
+      "coverage": {
+        "task_count": 50,
+        "epic_count": 17,
+        "covered_requirements": 50,
+        "hierarchy_edges": 50,
+        "dependency_edges": 33,
+        "max_task_depth": 2
+      },
+      "fragment_count": 17,
+      "max_proposal_changes": 9,
+      "recovery": {
+        "prepared_reply_loss": true,
+        "applied_replay_no_backend_calls": true,
+        "conflicting_replay_rejected": true,
+        "new_id_duplicate_rejected": true
+      },
+      "rolling_model": {
+        "completed_task_count": 50,
+        "wave_count": 25,
+        "peak_frontier": 2,
+        "checkpoint_recovered": true,
+        "execution_model": "fixture-completions-not-processes"
+      },
+      "native_execution": {
+        "completed_processes": 2,
+        "peak_processes": 2,
+        "third_ready_deferred": true,
+        "blocked_task_not_dispatched": true
+      },
+      "stages": {
+        "intake": {
+          "seconds": 15.249,
+          "budget_seconds": 60.400000000000006,
+          "subprocess_calls": 125
+        },
+        "snapshot": {
+          "seconds": 22.639,
+          "budget_seconds": 46.6,
+          "subprocess_calls": 183
+        },
+        "local": {
+          "seconds": 0.007,
+          "budget_seconds": 30.0,
+          "subprocess_calls": 0
+        },
+        "execution": {
+          "seconds": 1.648,
+          "budget_seconds": 60.0,
+          "subprocess_calls": 10
+        }
+      }
+    },
+    {
+      "size": 250,
+      "coverage": {
+        "task_count": 250,
+        "epic_count": 84,
+        "covered_requirements": 250,
+        "hierarchy_edges": 250,
+        "dependency_edges": 166,
+        "max_task_depth": 2
+      },
+      "fragment_count": 84,
+      "max_proposal_changes": 9,
+      "recovery": {
+        "prepared_reply_loss": true,
+        "applied_replay_no_backend_calls": true,
+        "conflicting_replay_rejected": true,
+        "new_id_duplicate_rejected": true
+      },
+      "rolling_model": {
+        "completed_task_count": 250,
+        "wave_count": 125,
+        "peak_frontier": 2,
+        "checkpoint_recovered": true,
+        "execution_model": "fixture-completions-not-processes"
+      },
+      "native_execution": {
+        "completed_processes": 2,
+        "peak_processes": 2,
+        "third_ready_deferred": true,
+        "blocked_task_not_dispatched": true
+      },
+      "stages": {
+        "intake": {
+          "seconds": 72.834,
+          "budget_seconds": 167.6,
+          "subprocess_calls": 593
+        },
+        "snapshot": {
+          "seconds": 103.343,
+          "budget_seconds": 179.8,
+          "subprocess_calls": 849
+        },
+        "local": {
+          "seconds": 0.031,
+          "budget_seconds": 30.0,
+          "subprocess_calls": 0
+        },
+        "execution": {
+          "seconds": 1.659,
+          "budget_seconds": 60.0,
+          "subprocess_calls": 10
+        }
+      }
+    },
+    {
+      "size": 1000,
+      "coverage": {
+        "task_count": 1000,
+        "epic_count": 334,
+        "covered_requirements": 1000,
+        "hierarchy_edges": 1000,
+        "dependency_edges": 666,
+        "max_task_depth": 2
+      },
+      "fragment_count": 334,
+      "max_proposal_changes": 9,
+      "recovery": {
+        "prepared_reply_loss": true,
+        "applied_replay_no_backend_calls": true,
+        "conflicting_replay_rejected": true,
+        "new_id_duplicate_rejected": true
+      },
+      "rolling_model": {
+        "completed_task_count": 1000,
+        "wave_count": 500,
+        "peak_frontier": 2,
+        "checkpoint_recovered": true,
+        "execution_model": "fixture-completions-not-processes"
+      },
+      "native_execution": {
+        "completed_processes": 2,
+        "peak_processes": 2,
+        "third_ready_deferred": true,
+        "blocked_task_not_dispatched": true
+      },
+      "stages": {
+        "intake": {
+          "seconds": 293.346,
+          "budget_seconds": 567.6,
+          "subprocess_calls": 2343
+        },
+        "snapshot": {
+          "seconds": 413.472,
+          "budget_seconds": 679.8000000000001,
+          "subprocess_calls": 3349
+        },
+        "local": {
+          "seconds": 0.196,
+          "budget_seconds": 30.0,
+          "subprocess_calls": 0
+        },
+        "execution": {
+          "seconds": 1.73,
+          "budget_seconds": 60.0,
+          "subprocess_calls": 10
+        }
+      }
+    }
+  ],
+  "temporary_root_removed": true
+}

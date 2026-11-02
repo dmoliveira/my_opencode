@@ -694,6 +694,28 @@ def ready_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ready
 
 
+def bounded_frontier(tasks: list[dict[str, Any]], limit: int = 2) -> dict[str, Any]:
+    """Bound scheduling advice without reserving work or mutating lifecycle."""
+    if type(limit) is not int or not 1 <= limit <= 32:
+        raise ValueError("frontier limit must be an integer in 1..32")
+    active = sorted(task["id"] for task in tasks if task.get("status") == "in_progress")
+    ready = sorted(ready_tasks(tasks), key=lambda task: task["id"])
+    available = max(0, limit - len(active))
+    selected = ready[:available]
+    return {
+        "authority": "advisory-only",
+        "limit": limit,
+        "active_ids": active,
+        "active_count": len(active),
+        "available_slots": available,
+        "over_capacity": len(active) > limit,
+        "ready_count": len(ready),
+        "deferred_count": len(ready) - len(selected),
+        "selected_count": len(selected),
+        "tasks": selected,
+    }
+
+
 def blocked_details(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_id = {task["id"]: task for task in tasks}
     blocked: list[dict[str, Any]] = []

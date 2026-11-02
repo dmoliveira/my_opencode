@@ -80,6 +80,8 @@ OPERATION_CLASSES: dict[str, str] = {
     "pages_github_metadata": "github_metadata",
     "wave_github_pr_metadata": "github_metadata",
     "hygiene_github_merged_pr_metadata": "github_metadata",
+    "rolling_qualification_probe": "codememory_probe",
+    "rolling_qualification_mutation": "codememory_mutation",
     "intent_codememory_doctor": "codememory_probe",
     "intent_codememory_find": "codememory_probe",
     "intent_codememory_apply": "codememory_mutation",

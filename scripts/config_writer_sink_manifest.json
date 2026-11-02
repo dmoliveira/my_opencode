@@ -2611,6 +2611,78 @@
   },
   {
     "language": "python",
+    "file": "rolling_decomposition.py",
+    "function": "rolling_model",
+    "kind": "path.write_text",
+    "destination": "checkpoint",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "__init__",
+    "kind": "path.write_text",
+    "destination": "self.config",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "_local_checks",
+    "kind": "path.write_bytes",
+    "destination": "runtime",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "_local_checks",
+    "kind": "path.write_text",
+    "destination": "runtime",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "execution_smoke",
+    "kind": "path.mkdir",
+    "destination": "worker",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "execution_smoke",
+    "kind": "path.write_text",
+    "destination": "release",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "main",
+    "kind": "path.mkdir",
+    "destination": "scenario",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "rolling_decomposition_qualification.py",
+    "function": "qualify",
+    "kind": "path.write_text",
+    "destination": "root / 'contract.md'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
     "file": "runtime_audit.py",
     "function": "save_audit",
     "kind": "path.mkdir",

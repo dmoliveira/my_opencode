@@ -12,7 +12,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from codememory_task_graph_projection import (  # type: ignore  # noqa: E402
+from codememory_task_graph_projection import (  # type: ignore
     ProjectionError,
     apply_projection,
     build_projection,
@@ -23,11 +23,12 @@ from codememory_task_graph_projection import (  # type: ignore  # noqa: E402
     make_oc_runner,
     projection_local_health,
 )
-from config_layering import resolve_write_path  # type: ignore  # noqa: E402
-from task_graph_runtime import (  # type: ignore  # noqa: E402
+from config_layering import resolve_write_path  # type: ignore
+from task_graph_runtime import (  # type: ignore
     TASK_STATUS,
     ManagedTaskMutationError,
     TaskGraphStateError,
+    bounded_frontier,
     graph_snapshot,
     is_codememory_managed,
     load_state,
@@ -88,6 +89,15 @@ def _json_or_human(payload: dict[str, Any], json_output: bool) -> int:
         print(f"task: {task.get('id')} [{task.get('status')}] {task.get('subject')}")
     if "count" in payload:
         print(f"count: {payload.get('count')}")
+    if payload.get("reason_code") == "task_frontier_advisory":
+        print("authority: advisory-only")
+        print(f"active: {payload['active_count']}/{payload['limit']}")
+        print(f"available_slots: {payload['available_slots']}")
+        print(f"selected: {payload['selected_count']}")
+        print(f"deferred: {payload['deferred_count']}")
+        print(f"over_capacity: {payload['over_capacity']}")
+        for task in payload["tasks"]:
+            print(f"- {task['id']}: {task['subject']}")
     return 0 if payload.get("result") == "PASS" else 1
 
 
@@ -326,6 +336,25 @@ def command_ready(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def command_frontier(args: argparse.Namespace) -> dict[str, Any]:
+    locked = load_state(_write_path())
+    try:
+        frontier = bounded_frontier(locked.state["tasks"], args.limit)
+    except ValueError as exc:
+        return {
+            "result": "FAIL",
+            "reason_code": "task_frontier_limit_invalid",
+            "detail": str(exc),
+        }
+    return {
+        "result": "PASS",
+        "reason_code": "task_frontier_advisory",
+        **frontier,
+        "projection_revision": locked.state.get("projection", {}).get("revision"),
+        "runtime_path": str(locked.runtime_path),
+    }
+
+
 def command_doctor(args: argparse.Namespace) -> dict[str, Any]:
     locked = load_strict_state(_write_path())
     tasks = [item for item in locked.state.get("tasks", []) if isinstance(item, dict)]
@@ -412,6 +441,12 @@ def build_parser() -> argparse.ArgumentParser:
     ready = sub.add_parser("ready", help="List dependency-unblocked tasks")
     ready.add_argument("--json", action="store_true")
 
+    frontier = sub.add_parser(
+        "frontier", help="Show bounded read-only scheduling advice"
+    )
+    frontier.add_argument("--limit", type=int, default=2)
+    frontier.add_argument("--json", action="store_true")
+
     doctor = sub.add_parser("doctor", help="Validate task graph integrity")
     doctor.add_argument("--json", action="store_true")
 
@@ -435,6 +470,8 @@ def main(argv: list[str]) -> int:
             payload = command_project(args)
         elif command == "ready":
             payload = command_ready(args)
+        elif command == "frontier":
+            payload = command_frontier(args)
         elif command == "doctor":
             payload = command_doctor(args)
         else:

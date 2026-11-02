@@ -5,12 +5,12 @@ PYTHON_MIN_VERSION := 3.11
 OPENCODE_BIN ?= opencode
 OPENCODE_RESUME_E2E_VERSION := 1.18.18
 
-.PHONY: python-check help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status install-test install-test-full release-check release
+.PHONY: python-check help validate selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke rolling-decomposition-live gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status install-test install-test-full release-check release
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-14s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-PYTHON_TARGETS := validate build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test install-test-full release-check release
+PYTHON_TARGETS := validate build-agents build-agents-check build-agents-prune release-index-update docs-automation-summary-update docs-automation-check pages-readiness-check release-note-validation-check release-note-quality-check plan-hygiene-check wave-linkage-check wave-handoff-summary wave-completion-update quality-fast quality-strict quality-off quality-status tasker-production-live-smoke rolling-decomposition-live gateway-status gateway-enable gateway-disable gateway-doctor gateway-secret-redaction-smoke gateway-resume-redaction-e2e gateway-resume-redaction-e2e-prebuilt gateway-execution-status-live-smoke gateway-turn-watch gateway-turn-watch-webhook harness-wave2-task4-smoke notify-icons-generate notify-icons-select reservation-status task-lease-status selftest doctor doctor-json sqlite-doctor sqlite-doctor-json devtools-status hooks-install install-test install-test-full release-check release
 
 $(PYTHON_TARGETS): python-check
 
@@ -138,6 +138,9 @@ task-lease-status: ## Show cooperative Codememory task lease state
 
 tasker-production-live-smoke: ## Exercise the actual Tasker plugin and OC backend with a controlled local provider
 	$(PYTHON) scripts/tasker_production_live_smoke.py --json
+
+rolling-decomposition-live: python-check ## Qualify isolated native rolling intake at 50, 250 and 1000 tasks
+	$(PYTHON) scripts/rolling_decomposition_qualification.py
 
 selftest: ## Run deterministic command self-tests
 	$(PYTHON) scripts/selftest.py
