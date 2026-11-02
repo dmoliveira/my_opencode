@@ -21,6 +21,7 @@ This repo-local index exists because `AGENTS.md` and related startup docs refere
 - `quickstart.md`: startup path and main command-surface overview
 - `execution-status-sidebar.md`: deterministic Goal/Last/Next sidebar setup, semantics, and verification
 - `agent-browser.md`: browser-owned blocker workflow for consent, re-auth, scope upgrade, and final visual verification
+- `dependency-security-workflow.md`: audit-bound locked Python setup, supported inputs, fail-closed limits, and activation checks
 - `operator-playbook.md`: operator-facing execution and incident flow
 - `parallel-wt-playbook.md`: worktree-first execution and safe reservation guidance
 - `command-handbook.md`: detailed slash-command reference
