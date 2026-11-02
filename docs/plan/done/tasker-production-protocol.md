@@ -1,5 +1,5 @@
 ---
-status: doing
+status: done
 priority: high
 updated: 2026-11-02
 ---
@@ -116,3 +116,13 @@ without changing another repository. In contrast, task transition at
 The reconciled production contract deliberately keeps all task/epic/session
 lifecycle transitions, including `cancel`, denied; the proposal's cancellation
 exception is rejected rather than relying on an unsafe queue-read race.
+
+## Implementation outcome
+
+Production implementation and local validation are complete. The final AI
+review has no remaining blocker; candidate installation passed after correcting
+a disposable installer fixture that seeded a different entry than search chose.
+Full gateway validation includes 1358 tests, with Python validation (594 tests,
+one skip), lint, pre-commit, selftest and the actual-runtime controlled-provider
+smoke passing. Delivery/merge state remains owned by GitHub and `task_122`.
+Current production was refreshed through `7c182639`, preserving PRs #751-#753.
