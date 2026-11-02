@@ -7,6 +7,7 @@ GATEWAY_PLUGIN_READY = "gateway_plugin_ready"
 GATEWAY_PLUGIN_DISABLED = "gateway_plugin_disabled"
 GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE = "gateway_plugin_runtime_unavailable"
 GATEWAY_PLUGIN_NOT_READY = "gateway_plugin_not_ready"
+GATEWAY_PLUGIN_INCOMPATIBLE_V2 = "gateway_plugin_incompatible_opencode_v2"
 
 # Canonical gateway loop-state selection reason codes.
 LOOP_STATE_AVAILABLE = "loop_state_available"

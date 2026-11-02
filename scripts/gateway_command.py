@@ -104,6 +104,7 @@ from gateway_plugin_bridge import (  # type: ignore
 from gateway_reason_codes import (  # type: ignore
     BRIDGE_STATE_IGNORED_IN_PLUGIN_MODE,
     GATEWAY_PLUGIN_DISABLED,
+    GATEWAY_PLUGIN_INCOMPATIBLE_V2,
     GATEWAY_PLUGIN_NOT_READY,
     GATEWAY_PLUGIN_READY,
     LOOP_STATE_AVAILABLE,
@@ -2556,9 +2557,29 @@ def bun_runtime_available() -> bool:
     return shutil.which("bun") is not None
 
 
+def opencode_major_version() -> int | None:
+    """Detect the CLI version without assuming an unavailable binary is V1."""
+    try:
+        result = subprocess.run(
+            ["opencode", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    match = re.search(r"\b(?:v)?(\d+)\.\d+\.\d+\b", result.stdout)
+    return int(match.group(1)) if result.returncode == 0 and match else None
+
+
 # Resolves active gateway runtime mode and deterministic reason code.
 def gateway_runtime_mode(
-    *, enabled: bool, bun_available: bool, hooks: dict[str, Any]
+    *,
+    enabled: bool,
+    bun_available: bool,
+    hooks: dict[str, Any],
+    opencode_major: int | None = None,
 ) -> dict[str, Any]:
     del bun_available
     required_dist_flags = [
@@ -2583,6 +2604,9 @@ def gateway_runtime_mode(
     reason_code = GATEWAY_PLUGIN_READY
     if not enabled:
         reason_code = GATEWAY_PLUGIN_DISABLED
+    elif opencode_major is not None and opencode_major >= 2:
+        mode = "python_command_bridge"
+        reason_code = GATEWAY_PLUGIN_INCOMPATIBLE_V2
     elif not plugin_ready:
         reason_code = GATEWAY_PLUGIN_NOT_READY
     return {
@@ -2644,10 +2668,12 @@ def status_payload(
     enabled = plugin_enabled(config, home)
     bun_available = bun_runtime_available()
     hooks = hook_diagnostics(pdir)
+    opencode_major = opencode_major_version()
     runtime_mode = gateway_runtime_mode(
         enabled=enabled,
         bun_available=bun_available,
         hooks=hooks,
+        opencode_major=opencode_major,
     )
     try:
         concise_mode = effective_concise_mode(cwd)
@@ -2669,8 +2695,9 @@ def status_payload(
     )
     gateway_entries = gateway_plugin_entries(config, home)
     payload = {
-        "result": "PASS",
+        "result": "FAIL" if runtime_mode["reason_code"] == GATEWAY_PLUGIN_INCOMPATIBLE_V2 else "PASS",
         "enabled": enabled,
+        "opencode_cli_major": opencode_major,
         "plugin_spec": gateway_plugin_spec(home),
         "plugin_entry_count": len(gateway_entries),
         "plugin_entries": gateway_entries,
@@ -2721,6 +2748,10 @@ def ensure_file_plugin_compat(home: Path, pdir: Path) -> dict[str, Any]:
 # Returns hard safety problems that should block non-forced enable.
 def enable_safety_problems(status: dict[str, Any]) -> list[str]:
     problems: list[str] = []
+    if status.get("runtime_reason_code") == GATEWAY_PLUGIN_INCOMPATIBLE_V2:
+        problems.append(
+            "gateway V1 plugin is incompatible with OpenCode V2; security hooks are not active"
+        )
     if status.get("plugin_dir_exists") is not True:
         problems.append("gateway plugin directory is missing")
     if status.get("plugin_dist_exists") is not True:
@@ -2834,6 +2865,10 @@ def command_doctor(
 
     problems: list[str] = []
     warnings: list[str] = []
+    if status.get("runtime_reason_code") == GATEWAY_PLUGIN_INCOMPATIBLE_V2:
+        problems.append(
+            "gateway V1 plugin is incompatible with OpenCode V2; security hooks are not active"
+        )
     if not status["plugin_dir_exists"]:
         warnings.append("gateway plugin directory is missing")
     if not status["plugin_dist_exists"]:

@@ -21,6 +21,36 @@ import plugin_command
 
 
 class PluginConfigEntriesTest(unittest.TestCase):
+    def test_gateway_v2_is_not_reported_as_ready(self) -> None:
+        module = importlib.import_module("gateway_command")
+        result = module.gateway_runtime_mode(
+            enabled=True,
+            bun_available=True,
+            hooks={name: True for name in (
+                "dist_index_exists", "dist_exposes_tool_execute_before",
+                "dist_exposes_command_execute_before", "dist_exposes_command_execute_after",
+                "dist_exposes_chat_message", "dist_exposes_messages_transform",
+                "dist_autopilot_handles_slashcommand", "dist_continuation_handles_session_idle",
+                "dist_safety_handles_session_deleted", "dist_safety_handles_session_error",
+                "dist_state_protocol_exists",
+            )},
+            opencode_major=2,
+        )
+        self.assertEqual("python_command_bridge", result["mode"])
+        self.assertEqual("gateway_plugin_incompatible_opencode_v2", result["reason_code"])
+        problems = module.enable_safety_problems({"runtime_reason_code": result["reason_code"]})
+        self.assertTrue(any("security hooks are not active" in problem for problem in problems))
+
+    def test_opencode_version_detection(self) -> None:
+        module = importlib.import_module("gateway_command")
+        with patch.object(module.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, "opencode v2.2.5\n", "")
+            self.assertEqual(2, module.opencode_major_version())
+            run.return_value = subprocess.CompletedProcess([], 1, "v2.2.5", "")
+            self.assertIsNone(module.opencode_major_version())
+            run.side_effect = subprocess.TimeoutExpired("opencode", 5)
+            self.assertIsNone(module.opencode_major_version())
+
     def test_gateway_tuple_detection_and_mutation_preserve_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
