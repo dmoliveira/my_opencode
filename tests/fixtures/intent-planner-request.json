@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "proposal_id": "request-1",
+  "scope": "example/repo",
+  "source": {
+    "kind": "user",
+    "id": "message-1",
+    "summary": "Build safe intake"
+  },
+  "research": [
+    {
+      "id": "design",
+      "path": "README.md",
+      "start_line": 1,
+      "end_line": 4
+    }
+  ]
+}
