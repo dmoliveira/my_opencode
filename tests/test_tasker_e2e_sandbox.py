@@ -24,15 +24,17 @@ class TaskerShellBoundaryTest(unittest.TestCase):
     def test_allows_exact_launcher_discovery(self) -> None:
         tasker_e2e_sandbox.validate_tasker_shell_command("command -v oc")
 
-    def test_allows_chained_read_only_health_checks(self) -> None:
-        tasker_e2e_sandbox.validate_tasker_shell_command(
-            "command -v oc && oc config --doctor"
-        )
+    def test_rejects_chained_read_only_health_checks(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "compound|chained"):
+            tasker_e2e_sandbox.validate_tasker_shell_command(
+                "command -v oc && oc config --doctor"
+            )
 
-    def test_allows_chained_read_only_help_checks(self) -> None:
-        tasker_e2e_sandbox.validate_tasker_shell_command(
-            "oc add task --help && oc add memory --help && oc link --help"
-        )
+    def test_rejects_chained_read_only_help_checks(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "compound|chained"):
+            tasker_e2e_sandbox.validate_tasker_shell_command(
+                "oc add task --help && oc add memory --help && oc link --help"
+            )
 
     def test_rejects_unapproved_or_mutating_subcommands(self) -> None:
         commands = (
@@ -44,12 +46,18 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             "oc done task_1 && oc cancel task_2",
         )
         for command in commands:
-            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "unapproved"):
+            with (
+                self.subTest(command=command),
+                self.assertRaisesRegex(AssertionError, "unapproved|compound"),
+            ):
                 tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_rejects_non_codememory_commands(self) -> None:
         for command in ("git status", "gh pr list", "python3 helper.py", "make test"):
-            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "non-Codememory"):
+            with (
+                self.subTest(command=command),
+                self.assertRaisesRegex(AssertionError, "non-Codememory"),
+            ):
                 tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_allows_single_write_with_global_options(self) -> None:
@@ -66,8 +74,11 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             "oc find task\noc add task title",
         )
         for command in commands:
-            with self.subTest(command=command), self.assertRaisesRegex(
-                AssertionError, "compound|chained|backend write"
+            with (
+                self.subTest(command=command),
+                self.assertRaisesRegex(
+                    AssertionError, "compound|chained|backend write"
+                ),
             ):
                 tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
@@ -77,12 +88,18 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             "oc --format json find task && oc --format json add task title",
         )
         for command in commands:
-            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "backend write"):
+            with (
+                self.subTest(command=command),
+                self.assertRaisesRegex(AssertionError, "backend write|compound"),
+            ):
                 tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_rejects_command_substitution(self) -> None:
         for command in ("oc get $(git rev-parse HEAD)", "oc get `whoami`"):
-            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "compound"):
+            with (
+                self.subTest(command=command),
+                self.assertRaisesRegex(AssertionError, "compound"),
+            ):
                 tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_refusal_allows_planning_write_with_execution_words_in_data(self) -> None:
@@ -95,7 +112,9 @@ class TaskerShellBoundaryTest(unittest.TestCase):
         )
         tasker_e2e_sandbox.validate_commands(
             scenario,
-            ['oc add task "Docs" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --summary "Do not run git, tests, or PR creation"'],
+            [
+                'oc add task "Docs" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --summary "Do not run git, tests, or PR creation"'
+            ],
         )
 
     def test_rejects_write_outside_prompt_sandbox(self) -> None:
@@ -108,7 +127,9 @@ class TaskerShellBoundaryTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "crossed the requested sandbox"):
             tasker_e2e_sandbox.validate_commands(
                 scenario,
-                ['oc add task "Docs" --scope other --worktree /tmp/worktree --branch sandbox/tasker'],
+                [
+                    'oc add task "Docs" --scope other --worktree /tmp/worktree --branch sandbox/tasker'
+                ],
             )
 
     def test_links_for_resolves_current_link_records(self) -> None:
@@ -150,11 +171,15 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             config_path = config_home / "opencode" / "opencode.json"
             config = json.loads(config_path.read_text(encoding="utf-8"))
 
-            self.assertTrue(tasker_path.is_symlink())
-            self.assertEqual(REPO_ROOT / "agent" / "tasker.md", tasker_path.resolve())
+            self.assertFalse(tasker_path.is_symlink())
+            self.assertEqual(
+                (REPO_ROOT / "agent" / "tasker.md").read_text(), tasker_path.read_text()
+            )
             self.assertEqual(str(config_home.resolve()), runtime_env["XDG_CONFIG_HOME"])
             self.assertEqual(1, len(config["plugin"]))
-            self.assertTrue(config["plugin"][0].endswith("plugin/gateway-core/dist/index.js"))
+            self.assertTrue(
+                config["plugin"][0][0].endswith("plugin/gateway-core/dist/index.js")
+            )
             self.assertEqual("allow", config["permission"]["bash"])
             self.assertEqual("deny", config["permission"]["edit"])
             tasker_spec = json.loads(

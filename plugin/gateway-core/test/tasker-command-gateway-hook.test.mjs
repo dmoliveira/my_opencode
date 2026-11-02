@@ -1,92 +1,28 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { createTaskerCommandGatewayHook } from "../dist/hooks/tasker-command-gateway/index.js"
+import { isAllowedTaskerCommand } from "../dist/hooks/tasker-command-gateway/command-policy.js"
+import { fixture, sandbox } from "./tasker-protocol-fixture.mjs"
 
-const create = (agent) =>
-  createTaskerCommandGatewayHook({
-    directory: process.cwd(),
-    resolveAgent: async () => agent,
-    resolveSandbox: async () => ({
-      scope: "sandbox",
-      worktree: "/tmp/worktree",
-      branch: "sandbox/tasker",
-    }),
-    knownRecordTargets: new Map([
-      ["task_119", { scope: "sandbox", worktree: "/tmp/worktree", branch: "sandbox/tasker" }],
-      ["task_120", { scope: "sandbox", worktree: "/tmp/worktree", branch: "sandbox/tasker" }],
-    ]),
-  })
-
-const invoke = (command, tool = "bash", agent = "tasker", inputAgent) =>
-  create(agent).event("tool.execute.before", {
-    input: {
-      tool,
-      sessionID: "ses-tasker",
-      ...(inputAgent ? { agent: inputAgent } : {}),
-    },
-    output: { args: { command } },
-    directory: process.cwd(),
-  })
-
-const scopedAdd = 'oc add task "planned work" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --kind chore --format json'
-
-test("allows discovery and bounded OC reads", async () => {
-  await invoke("", "read")
-  await invoke("command -v oc")
-  await invoke("oc find tasker --type task --scope sandbox && oc get task_119 --view full")
-  await invoke("oc config --doctor")
-  await invoke("oc --format json config --doctor")
+test("allows discovery and one bounded OC read", async () => {
+  for (const command of ["command -v oc", "oc config --doctor", "oc --format json config --doctor", "oc find title --type task --scope sandbox --format json"]) await fixture().execute(command)
+  await fixture().execute({}, {}, { tool: "read" })
 })
-
-test("allows one bounded OC write", async () => {
-  await invoke(scopedAdd)
-  await invoke("oc set task_119 status doing")
-  await invoke("oc link task_119 depends-on task_120")
+test("rejects arbitrary tools, compound syntax, lifecycle and configuration overrides", async () => {
+  for (const command of ["echo unsafe", "oc current; echo unsafe", "oc current && oc queue", "oc current | cat", "oc current &echo unsafe", "oc current&echo unsafe", "oc current $(id)", "oc current `id`", "oc --config /tmp/other current", "/tmp/oc current", "oc cancel task_1 --why removal --expected-revision 1 --format json", "oc set task_1 status doing --format json", "oc list task --scope other", "oc find title --type task --scope other"])
+    await assert.rejects(fixture().execute(command), /tasker_command_boundary_blocked/)
+  for (const tool of ["write", "edit", "task", "todowrite", "webfetch"]) await assert.rejects(fixture().execute({}, {}, { tool }), /Blocked planning-agent request/)
 })
-
-test("requires bounded write targets and rejects unknown options", async () => {
-  for (const command of [
-    "oc add memory note --kind note",
-    "oc add task note --scope other --worktree /tmp/worktree --branch sandbox/tasker",
-    "oc add task note --scope sandbox --worktree /tmp/other --branch sandbox/tasker",
-    "oc add task note --scope sandbox --worktree /tmp/worktree --branch other",
-    "oc add memory note --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker --config /tmp/other",
-    "oc set task_119 status doing --override {\"scope\":\"other\"}",
-    "oc set task_999 status doing",
-    "oc link task_119 arbitrary-edge task_120",
-    "oc link task_119 captured task_120",
-    "oc link task_119 depends-on task_999",
-  ]) {
-    await assert.rejects(invoke(command), /Blocked planning-agent request/)
-  }
+test("only a caller-bound native session prefix is transparent", () => {
+  const context = { sandbox, sessionID: "ses_native" }
+  assert.equal(isAllowedTaskerCommand("OPENCODE_SESSION_ID='ses_native' oc current", context), true)
+  for (const value of ["OPENCODE_SESSION_ID=other oc current", "env OPENCODE_SESSION_ID=ses_native oc current", "OPENCODE_SESSION_ID=ses_native HOME=/other oc current"]) assert.equal(isAllowedTaskerCommand(value, context), false)
 })
-
-test("blocks arbitrary tools and shell syntax", async () => {
-  for (const [command, tool] of [
-    ["echo unsafe", "bash"],
-    ["oc current; echo unsafe", "bash"],
-    ["oc current | cat", "bash"],
-    ["oc current &echo unsafe", "bash"],
-    ["oc current&echo unsafe", "bash"],
-    ["oc current && oc add memory note", "bash"],
-    ["oc current $(id)", "bash"],
-    ["oc current `id`", "bash"],
-    ["oc find tasker --type task --scope other", "bash"],
-    ["oc list task --scope other", "bash"],
-    ["/tmp/oc current", "bash"],
-    ["", "task"],
-    ["", "write"],
-    ["oc delete task_119", "bash"],
-  ]) {
-    await assert.rejects(invoke(command, tool), /Blocked planning-agent request/)
-  }
+test("fails closed on absent identity and deleted session reuse", async () => {
+  const { hook, execute } = fixture({ resolveAgent: async () => undefined })
+  await assert.rejects(execute("oc current", {}, { agent: "" }), /tasker_identity_unknown/)
+  await hook.event("session.deleted", { properties: { info: { id: "parent" } } })
+  await assert.rejects(execute("oc current"), /tasker_identity_unknown/)
 })
-
-test("fails closed when identity is unknown", async () => {
-  await assert.rejects(invoke("oc current", "bash", null), /tasker_identity_unknown/)
-})
-
-test("prefers authoritative input identity over a stale resolver", async () => {
-  await assert.rejects(invoke("oc current; echo unsafe", "bash", "reviewer", "tasker"), /Blocked planning-agent request/)
-  await invoke("echo unsafe", "bash", "tasker", "reviewer")
+test("leaves a proven unrelated agent unchanged", async () => {
+  await fixture().execute("echo safe", {}, { agent: "reviewer" })
 })

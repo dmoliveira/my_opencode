@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import json
 import re
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -243,6 +242,7 @@ class WriterVisitor(ast.NodeVisitor):
                 "copy",
                 "copy2",
                 "copyfile",
+                "copytree",
                 "move",
             }:
                 self._record_sink(

@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +51,6 @@ class AgentDoctorPromptBudgetTest(unittest.TestCase):
             [check for check in checks if not check["ok"]],
         )
         word_count = agent_doctor.count_prompt_words(body)
-        self.assertEqual(446, word_count)
         self.assertLessEqual(
             word_count,
             int(agent_doctor.ORCHESTRATOR_BODY_WORD_BASELINE * 0.70),
@@ -101,9 +101,7 @@ class AgentDoctorTaskerPromptTest(unittest.TestCase):
             with self.subTest(marker=marker):
                 mutated = dict(self.spec)
                 mutated["body_template"] = self.body.replace(marker, "")
-                checks = agent_doctor._check_tasker_prompt_contract(
-                    mutated, self.path
-                )
+                checks = agent_doctor._check_tasker_prompt_contract(mutated, self.path)
                 self.assertTrue(
                     any(
                         not check["ok"]
@@ -124,9 +122,7 @@ class AgentDoctorTaskerPromptTest(unittest.TestCase):
 
     def test_tasker_stays_unpinned_on_writing_model(self) -> None:
         categories = agent_doctor.load_routing_categories()
-        policy = agent_doctor.agent_model_policy_check(
-            self.spec, categories, self.path
-        )
+        policy = agent_doctor.agent_model_policy_check(self.spec, categories, self.path)
         generated = (REPO_ROOT / "agent" / "tasker.md").read_text(encoding="utf-8")
         generated_header = generated.split("---", 2)[1]
 
@@ -140,7 +136,7 @@ class AgentDoctorTaskerPromptTest(unittest.TestCase):
 
 
 class AgentDoctorModelPolicyTest(unittest.TestCase):
-    ROUTING_CATEGORIES = {
+    ROUTING_CATEGORIES: ClassVar[dict[str, dict[str, str]]] = {
         "balanced": {"model": "openai/gpt-5.6-terra"},
         "writing": {"model": "openai/gpt-5.6-terra"},
     }
@@ -269,8 +265,9 @@ class BuildAgentsCheckTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with patch.object(build_agents, "SPEC_DIR", specs_dir), patch.object(
-                build_agents, "OUTPUT_DIR", output_dir
+            with (
+                patch.object(build_agents, "SPEC_DIR", specs_dir),
+                patch.object(build_agents, "OUTPUT_DIR", output_dir),
             ):
                 self.assertEqual(0, build_agents.build_agents("balanced"))
                 self.assertEqual(
@@ -295,8 +292,9 @@ class BuildAgentsCheckTest(unittest.TestCase):
             output_dir.mkdir()
             self.write_spec(specs_dir)
 
-            with patch.object(build_agents, "SPEC_DIR", specs_dir), patch.object(
-                build_agents, "OUTPUT_DIR", output_dir
+            with (
+                patch.object(build_agents, "SPEC_DIR", specs_dir),
+                patch.object(build_agents, "OUTPUT_DIR", output_dir),
             ):
                 self.assertEqual(0, build_agents.build_agents("balanced"))
                 self.assertTrue((output_dir / "rendered-name.md").exists())

@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
@@ -105,7 +106,7 @@ export function createAdaptiveDelegationPolicyHook(options: {
       }
 
       const hint = `[adaptive-delegation-policy] cooldown active; recent_failures=${stats.failed}/${stats.total}; prefer low-risk scoped delegation and explicit validation steps.`
-      args.prompt = upsertDelegationPromptLine(
+      if (!isTaskerResearchArgs(args)) args.prompt = upsertDelegationPromptLine(
         String(args.prompt ?? ""),
         "[adaptive-delegation-policy]",
         hint,

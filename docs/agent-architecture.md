@@ -63,6 +63,15 @@ Task-graph-aware default:
 - Upsert generated prompt lines and focus blocks by stable header identity so rerouting or changed failure statistics replace stale context instead of accumulating copies.
 - Keep stable role/routing/focus guidance ahead of volatile session, worktree, and trace values to maximize provider prefix-cache reuse.
 
+## Tasker Planning Protocol
+
+Tasker can collect bounded read-only research before persisting a scoped graph.
+Its mandatory gateway binds the backend working directory and artifact
+provenance, verifies native inspection/revision evidence, and consumes mutation
+proofs. Lifecycle transitions remain execution-agent work. The exact contract,
+reconciliation decisions and runtime validation are in
+[`docs/specs/tasker-planning-protocol.md`](specs/tasker-planning-protocol.md).
+
 ## Tool Restriction Contract
 
 Read-only agents must keep write/edit disabled and must not be granted escalation via delegation loops.
@@ -72,6 +81,10 @@ Canonical contract and per-agent deny lists: `docs/agent-tool-restrictions.md`.
 
 - The gateway adds one compact, idempotent reminder to delegated prompts: return findings, evidence, confidence, affected paths, next action, and validation; omit the child transcript.
 - This is best-effort guidance for context and token control, not a schema parser. Specialists keep role-specific deliverables while using the shared fields when applicable.
+
+Structured Tasker research packets are immutable. They retain only an inert
+native trace header and the gateway-controlled read-only boundary; optional
+routing and focus hints do not rewrite the explicit role or packet.
 
 ## Model Routing Contract
 

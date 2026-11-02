@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata } from "../shared/agent-metadata.js";
 import { stripDelegationDescriptionContext, stripDelegationPromptContext, } from "../shared/delegation-context.js";
@@ -279,6 +280,9 @@ export function createAgentModelResolverHook(options) {
             const originalDescription = String(args.description ?? "");
             const traceId = resolveDelegationTraceId(args);
             annotateDelegationMetadata(eventPayload.output ?? {}, args);
+            // A production-authorized research packet has an explicit immutable role.
+            if (isTaskerResearchArgs(args))
+                return;
             const sid = sessionId(eventPayload);
             const metadataByAgent = loadAgentMetadata(directory);
             const knownAgents = new Set(metadataByAgent.keys());

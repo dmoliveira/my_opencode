@@ -4,6 +4,7 @@ export type TaskerSandbox = Readonly<{
     branch: string;
 }>;
 export type TaskerCommandContext = Readonly<{
+    sessionID?: string;
     sandbox?: TaskerSandbox;
     knownRecordIds?: ReadonlySet<string>;
     knownRecordTargets?: ReadonlyMap<string, TaskerSandbox>;
@@ -13,7 +14,10 @@ export type TaskerCommandInspection = Readonly<{
     verb: string;
     positionals: readonly string[];
     options: Readonly<Record<string, readonly string[]>>;
+    json: boolean;
 }>;
+export declare function isPlanningLink(source: string, relation: string, target: string): boolean;
+export declare function taskerOption(command: TaskerCommandInspection, name: string): string | undefined;
 export declare function inspectTaskerCommand(command: string, context?: TaskerCommandContext): readonly TaskerCommandInspection[] | null;
 export declare function isAllowedTaskerCommand(command: string, context?: TaskerCommandContext): boolean;
 export declare function extractTaskerRecordIds(value: unknown): Set<string>;

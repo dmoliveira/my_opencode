@@ -237,12 +237,15 @@ function taskerSandboxFromPrompt(prompt) {
     return scope && worktree && branch ? { scope, worktree, branch } : undefined;
 }
 // Creates ordered hook list using one resolved gateway config snapshot.
-function configuredHooks(ctx, runtime, resolveTaskerAgent = () => undefined, resolveTaskerSandbox = () => undefined) {
+function configuredHooks(ctx, runtime, resolveTaskerAgent = () => undefined, resolveTaskerSandbox = () => undefined, resolveTaskerParent, wasTasker, initialResearchPrompt) {
     const { directory, loadedConfig, cfg } = runtime;
     const taskerCommandGateway = createTaskerCommandGatewayHook({
         directory,
         resolveAgent: resolveTaskerAgent,
         resolveSandbox: resolveTaskerSandbox,
+        resolveParent: resolveTaskerParent,
+        wasTasker,
+        initialResearchPrompt,
         // OpenCode always supplies a client. Lightweight unit contexts without one
         // cannot execute a real tool call and are treated as non-runtime mocks.
         failClosedOnUnknownIdentity: Boolean(ctx.client),
@@ -988,7 +991,44 @@ export default function GatewayCorePlugin(ctx, options) {
         }
     };
     const resolveTaskerSandbox = async (sessionID) => sessionSandboxes.get(sessionID);
-    const hooks = configuredHooks(ctx, runtime, resolveTaskerAgent, resolveTaskerSandbox);
+    const resolveTaskerParent = ctx.client
+        ? async (sessionID) => {
+            try {
+                const response = await ctx.client?.session?.get?.({ path: { id: sessionID }, query: { directory } });
+                if (response?.data?.id !== sessionID)
+                    return undefined;
+                return response.data.parentID || null;
+            }
+            catch {
+                return undefined;
+            }
+        }
+        : undefined;
+    const wasTasker = ctx.client
+        ? async (sessionID) => {
+            try {
+                const response = await ctx.client?.session?.messages({ path: { id: sessionID }, query: { directory } });
+                if (!Array.isArray(response?.data))
+                    return undefined;
+                return response.data.some((message) => message.info?.agent?.trim().toLowerCase() === "tasker");
+            }
+            catch {
+                return undefined;
+            }
+        }
+        : undefined;
+    const initialResearchPrompt = ctx.client
+        ? async (sessionID) => {
+            try {
+                const response = await ctx.client?.session?.messages({ path: { id: sessionID }, query: { directory } });
+                return response?.data?.filter((message) => message.info?.role === "user").map((message) => message.parts?.filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n") ?? "").find((text) => text.includes("[Tasker read authority "));
+            }
+            catch {
+                return undefined;
+            }
+        }
+        : undefined;
+    const hooks = configuredHooks(ctx, runtime, resolveTaskerAgent, resolveTaskerSandbox, resolveTaskerParent, wasTasker, initialResearchPrompt);
     const hookDispatchLatency = cfg.hookDispatchLatency.enabled && gatewayEventAuditEnabled()
         ? createHookDispatchLatencyCollector({
             enabled: true,
@@ -1131,8 +1171,19 @@ export default function GatewayCorePlugin(ctx, options) {
                     executedHooks.push(validationEvidenceLedger);
                 }
             }
-            // Nothing may dispatch after this check: even the evidence ledger is
-            // inside the final binding boundary for trusted security rewrites.
+            const taskerGuard = selectedHooks.find((hook) => hook.id === "tasker-command-gateway");
+            if (taskerGuard) {
+                const result = await dispatchHook({
+                    hook: taskerGuard,
+                    eventType: "tool.execute.before.final",
+                    payload: { input, output, directory },
+                    directory,
+                });
+                if (!result.ok)
+                    throw result.error;
+            }
+            // Nothing may dispatch after this check, including Tasker's final gate:
+            // trusted dependency rewrites remain inside the last binding boundary.
             const dependencyGuard = selectedHooks.find((hook) => hook.id === "dependency-risk-guard");
             if (dependencyGuard) {
                 const result = await dispatchHook({

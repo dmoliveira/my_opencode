@@ -19,12 +19,14 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ID_RE = re.compile(r"\b(?P<kind>task|epic|memory|doc|link)_\d+\b")
-TASKER_MODEL = "openai/gpt-5.6-terra"
-SHELL_OPERATOR_CHARS = frozenset(";&|<>")
+TASKER_MODEL = "opencode/deepseek-v4.1-flash-free"
+SHELL_OPERATOR_CHARS = frozenset(";&|<>()")
 TASKER_READ_ONLY_SUBCOMMANDS = frozenset(
-    {"config", "current", "find", "get", "help", "list", "next", "queue"}
+    {"config", "current", "find", "get", "help", "history", "list", "next", "queue"}
 )
-TASKER_WRITE_SUBCOMMANDS = frozenset({"add", "link", "set"})
+TASKER_WRITE_SUBCOMMANDS = frozenset(
+    {"add", "link", "set", "unlink", "archive", "restore", "db"}
+)
 TASKER_SANDBOX_PASSTHROUGH_ENV = frozenset(
     {
         "LANG",
@@ -32,13 +34,6 @@ TASKER_SANDBOX_PASSTHROUGH_ENV = frozenset(
         "LC_CTYPE",
         "SYSTEMROOT",
         "WINDIR",
-        "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "PORTKEY_API_KEY",
-        "PORTKEY_BASE_URL",
-        "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY",
-        "GEMINI_API_KEY",
     }
 )
 TASKER_SANDBOX_CHILD_ENV = frozenset(
@@ -66,6 +61,8 @@ TASKER_SANDBOX_CHILD_ENV = frozenset(
         "OPENCODE_SESSION_ID",
         "MY_OPENCODE_SESSION_ID",
         "TASKER_E2E_ISOLATED_ENV",
+        "MY_OPENCODE_GATEWAY_EVENT_AUDIT",
+        "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH",
     }
 )
 TASKER_SANDBOX_BLOCKED_ENV = frozenset(
@@ -90,11 +87,21 @@ class Scenario:
     expect_memory_kind: bool = False
 
 
+def positive_run_count(value: str) -> int:
+    try:
+        count = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("runs must be an integer") from exc
+    if count < 1:
+        raise argparse.ArgumentTypeError("runs must be at least 1")
+    return count
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run live tasker e2e sandbox simulations"
     )
-    parser.add_argument("--runs", type=int, default=30)
+    parser.add_argument("--runs", type=positive_run_count, default=30)
     parser.add_argument("--timeout-ms", type=int, default=360000)
     parser.add_argument("--json", action="store_true")
     return parser.parse_args(argv)
@@ -182,13 +189,6 @@ def safe_environment() -> dict[str, str]:
         "LANG",
         "LC_ALL",
         "LC_CTYPE",
-        "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "PORTKEY_API_KEY",
-        "PORTKEY_BASE_URL",
-        "ANTHROPIC_API_KEY",
-        "GOOGLE_API_KEY",
-        "GEMINI_API_KEY",
     )
     environment = {"PATH": os.defpath}
     environment.update(
@@ -250,62 +250,28 @@ def configure_tasker_runtime_launchers(
         )
 
 
-def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
-    config_home.mkdir(parents=True, exist_ok=True)
+def prepare_tasker_runtime(
+    config_home: Path, *, model: str = TASKER_MODEL, scope: str = "tasker-e2e"
+) -> dict[str, str]:
+    """Prepare disposable files without resolving or invoking live launchers."""
+    config_home.mkdir(mode=0o700, parents=True, exist_ok=True)
     if config_home.is_symlink():
         raise RuntimeError("tasker e2e sandbox refuses a symlinked temporary root")
-    existing_wrapper = config_home / "bin" / "oc"
-    existing_rg_wrapper = config_home / "bin" / "rg"
-    if (
-        existing_wrapper.exists()
-        or existing_wrapper.is_symlink()
-        or (existing_rg_wrapper.exists() or existing_rg_wrapper.is_symlink())
-    ):
-        raise RuntimeError("tasker e2e sandbox refuses a pre-existing tool wrapper")
     if any(config_home.iterdir()):
         raise RuntimeError("tasker e2e sandbox requires an empty temporary root")
     config_home = config_home.resolve()
     wrapper = config_home / "bin" / "oc"
     rg_wrapper = wrapper.with_name("rg")
-    if wrapper.parent.is_symlink() or any(
-        path.exists() or path.is_symlink() for path in (wrapper, rg_wrapper)
-    ):
-        raise RuntimeError("tasker e2e sandbox refuses a pre-existing tool wrapper")
     wrapper.parent.mkdir(parents=True, exist_ok=True)
-    config_root = config_home / "opencode"
-    agent_dir = config_root / "agent"
-    agent_dir.mkdir(parents=True, exist_ok=True)
-    (agent_dir / "tasker.md").symlink_to(REPO_ROOT / "agent" / "tasker.md")
-    (config_root / "opencode.json").write_text(
-        json.dumps(
-            {
-                "$schema": "https://opencode.ai/config.json",
-                "plugin": [
-                    f"file://{(REPO_ROOT / 'plugin/gateway-core/dist/index.js').resolve()}",
-                ],
-                "permission": {
-                    "bash": "allow",
-                    "read": "allow",
-                    "glob": "allow",
-                    "grep": "allow",
-                    "list": "allow",
-                    "write": "deny",
-                    "edit": "deny",
-                    "webfetch": "deny",
-                    "task": "deny",
-                    "todowrite": "deny",
-                    "todoread": "deny",
-                },
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    codememory_root = config_home / "codememory"
-    codememory_root.mkdir(parents=True, exist_ok=True)
-    codememory_config = config_home / "codememory.sqlite.yaml"
-    codememory_database = codememory_root / "tasker-e2e.sqlite3"
+    workspace = config_home / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(REPO_ROOT / "docs", workspace / "docs", symlinks=False)
+    shutil.copy2(REPO_ROOT / "AGENTS.md", workspace / "AGENTS.md", follow_symlinks=True)
+    workspace_codememory = workspace / ".codememory"
+    workspace_codememory.mkdir(mode=0o700)
+    codememory_root = workspace_codememory
+    codememory_config = codememory_root / "config.sqlite.yaml"
+    codememory_database = codememory_root / "codememory.sqlite3"
     codememory_cache = config_home / "codememory-cache"
     codememory_config.write_text(
         "\n".join(
@@ -316,17 +282,13 @@ def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
                 "  url: ''",
                 f"  path: {json.dumps(str(codememory_database))}",
                 "  max_connections: 1",
-                "models:",
-                "  summary_model: opencode-small",
-                "  summary_tool: auto",
-                "  decision_model: opencode-small",
                 "cache:",
                 "  enabled: true",
                 f"  dir: {json.dumps(str(codememory_cache))}",
                 "  reuse_unchanged: true",
                 "  ttl_minutes: 60",
                 "defaults:",
-                "  scope_key: tasker-e2e",
+                f"  scope_key: {json.dumps(scope)}",
                 "  canonicalize_worktree: true",
                 "  prefer_alias: true",
                 "session:",
@@ -338,30 +300,78 @@ def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
         encoding="utf-8",
     )
     codememory_config.chmod(0o600)
-    workspace = config_home / "workspace"
-    workspace.mkdir(parents=True, exist_ok=True)
-    (workspace / "docs").symlink_to(REPO_ROOT / "docs", target_is_directory=True)
-    (workspace / "AGENTS.md").symlink_to(REPO_ROOT / "AGENTS.md")
-    workspace_codememory = workspace / ".codememory"
-    workspace_codememory.mkdir(parents=True, exist_ok=True)
-    (workspace_codememory / "config.sqlite.yaml").write_text(
-        codememory_config.read_text(encoding="utf-8"), encoding="utf-8"
+    config_root = config_home / "opencode"
+    agent_dir = config_root / "agent"
+    agent_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / "agent" / "tasker.md", agent_dir / "tasker.md")
+    for name in ("explore", "librarian"):
+        content = (REPO_ROOT / "agent" / f"{name}.md").read_text(encoding="utf-8")
+        header, separator, body = content.partition("\n---\n")
+        header = re.sub(r"(?m)^model: .*$", f"model: {model}", header)
+        if not re.search(r"(?m)^model:", header):
+            header += f"\nmodel: {model}"
+        (agent_dir / f"{name}.md").write_text(
+            header + separator + body, encoding="utf-8"
+        )
+    research_permissions = {
+        "bash": "deny",
+        "write": "deny",
+        "edit": "deny",
+        "task": "deny",
+        "todowrite": "deny",
+        "todoread": "deny",
+        "webfetch": "allow",
+    }
+    (config_root / "opencode.json").write_text(
+        json.dumps(
+            {
+                "$schema": "https://opencode.ai/config.json",
+                "snapshot": False,
+                "model": model,
+                "small_model": model,
+                "plugin": [
+                    [
+                        f"file://{(REPO_ROOT / 'plugin/gateway-core/dist/index.js').resolve()}",
+                        {"hooks": {"enabled": False}},
+                    ]
+                ],
+                "agent": {
+                    "build": {"disable": True},
+                    "general": {"disable": True},
+                    "plan": {"disable": True},
+                    "explore": {"permission": research_permissions},
+                    "librarian": {"permission": research_permissions},
+                },
+                "permission": {
+                    "bash": "allow",
+                    "read": "allow",
+                    "glob": "allow",
+                    "grep": "allow",
+                    "list": "allow",
+                    "write": "deny",
+                    "edit": "deny",
+                    "webfetch": "deny",
+                    "task": {"*": "deny", "explore": "allow", "librarian": "allow"},
+                    "todowrite": "deny",
+                    "todoread": "deny",
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
     )
     scenario_root = config_home / "scenarios"
     scenario_root.mkdir(parents=True, exist_ok=True)
     runtime_paths = {
-        "home": config_home / "home",
-        "cache": config_home / "cache",
-        "data": config_home / "data",
-        "state": config_home / "state",
-        "tmp": config_home / "tmp",
-        "config_dirs": config_home / "config-dirs",
+        name: config_home / name
+        for name in ("home", "cache", "data", "state", "tmp", "config-dirs")
     }
     for path in runtime_paths.values():
         path.mkdir(parents=True, exist_ok=True)
     runtime_env = {
         name: os.environ[name]
-        for name in TASKER_SANDBOX_PASSTHROUGH_ENV
+        for name in ("LANG", "LC_ALL", "LC_CTYPE", "SYSTEMROOT", "WINDIR")
         if name in os.environ
     }
     runtime_env.update(
@@ -369,7 +379,7 @@ def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
             "TASKER_E2E_ISOLATED_ENV": "1",
             "HOME": str(runtime_paths["home"]),
             "XDG_CONFIG_HOME": str(config_home),
-            "XDG_CONFIG_DIRS": str(runtime_paths["config_dirs"]),
+            "XDG_CONFIG_DIRS": str(runtime_paths["config-dirs"]),
             "XDG_CACHE_HOME": str(runtime_paths["cache"]),
             "XDG_DATA_HOME": str(runtime_paths["data"]),
             "XDG_STATE_HOME": str(runtime_paths["state"]),
@@ -386,6 +396,10 @@ def prepare_tasker_runtime(config_home: Path) -> dict[str, str]:
             "TASKER_E2E_RG_WRAPPER": str(rg_wrapper),
             "TASKER_E2E_WORKSPACE": str(workspace),
             "TASKER_E2E_SCENARIO_ROOT": str(scenario_root),
+            "MY_OPENCODE_GATEWAY_EVENT_AUDIT": "1",
+            "MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH": str(
+                config_home / "gateway-audit.jsonl"
+            ),
         }
     )
     return runtime_env
@@ -459,11 +473,13 @@ def validate_tasker_shell_command(command: str) -> None:
     if "\n" in command or "\r" in command or "$(" in command or "`" in command:
         raise AssertionError(f"Tasker emitted compound shell syntax: {command}")
 
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()")
     lexer.whitespace_split = True
     lexer.commenters = ""
     try:
         tokens = list(lexer)
+        if tokens and re.fullmatch(r"OPENCODE_SESSION_ID=ses_[A-Za-z0-9]+", tokens[0]):
+            tokens.pop(0)
     except ValueError as exc:
         raise AssertionError(f"Tasker emitted invalid shell syntax: {command}") from exc
     if not tokens:
@@ -472,12 +488,9 @@ def validate_tasker_shell_command(command: str) -> None:
     segments: list[list[str]] = [[]]
     for token in tokens:
         if token == "&&":
-            if not segments[-1]:
-                raise AssertionError(
-                    f"Tasker emitted invalid shell chaining: {command}"
-                )
-            segments.append([])
-            continue
+            raise AssertionError(
+                f"Tasker emitted compound or chained shell syntax: {command}"
+            )
         if token and set(token) <= SHELL_OPERATOR_CHARS:
             raise AssertionError(
                 f"Tasker emitted unsafe chained or redirected shell syntax: {command}"
@@ -487,8 +500,10 @@ def validate_tasker_shell_command(command: str) -> None:
         raise AssertionError(f"Tasker emitted invalid shell chaining: {command}")
 
     write_count = 0
+
     def has_option(segment: list[str], name: str) -> bool:
         return any(token == name or token.startswith(name + "=") for token in segment)
+
     for segment in segments:
         if segment == ["command", "-v", "oc"]:
             continue
@@ -506,8 +521,13 @@ def validate_tasker_shell_command(command: str) -> None:
                 raise AssertionError(
                     f"Tasker combined a backend write with another shell command: {command}"
                 )
-            if subcommand == "add" and not all(has_option(segment, option) for option in ("--scope", "--worktree", "--branch")):
-                raise AssertionError(f"Tasker add command lacks explicit scope/worktree/branch: {command}")
+            if subcommand == "add" and not all(
+                has_option(segment, option)
+                for option in ("--scope", "--worktree", "--branch")
+            ):
+                raise AssertionError(
+                    f"Tasker add command lacks explicit scope/worktree/branch: {command}"
+                )
             write_count += 1
             continue
         raise AssertionError(
@@ -629,7 +649,10 @@ def choose_id(found: dict[str, set[str]], kind: str, title: str) -> str:
 
 
 def build_scenarios(
-    total_runs: int, *, worktree_root: Path | None = None
+    total_runs: int,
+    *,
+    worktree_root: Path | None = None,
+    runtime_workspace: Path | None = None,
 ) -> list[Scenario]:
     relation_phrases = [
         "make docs depend on migration",
@@ -646,7 +669,7 @@ def build_scenarios(
     for index in range(total_runs):
         scope = f"tasker-e2e-{stamp}-{index:02d}"
         prefix = f"tasker-e2e-{index:02d}"
-        worktree = worktree_root / f"{prefix}-worktree"
+        worktree = runtime_workspace or worktree_root / f"{prefix}-worktree"
         worktree.mkdir(parents=True, exist_ok=True)
         if index % 5 == 0:
             task_title = f"{prefix} task"
@@ -936,7 +959,7 @@ def run_scenario(
     ACTIVE_OC_ENV = runtime_env
     ACTIVE_OC_CWD = Path(runtime_env["TASKER_E2E_WORKSPACE"])
     run_count = 2 if scenario.mode == "duplicate" else 1
-    last_events: list[dict[str, Any]] = []
+    validated_runs: list[dict[str, Any]] = []
     try:
         for _ in range(run_count):
             result = run_process(
@@ -957,10 +980,13 @@ def run_scenario(
                 timeout_ms=timeout_ms,
                 env_overrides=runtime_env,
             )
-            last_events = parse_events(result.stdout)
+            events = parse_events(result.stdout)
             if result.returncode != 0:
                 raise AssertionError(result.stderr or result.stdout)
-        return validate_scenario(scenario, last_events)
+            validated_runs.append(validate_scenario(scenario, events))
+        outcome = validated_runs[-1]
+        outcome["validated_runs"] = len(validated_runs)
+        return outcome
     finally:
         ACTIVE_OC_ENV = previous_oc_env
         ACTIVE_OC_CWD = previous_oc_cwd
@@ -1002,6 +1028,7 @@ def main(argv: list[str]) -> int:
             scenarios = build_scenarios(
                 args.runs,
                 worktree_root=Path(runtime_env["TASKER_E2E_SCENARIO_ROOT"]),
+                runtime_workspace=Path(runtime_env["TASKER_E2E_WORKSPACE"]),
             )
             for scenario in scenarios:
                 try:

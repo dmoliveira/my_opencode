@@ -109,11 +109,13 @@ test("buildHookMessageBody includes metadata only when present", () => {
   assert.equal(body.agent, "build")
   assert.equal(body.model?.providerID, "openai")
   assert.equal(body.parts[0]?.text, "continue work")
+  assert.equal(body.parts[0]?.synthetic, true)
 
   const bodyWithoutIdentity = buildHookMessageBody("continue work", {})
   assert.equal("agent" in bodyWithoutIdentity, false)
   assert.equal("model" in bodyWithoutIdentity, false)
   assert.equal(bodyWithoutIdentity.parts[0]?.text, "continue work")
+  assert.equal(bodyWithoutIdentity.parts[0]?.synthetic, true)
 })
 
 test("injectHookMessage truncates oversized content before promptAsync", async () => {

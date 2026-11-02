@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { buildCompactDecisionCacheKey, writeDecisionComparisonAudit, } from "../shared/llm-decision-runtime.js";
@@ -111,7 +112,8 @@ export function createDelegationFallbackOrchestratorHook(options) {
                 const fallbackHint = "[delegation-fallback-orchestrator] previous delegation failed; applying fallback route category=general and removing explicit subagent_type.";
                 delete args.subagent_type;
                 args.category = "general";
-                args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[delegation-fallback-orchestrator]", fallbackHint);
+                if (!isTaskerResearchArgs(args))
+                    args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[delegation-fallback-orchestrator]", fallbackHint);
                 lastFailureByDelegation.delete(delegationKey(sid, failure.traceId));
                 writeGatewayEventAudit(directory, {
                     hook: "delegation-fallback-orchestrator",

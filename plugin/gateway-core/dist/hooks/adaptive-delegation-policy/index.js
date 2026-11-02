@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { getDelegationFailureStats, } from "../shared/delegation-runtime-state.js";
@@ -64,7 +65,8 @@ export function createAdaptiveDelegationPolicyHook(options) {
                 throw new Error(`Blocked delegation: adaptive cooldown active due to recent failures; category=${category} is temporarily restricted.`);
             }
             const hint = `[adaptive-delegation-policy] cooldown active; recent_failures=${stats.failed}/${stats.total}; prefer low-risk scoped delegation and explicit validation steps.`;
-            args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[adaptive-delegation-policy]", hint);
+            if (!isTaskerResearchArgs(args))
+                args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[adaptive-delegation-policy]", hint);
         },
     };
 }

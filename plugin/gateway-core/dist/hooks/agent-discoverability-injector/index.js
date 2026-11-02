@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 function sessionId(payload) {
     return String(payload.input?.sessionID ?? payload.input?.sessionId ?? "").trim();
 }
@@ -55,7 +56,8 @@ export function createAgentDiscoverabilityInjectorHook(options) {
                 ? `[AGENT CATALOG] Inspect details with: /agent-catalog explain ${subagentType}`
                 : "[AGENT CATALOG] Inspect details with: /agent-catalog list";
             // Prompt is the canonical delegation channel; avoid duplicating static catalog text in description.
-            args.prompt = prependHint(String(args.prompt ?? ""), hint);
+            if (!isTaskerResearchArgs(args))
+                args.prompt = prependHint(String(args.prompt ?? ""), hint);
             if (sid) {
                 lastInjectedAtBySession.set(sid, now);
             }

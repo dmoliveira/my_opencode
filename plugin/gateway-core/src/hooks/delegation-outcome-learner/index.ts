@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
@@ -101,7 +102,7 @@ export function createDelegationOutcomeLearnerHook(options: {
         if (adaptedCategory !== currentCategory) {
           args.category = adaptedCategory
         }
-        args.prompt = upsertDelegationPromptLine(
+        if (!isTaskerResearchArgs(args)) args.prompt = upsertDelegationPromptLine(
           String(args.prompt ?? ""),
           "[DELEGATION LEARNER]",
           hint,

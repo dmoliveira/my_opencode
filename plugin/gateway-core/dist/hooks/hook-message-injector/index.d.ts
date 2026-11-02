@@ -40,6 +40,7 @@ interface SessionClient {
             parts: Array<{
                 type: string;
                 text: string;
+                synthetic?: boolean;
             }>;
             agent?: string;
             model?: {
@@ -80,6 +81,7 @@ export declare function buildHookMessageBody(content: string, identity: HookMess
     parts: Array<{
         type: string;
         text: string;
+        synthetic?: boolean;
     }>;
     agent?: string;
     model?: {

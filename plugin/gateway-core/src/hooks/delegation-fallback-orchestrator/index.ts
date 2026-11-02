@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js"
 import { writeGatewayEventAudit } from "../../audit/event-audit.js"
 import type { GatewayHook } from "../registry.js"
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js"
@@ -173,7 +174,7 @@ export function createDelegationFallbackOrchestratorHook(options: {
           "[delegation-fallback-orchestrator] previous delegation failed; applying fallback route category=general and removing explicit subagent_type."
         delete args.subagent_type
         args.category = "general"
-        args.prompt = upsertDelegationPromptLine(
+        if (!isTaskerResearchArgs(args)) args.prompt = upsertDelegationPromptLine(
           String(args.prompt ?? ""),
           "[delegation-fallback-orchestrator]",
           fallbackHint,
