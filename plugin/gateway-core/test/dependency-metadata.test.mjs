@@ -193,7 +193,7 @@ test("checker has exactly parser/version/read-only check calls, private stage cl
   } finally { f.close() }
 })
 
-for (const kind of ["input", "tool", "parser", "version", "lock", "stage", "sentinel", "duplicate-toml"]) test(`checker fails closed on ${kind}`, () => {
+for (const kind of ["input", "tool", "parser", "interpreter", "version", "lock", "stage", "sentinel", "duplicate-toml"]) test(`checker fails closed on ${kind}`, () => {
   const f = fixture()
   const base = f.boundary.subprocess
   try {
@@ -202,6 +202,7 @@ for (const kind of ["input", "tool", "parser", "version", "lock", "stage", "sent
     f.boundary.subprocess = (...args) => {
       const [exe, argv, cwd] = args
       if (kind === "parser" && exe === f.snapshot.python) throw new Error("parser_failed")
+      if (kind === "interpreter" && exe === f.snapshot.python) return JSON.stringify({ project, original: parsed, candidate: converted(), version: "3.12.999" })
       if (kind === "version" && argv[0] === "--version") return "uv 0.0.0"
       if (kind === "lock" && argv[0] === "lock") throw new Error("offline_check_failed")
       if (kind === "stage") writeFileSync(join(cwd, "uv.lock"), "changed")
@@ -222,6 +223,13 @@ for (const kind of ["input", "tool", "parser", "version", "lock", "stage", "sent
 test("strict parser validates Unicode proof through the same checker boundary without a resolver", () => {
   const f = fixture(), base = f.boundary.subprocess
   try {
+    // The adapter executes this installed interpreter, not the mocked patch pin.
+    // Bind its actual patch version in both the source pin and fixture snapshot.
+    const version = execFileSync("python3.12", ["-I", "-S", "-B", "-c", "import sys;print('.'.join(map(str,sys.version_info[:3])))"], { encoding: "utf8" }).trim()
+    assert.match(version, /^3\.12\.\d+$/)
+    writeFileSync(join(f.root, ".python-version"), version + "\n")
+    f.snapshot.version = version
+    f.snapshot.inputs[".python-version"] = digest(version + "\n")
     f.boundary.subprocess = (exe, args, ...rest) => exe === f.snapshot.python
       ? execFileSync("python3.12", args, { encoding: "utf8" }) : base(exe, args, ...rest)
     checkMetadata(f.snapshot, [f.sentinel], f.boundary)
