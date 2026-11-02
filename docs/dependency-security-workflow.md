@@ -37,6 +37,16 @@ The runner receives bounded canonical snapshot evidence containing executable/he
 
 ## Privacy and deployment
 
+### Patch target classification
+
+The patch guard checks native Add/Update/Delete operation paths and both rename
+endpoints. Protected filenames appearing only inside source, test or documentation
+hunks are not file operations. Raw and normalized endpoint checks remain
+conservative; malformed/ambiguous patches, quoted/control-character targets and
+patches exceeding 4 MiB of UTF-8 bytes fail closed. This is lexical target
+classification, not filesystem alias/symlink hardening. It grants neither lock
+editing permission nor installation authority.
+
 Audit events contain reason codes, not project names, dependency inventories or credentials. Runner failures are redacted; local/private evidence is not copied into public change descriptions. This is an instrumented command guard, not an OS sandbox for arbitrary malicious programs; ordinary tool permissions and project-scope rules still apply.
 
 Privileged concurrent replacement between the last static check and OS process creation is outside this guard's threat model. Use OS isolation when hostile concurrent processes are in scope; do not interpret hash continuity as an execution sandbox.

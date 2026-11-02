@@ -1,5 +1,5 @@
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { AuthorizationLedger, AUTH_REQUEST, SETUP_REQUEST, MAX_STATE, PENDING_MS, PERMIT_MS } from "./protocol.js";
 import { capability } from "./capability.js";
 import { capture, recapture, captureAuditor, digest, exists, runnerCommand } from "./safety.js";
@@ -12,6 +12,65 @@ function targetPath(payload) {
 export function nativeDependencyCommand(command, session) {
     const prefix = `OPENCODE_SESSION_ID='${session.replace(/'/g, `'"'"'`)}' `;
     return session && command.startsWith(prefix) ? { command: command.slice(prefix.length), prefix } : { command, prefix: "" };
+}
+/** Conservative native patch grammar; hunk content is never an operation target. */
+export function patchFileTargets(patch) {
+    if (Buffer.byteLength(patch, "utf8") > 4 * 1024 * 1024)
+        return null;
+    const lines = patch.replace(/\r\n?/g, "\n").trim().split("\n");
+    if (lines[0]?.trim() !== "*** Begin Patch" || lines.at(-1)?.trim() !== "*** End Patch")
+        return null;
+    const targets = [];
+    let kind;
+    let canMove = false;
+    const addTarget = (raw) => {
+        const path = raw.trim();
+        // Quotes are literal upstream, not shell syntax. Refuse ambiguous spellings.
+        if (!path || path.length > 4096 || /[\u0000-\u001f\u007f'"]/.test(path))
+            return false;
+        targets.push(path);
+        return true;
+    };
+    for (const line of lines.slice(1, -1)) {
+        if (["*** Begin Patch", "*** End Patch"].includes(line.trim()))
+            return null;
+        const header = /^\*\*\* (Add|Update|Delete) File:(.*)$/.exec(line);
+        if (header) {
+            if (!addTarget(header[2]))
+                return null;
+            kind = header[1];
+            canMove = kind === "Update";
+            continue;
+        }
+        if (line.startsWith("*** Move to:")) {
+            if (!canMove || !addTarget(line.slice("*** Move to:".length)))
+                return null;
+            canMove = false;
+            continue;
+        }
+        canMove = false;
+        if (line === "*** End of File" && kind === "Update") {
+            kind = undefined;
+            continue;
+        }
+        if (line.startsWith("***"))
+            return null;
+        if (!line.trim())
+            continue;
+        if (kind === "Add" && line.startsWith("+"))
+            continue;
+        if (kind === "Update" && (line.startsWith("@@") || /^[ +\-]/.test(line)))
+            continue;
+        return null;
+    }
+    return targets.length ? targets : null;
+}
+function protectedPatchTarget(path, pattern) {
+    const portable = (value) => value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const rawPath = portable(path);
+    const rawPattern = portable(pattern);
+    // Keep the raw comparison too: normalization must never erase a protected suffix.
+    return rawPath.endsWith(rawPattern) || posix.normalize(rawPath).endsWith(posix.normalize(rawPattern));
 }
 /** Instrumented command guard, not a sandbox for arbitrary user-authored programs. */
 export function dependencyCommandRisk(command) {
@@ -209,7 +268,8 @@ export function createDependencyRiskGuardHook(options) {
             else {
                 if (tool === "apply_patch") {
                     const patch = eventPayload.output?.args?.patchText ?? eventPayload.output?.args?.patch ?? "";
-                    if (!patterns.some((pattern) => patch.includes(pattern)))
+                    const targets = patchFileTargets(patch);
+                    if (targets && !targets.some((path) => patterns.some((pattern) => protectedPatchTarget(path, pattern))))
                         return;
                 }
                 else {
