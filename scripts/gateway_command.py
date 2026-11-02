@@ -2847,11 +2847,9 @@ def command_disable(as_json: bool) -> int:
 def command_status(as_json: bool) -> int:
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     config, _ = load_config()
-    emit(
-        status_payload(config, home, Path.cwd(), cleanup_orphans=True),
-        as_json=as_json,
-    )
-    return 0
+    payload = status_payload(config, home, Path.cwd(), cleanup_orphans=True)
+    emit(payload, as_json=as_json)
+    return 1 if payload.get("result") == "FAIL" else 0
 
 
 # Runs gateway plugin diagnostics with quick fixes.

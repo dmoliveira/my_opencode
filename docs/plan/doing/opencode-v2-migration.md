@@ -31,6 +31,8 @@ Status: in progress. This inventory identifies surfaces to investigate; it is no
 
 ## Progress
 
-An experimental, unconfigured context adapter registers redaction for V2 context, compaction, generate and title hooks. Unit tests exercise all four registrations, malformed inputs and registration cleanup. `scripts/gateway_v2_context_live_smoke.py` runs OpenCode against a localhost capture provider in an isolated home; it demonstrated synthetic prompt redaction for the requests observed in that run. This does **not** verify all four request kinds live, later plugin mutations, request overlays, HTTP/WebSocket transport coverage, tool guards, or complete gateway protection. It must not be enabled as a production boundary yet.
+Experimental, unconfigured adapters cover V2 model-context and native transport redaction, successful tool-output redaction, two shell guards, and write/protected-worktree guards. `make gateway-v2-slice-smoke` builds and exercises them with isolated OpenCode processes, synthetic data, disposable Git worktrees and a localhost provider. The live checks cover a late context mutation before the HTTP hook, rejection of unsupported HTTP content, allowed and blocked shell commands, tool-output redaction, and linked versus primary worktree writes.
+
+These are **not** complete gateway protection or parity. In particular, transport-hook ordering and non-native providers, WebSocket behavior, images and other encodings, large/resumed histories, all four request kinds live, tool errors, command and event lifecycles, and the remaining guards require validation. The adapters are intentionally not registered in the user's configuration.
 
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.

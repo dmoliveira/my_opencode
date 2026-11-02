@@ -40,11 +40,15 @@ def main() -> int:
             plugin.mkdir(parents=True)
             (plugin / "index.ts").write_text(
                 'import { Plugin } from "@opencode/plugin"\n'
-                f"import {{ registerV2ContextRedaction }} from {json.dumps((dist / 'v2/provider-boundary.js').as_uri())}\n"
+                f"import {{ registerV2ContextRedaction, registerV2TransportRedaction }} from {json.dumps((dist / 'v2/provider-boundary.js').as_uri())}\n"
                 f"import {{ createSecretRedactor }} from {json.dumps((dist / 'hooks/shared/secret-redaction.js').as_uri())}\n"
                 'export default Plugin.define({ id: "v2-context-probe", async setup(ctx) {\n'
                 f'  const redactor = createSecretRedactor({{ patterns: [{json.dumps(CANARY)}], redactionToken: "[REDACTED]", limits: {{ maxDepth: 64, maxNodes: 100000, maxChars: 5000000 }} }})\n'
-                "  return await registerV2ContextRedaction(ctx.session, redactor)\n"
+                "  const disposeContext = await registerV2ContextRedaction(ctx.session, redactor)\n"
+                f'  await ctx.session.hook("context", (event) => event.system.push({{ type: "text", text: "late-marker {CANARY}" }}))\n'
+                '  if (process.env.V2_TEST_BAD_CONTENT === "1") await ctx.session.hook("http.request", (event) => { const headers = new Headers(event.request.headers); headers.set("content-type", "text/plain"); event.request = new Request(event.request, { headers }) })\n'
+                "  const disposeTransport = await registerV2TransportRedaction(ctx.session, redactor)\n"
+                "  return async () => { await disposeTransport(); await disposeContext() }\n"
                 "} })\n",
                 encoding="utf-8",
             )
@@ -63,7 +67,8 @@ def main() -> int:
                     }
                 },
             }
-            (project / "opencode.json").write_text(json.dumps(config), encoding="utf-8")
+            config_path = project / "opencode.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
             env = isolated_env(home, root / "audit.jsonl")
             env.pop("OPENCODE_SESSION_ID", None)
             result = subprocess.run(
@@ -84,28 +89,104 @@ def main() -> int:
             )
             with state.lock:
                 captured = json.dumps(state.requests)
+                request_count = len(state.requests)
+            env["V2_TEST_BAD_CONTENT"] = "1"
+            negative = subprocess.run(
+                [
+                    "opencode",
+                    "run",
+                    "--standalone",
+                    "--model",
+                    "capture/mock",
+                    f"Reply MOCK_OK. {CANARY} negative-control",
+                ],
+                cwd=project,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            with state.lock:
+                negative_requests = len(state.requests) - request_count
+            negative_failed_closed = (
+                negative_requests == 0
+                and "refusing unscanned request" in (negative.stderr + negative.stdout)
+            )
+            # The installed configuration still uses legacy AI SDK providers.
+            env.pop("V2_TEST_BAD_CONTENT")
+            config["providers"]["capture"]["package"] = (
+                "aisdk:@ai-sdk/openai-compatible"
+            )
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+            with state.lock:
+                before_aisdk = len(state.requests)
+            aisdk = subprocess.run(
+                [
+                    "opencode",
+                    "run",
+                    "--standalone",
+                    "--model",
+                    "capture/mock",
+                    f"Reply MOCK_OK. {CANARY} aisdk-control-marker",
+                ],
+                cwd=project,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=90,
+                check=False,
+            )
+            with state.lock:
+                aisdk_requests = list(state.requests[before_aisdk:])
+            aisdk_captured = json.dumps(aisdk_requests)
+            aisdk_protected = (
+                aisdk.returncode == 0
+                and bool(aisdk_requests)
+                and CANARY not in aisdk_captured
+                and "late-marker [REDACTED]" in aisdk_captured
+                and "aisdk-control-marker" in aisdk_captured
+            )
             passed = (
                 result.returncode == 0
-                and bool(state.requests)
+                and request_count > 0
                 and CANARY not in captured
                 and "[REDACTED]" in captured
                 and "control-marker" in captured
+                and "late-marker [REDACTED]" in captured
+                and negative_failed_closed
+                and aisdk_protected
             )
             print(
                 json.dumps(
                     {
                         "result": "PASS" if passed else "FAIL",
                         "returncode": result.returncode,
-                        "request_count": len(state.requests),
+                        "request_count": request_count,
                         "canary_absent": CANARY not in captured,
                         "redaction_present": "[REDACTED]" in captured,
                         "control_present": "control-marker" in captured,
+                        "late_injection_redacted": "late-marker [REDACTED]" in captured,
+                        "unsupported_content_blocked": negative_failed_closed,
+                        "negative_request_count": negative_requests,
+                        "aisdk_protected": aisdk_protected,
+                        "aisdk_request_count": len(aisdk_requests),
                     }
                 )
             )
             if not passed:
                 print(
                     (result.stderr + "\n" + result.stdout).replace(CANARY, "[CANARY]")[
+                        -4000:
+                    ]
+                )
+                print(
+                    (negative.stderr + "\n" + negative.stdout).replace(
+                        CANARY, "[CANARY]"
+                    )[-4000:]
+                )
+                print(
+                    (aisdk.stderr + "\n" + aisdk.stdout).replace(CANARY, "[CANARY]")[
                         -4000:
                     ]
                 )

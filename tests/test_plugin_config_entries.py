@@ -21,6 +21,15 @@ import plugin_command
 
 
 class PluginConfigEntriesTest(unittest.TestCase):
+    def test_gateway_status_failure_uses_nonzero_exit(self) -> None:
+        module = importlib.import_module("gateway_command")
+        with (
+            patch.object(module, "load_config", return_value=({}, Path("test"))),
+            patch.object(module, "status_payload", return_value={"result": "FAIL"}),
+            patch.object(module, "emit"),
+        ):
+            self.assertEqual(1, module.command_status(True))
+
     def test_gateway_v2_is_not_reported_as_ready(self) -> None:
         module = importlib.import_module("gateway_command")
         result = module.gateway_runtime_mode(

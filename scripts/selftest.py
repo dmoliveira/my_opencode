@@ -13018,11 +13018,16 @@ exit 0
             )
 
         result = run_gateway("status", "--json")
-        expect(result.returncode == 0, f"gateway status failed: {result.stderr}")
         gateway_status = parse_json_output(result.stdout)
+        gateway_cli_v2 = (gateway_status.get("opencode_cli_major") or 0) >= 2
         expect(
-            gateway_status.get("result") == "PASS",
-            "gateway status should return PASS",
+            result.returncode == (1 if gateway_cli_v2 and gateway_status.get("enabled") else 0),
+            f"gateway status exit did not reflect V2 compatibility: {result.stderr}",
+        )
+        expect(
+            gateway_status.get("result")
+            == ("FAIL" if gateway_cli_v2 and gateway_status.get("enabled") else "PASS"),
+            "gateway status should flag the V1 plugin under the V2 CLI",
         )
         expect(
             isinstance(gateway_status.get("orphan_cleanup"), dict),
@@ -13178,7 +13183,7 @@ exit 0
 
         result = run_gateway("status", "--json")
         expect(
-            result.returncode == 0,
+            result.returncode == (1 if gateway_cli_v2 else 0),
             f"gateway status stale cleanup failed: {result.stderr}",
         )
         gateway_status_stale = parse_json_output(result.stdout)
@@ -13210,7 +13215,7 @@ exit 0
         gateway_state_lock_token.chmod(0o600)
         result = run_gateway("status", "--json")
         expect(
-            result.returncode == 0,
+            result.returncode == (1 if gateway_cli_v2 else 0),
             f"gateway status lock diagnostics failed: {result.stderr}",
         )
         gateway_status_locked = parse_json_output(result.stdout)
@@ -13261,8 +13266,8 @@ exit 0
             env_override={"MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE": "0"},
         )
         expect(
-            result.returncode == 0,
-            "gateway enable should use the direct entry when bun is unavailable: "
+            result.returncode == (1 if gateway_cli_v2 else 0),
+            "gateway enable should reject the V1 entry on V2 and otherwise not require bun: "
             + (result.stderr or result.stdout),
         )
         gateway_enabled_without_bun = parse_json_output(result.stdout)
@@ -19991,6 +19996,7 @@ version: 1
                 "gateway_plugin_ready",
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
+                "gateway_plugin_incompatible_opencode_v2",
             },
             "autopilot doctor should include deterministic gateway runtime mode diagnostics",
         )
@@ -20105,6 +20111,7 @@ version: 1
                 "gateway_plugin_ready",
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
+                "gateway_plugin_incompatible_opencode_v2",
             },
             "autopilot status should expose deterministic gateway runtime routing mode",
         )
@@ -20202,6 +20209,7 @@ version: 1
             in {
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
+                "gateway_plugin_incompatible_opencode_v2",
                 "gateway_plugin_ready",
             },
             "autopilot status should keep direct gateway diagnostics when bun is unavailable",
