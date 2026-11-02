@@ -65,3 +65,71 @@ node plugin/gateway-core/test/dependency-authorization-audit-smoke.mjs
 ```
 
 The smoke requires real registry access and the existing scanner cache; unit tests use synthetic boundaries. Full gateway tests and repository checks remain required before delivery. Do not represent unavailable checks, an unrelated baseline failure, or source-only tests as successful activation.
+
+## Phase A: read-only editable-root feasibility
+
+`captureMetadata` uses the named informational policy
+`read-only-editable-dot-metadata-v1`. It accepts exactly one static editable-dot
+root whose name/version match the manifest, with explicit `package = false`, no
+backend/dynamic metadata, and the existing registry/wheel restrictions. Its
+conservative manifest subset excludes URL dependencies, extras/groups beyond the
+supported default, custom tool configuration and workspaces. Ordinary `capture`
+still requires a virtual root. Metadata snapshots are explicitly rejected by
+normal audit/setup entry, scanner discovery/capture and runner command creation;
+they cannot issue an audit frame or installation permission.
+
+`checkMetadata` reads hash-bound frozen inputs and accepts only one canonical
+`source = { editable = "." }` line (optional trailing comment). It changes exactly
+the eight UTF-8 bytes `editable` to the seven bytes `virtual`; prefix/suffix bytes
+are retained exactly. The bound interpreter's isolated standard-library
+`tomllib` strictly parses both versions, rejects duplicate keys, and proves that
+the entire parsed document differs only in that root source. Every external
+record, edge, hash, top-level field, comment and other byte is preserved. Other
+formatting fails closed rather than invoking a TOML rewrite or regeneration.
+
+The checker resolves and validates the existing temporary parent before creating
+staging. A parent equal to or beneath the source root is rejected, with no
+fallback. It walks that parent and every ancestor through filesystem root and
+rejects any `pyproject.toml`, `uv.toml` or `.python-version` entry, regardless of
+file type (including dangling symlinks). It stages only frozen manifest, pin and
+candidate in a private directory, binding both parent and staging directory
+identities. Each parser, version and consistency subprocess first rechecks this
+ancestry/isolation boundary, the bound snapshot, staged bytes and supplied
+original/environment sentinel hashes. `--no-config`, explicit cwd/project and
+an arbitrary Git marker alone do not establish workspace isolation.
+The same checks run after completion or failure, and staging is removed. Its only
+resolver operation is:
+
+```text
+uv lock --check --offline --no-config --no-cache --no-build --no-python-downloads --python <bound-installed-interpreter> --project <private-stage>
+```
+
+UV must identify as **0.13.6**, and the installed interpreter must match the exact
+pin. `--no-cache` documents independence from existing dependency metadata cache;
+it does not remove the host cache or installed interpreter. Temporary/cache
+environment paths are confined to owned staging. Offline, no-build and
+no-interpreter-download guarantees here are documented tool semantics, not
+process/network tracing. A successful check proves consistency/freshness, not a
+vulnerability audit, artifact validity, or absence of internal resolution work.
+If it fails, no regeneration, upgrade, installation or promotion is attempted.
+
+Focused units use synthetic subprocess boundaries plus isolated Python 3.12
+stdlib parsing; they require neither a resolver nor network. The explicit opt-in
+smoke uses the same checker with installed pinned tools:
+
+```sh
+node --test plugin/gateway-core/test/dependency-metadata.test.mjs
+node plugin/gateway-core/test/dependency-metadata-smoke.mjs
+```
+
+The smoke creates only its own synthetic metadata, Git marker, environment
+sentinel and sibling staging parent, restoring temporary-directory environment
+variables afterward. Bootstrap performs read-only Git/tool/interpreter discovery. Its frozen
+external wheel URL/hash are deliberately synthetic: no artifact is fetched or
+verified. The observed UV 0.13.6 / Python 3.12.16 run accepted the single-key
+conversion with an external record and root dependency/metadata edges unchanged;
+original-input and sentinel hashes remained identical. It prints bound tool
+identities, exact checker arguments, checked staging isolation/cleanup, span and before/candidate hashes. No network
+or process trace was collected. This narrowly establishes metadata feasibility;
+it grants no live-project write authority. Git-common backup/schema expansion and
+any promotion transition remain separate Phase B work.
