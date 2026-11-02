@@ -66,6 +66,55 @@ export declare function metadataCandidate(original: Buffer): {
 export declare function proveMetadataConversion(project: Record<string, unknown>, original: Buffer, candidate: Buffer, lock: Record<string, unknown>, converted: Record<string, unknown>): void;
 export declare function capture(directory: string): Snapshot;
 export declare function captureMetadata(directory: string): Snapshot;
+export interface MetadataFile extends DirectoryIdentity {
+    uid: string;
+    mode: number;
+    size: number;
+    sha256: string;
+}
+export interface MetadataContext {
+    v: 1;
+    policy: "one-key-metadata-promotion-v1";
+    snapshot: Snapshot;
+    original: MetadataFile;
+    common: DirectoryIdentity;
+    pointer: {
+        kind: "absent";
+    } | {
+        kind: "file";
+        file: MetadataFile;
+        target: string;
+    };
+    fingerprint: string;
+}
+/** Identity plus bytes; timestamps deliberately are not authority fields. */
+export declare function metadataFile(path: string): MetadataFile;
+export declare function metadataFingerprint(context: Omit<MetadataContext, "fingerprint"> | MetadataContext): string;
+export declare function encodeMetadataContext(context: MetadataContext): string;
+export declare function decodeMetadataContext(encoded: string): MetadataContext;
+export declare function captureMetadataContext(directory: string): MetadataContext;
+export declare function recaptureMetadataContext(context: MetadataContext): MetadataContext;
+/** The sole permitted post-state: this prepared inode, not identical replacement bytes. */
+export declare function verifyMetadataTransition(context: MetadataContext, prepared: MetadataFile, candidateHash: string): void;
+export interface MetadataPreparation {
+    namespace: DirectoryIdentity;
+    job: DirectoryIdentity;
+    backup: MetadataFile;
+    candidate: MetadataFile;
+    descriptors: number[];
+}
+export declare function metadataPaths(context: MetadataContext, nonce: string): {
+    namespace: string;
+    job: string;
+    backup: string;
+    candidate: string;
+};
+/** Called independently by the helper and live host callback, with no caller paths. */
+export declare function inspectMetadataPreparation(context: MetadataContext, nonce: string, candidateHash: string): MetadataPreparation;
+export declare function verifyMetadataPreparation(context: MetadataContext, nonce: string, candidateHash: string, prepared: MetadataPreparation): void;
+export declare function closeMetadataPreparation(prepared: MetadataPreparation, cleanup?: boolean): void;
+export declare function verifyMetadataRecovery(prepared: MetadataPreparation): void;
+export declare function prepareMetadata(context: MetadataContext, nonce: string, expected: string): MetadataPreparation;
 export interface Auditor {
     root: string;
     fingerprint: string;

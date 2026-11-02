@@ -1,10 +1,14 @@
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { connect } from "node:net"
 import { fileURLToPath } from "node:url"
 import { recapture, captureAuditor, discoverAuditor, decodeSnapshot, directoryIdentity, digest, exists, run, safeRead, METADATA_POLICY, metadataCandidate, proveMetadataConversion, type Snapshot, type Auditor, type DirectoryIdentity, type FileIdentity } from "./safety.js"
 import type { AuditFrame } from "./protocol.js"
+import { decodeMetadataInvocation, encodeMetadataInvocation, metadataFrame, type MetadataInvocation, type MetadataFrame } from "./protocol.js"
+import { metadataCapabilityBinding } from "./capability.js"
+import { decodeMetadataContext, recaptureMetadataContext, prepareMetadata, verifyMetadataPreparation, closeMetadataPreparation,
+  verifyMetadataTransition, type MetadataPreparation } from "./safety.js"
 
 export interface Requirement { name: string; version: string; hashes: string[] }
 const normalize = (name: string): string => name.toLowerCase().replace(/[-_.]+/g, "-")
@@ -154,17 +158,55 @@ function scanner(auditor: Auditor, args: string[], cwd: string, subprocess: type
   return subprocess(auditor.python, ["-I", "-S", "-B", "-c", script, ...args], cwd, 60_000)
 }
 
-async function redeem(socket: string, nonce: string, fingerprint: string): Promise<void> {
+async function redeem(socket: string, nonce: string, fingerprint: string, metadata = false): Promise<void> {
   if (!socket.startsWith(join(realpathSync(tmpdir()), "dependency-authority-"))) throw new Error("capability_invalid")
   await new Promise<void>((resolve, reject) => {
     const client = connect(socket)
     let result = ""
     client.setTimeout(5000, () => client.destroy(new Error("capability_timeout")))
     client.on("error", reject)
-    client.on("connect", () => client.end(JSON.stringify({ nonce, fingerprint }) + "\n"))
+    client.on("connect", () => client.end(JSON.stringify(metadata ? { operation: "metadata-promotion-v1", nonce, fingerprint } : { nonce, fingerprint }) + "\n"))
     client.on("data", (chunk) => { result += chunk.toString(); if (result.length > 16) client.destroy(new Error("capability_invalid")) })
     client.on("end", () => result === "authorized\n" ? resolve() : reject(new Error("capability_invalid")))
   })
+}
+
+/** Dedicated CLI/authority domain; the read-only checker remains the only subprocess path. */
+export async function executeMetadata(invocation: MetadataInvocation,
+  boundary: { check: typeof checkMetadata; redeem: typeof redeem; rename: typeof renameSync } = {
+    check: checkMetadata, redeem, rename: renameSync,
+  },
+): Promise<MetadataFrame> {
+  encodeMetadataInvocation(invocation)
+  const context = decodeMetadataContext(invocation.context)
+  if (context.snapshot.root !== invocation.root || context.fingerprint !== invocation.fingerprint ||
+      context.original.sha256 !== invocation.original) throw new Error("metadata_invocation_mismatch")
+  recaptureMetadataContext(context)
+  const checked = boundary.check(context.snapshot, [], {
+    inspect: (snapshot) => { recaptureMetadataContext(context); return recapture(snapshot) },
+    subprocess: (...args) => { recaptureMetadataContext(context); return run(...args) },
+  })
+  recaptureMetadataContext(context)
+  if (checked.original !== invocation.original || invocation.phase === "migrate" && checked.candidate !== invocation.candidate) throw new Error("metadata_candidate_mismatch")
+  const result = metadataFrame({ ...invocation, candidate: checked.candidate })
+  if (invocation.phase === "check") return result
+  let prepared: MetadataPreparation | undefined
+  let redeemed = false, renamed = false
+  try {
+    prepared = prepareMetadata(context, invocation.nonce, checked.candidate)
+    verifyMetadataPreparation(context, invocation.nonce, checked.candidate, prepared)
+    await boundary.redeem(invocation.socket, invocation.capability, metadataCapabilityBinding(invocation), true)
+    redeemed = true
+    // Pure filesystem/tool hashing only beyond redemption. No tool execution follows.
+    verifyMetadataPreparation(context, invocation.nonce, checked.candidate, prepared)
+    boundary.rename(prepared.candidate.path, context.original.path)
+    renamed = true
+    verifyMetadataTransition(context, prepared.candidate, checked.candidate)
+    return result
+  } catch (error) {
+    if (redeemed) throw new Error("metadata_outcome_indeterminate")
+    throw error
+  } finally { if (prepared) closeMetadataPreparation(prepared, !renamed) }
 }
 
 /** Every setup repeats the real audit; no receipt or supplied package list is accepted. */
@@ -262,11 +304,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   // No exception text or subprocess output: those may contain private paths/inventories.
   const timer = setTimeout(() => process.exit(1), 150_000)
   const args = process.argv.slice(2)
-  const result = Promise.resolve().then(() => {
+  const result = Promise.resolve().then<AuditFrame | MetadataFrame>(() => {
+    if (args[0] === "metadata") {
+      if (args.length !== 2) throw new Error("metadata_invocation_invalid")
+      return executeMetadata(decodeMetadataInvocation(args[1]))
+    }
     if (args.length !== 8) throw new Error("invocation_invalid")
     return execute(...args.slice(0, 7) as [string, string, string, string, string, string, string], decodeSnapshot(args[7]))
   })
   result
     .then((frame) => { clearTimeout(timer); process.stdout.write(JSON.stringify(frame) + "\n") })
-    .catch(() => { clearTimeout(timer); process.stderr.write("dependency_security_refused\n"); process.exitCode = 1 })
+    .catch((error: unknown) => { clearTimeout(timer); process.stderr.write(error instanceof Error && error.message === "metadata_outcome_indeterminate" ? "metadata_outcome_indeterminate\n" : "dependency_security_refused\n"); process.exitCode = 1 })
 }

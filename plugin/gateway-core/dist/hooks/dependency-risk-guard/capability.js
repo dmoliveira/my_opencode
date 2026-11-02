@@ -4,8 +4,21 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PERMIT_MS } from "./protocol.js";
+import { createHash } from "node:crypto";
 /** Private, one-shot host handshake. A CLI flag/receipt cannot mint a setup permit. */
 export async function capability(fingerprint, recheck) {
+    return privateCapability(fingerprint, recheck, "setup");
+}
+export function metadataCapabilityBinding(binding) {
+    return createHash("sha256").update(JSON.stringify(["metadata-promotion-v1", binding.phase, binding.session, binding.call,
+        binding.issuer, binding.root, binding.fingerprint, binding.nonce, binding.original, binding.candidate])).digest("hex");
+}
+export async function metadataCapability(binding, recheck) {
+    if (binding.phase !== "migrate")
+        throw new Error("metadata_capability_invalid");
+    return privateCapability(metadataCapabilityBinding(binding), recheck, "metadata-promotion-v1");
+}
+async function privateCapability(fingerprint, recheck, operation) {
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "dependency-authority-")));
     const path = join(directory, "permit.sock");
     const nonce = randomBytes(32).toString("hex");
@@ -35,7 +48,8 @@ export async function capability(fingerprint, recheck) {
             }
             spent = true;
             try {
-                if (data !== JSON.stringify({ nonce, fingerprint }) + "\n")
+                const request = operation === "setup" ? { nonce, fingerprint } : { operation, nonce, fingerprint };
+                if (data !== JSON.stringify(request) + "\n")
                     throw new Error("capability_invalid");
                 recheck();
                 client.end("authorized\n");

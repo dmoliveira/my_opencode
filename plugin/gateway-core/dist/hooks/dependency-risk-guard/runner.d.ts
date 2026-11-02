@@ -1,5 +1,7 @@
+import { renameSync } from "node:fs";
 import { recapture, captureAuditor, discoverAuditor, run, METADATA_POLICY, type Snapshot, type Auditor, type FileIdentity } from "./safety.js";
 import type { AuditFrame } from "./protocol.js";
+import { type MetadataInvocation, type MetadataFrame } from "./protocol.js";
 export interface Requirement {
     name: string;
     version: string;
@@ -27,6 +29,13 @@ export declare function checkMetadata(snapshot: Snapshot, sentinels?: readonly F
     }[];
     sentinels: readonly FileIdentity[];
 };
+declare function redeem(socket: string, nonce: string, fingerprint: string, metadata?: boolean): Promise<void>;
+/** Dedicated CLI/authority domain; the read-only checker remains the only subprocess path. */
+export declare function executeMetadata(invocation: MetadataInvocation, boundary?: {
+    check: typeof checkMetadata;
+    redeem: typeof redeem;
+    rename: typeof renameSync;
+}): Promise<MetadataFrame>;
 /** Every setup repeats the real audit; no receipt or supplied package list is accepted. */
 export declare function execute(mode: string, root: string, nonce: string, fingerprint: string, socket: string, auditorRoot?: string, auditorFingerprint?: string, boundSnapshot?: Snapshot | undefined, boundary?: {
     inspect: typeof recapture;
@@ -34,3 +43,4 @@ export declare function execute(mode: string, root: string, nonce: string, finge
     auditor: typeof discoverAuditor;
     inspectAuditor: typeof captureAuditor;
 }): Promise<AuditFrame>;
+export {};
