@@ -7,7 +7,7 @@ updated: 2026-08-15
 # Intent Control Plane Roadmap
 
 Codememory epic: `epic_24`
-Current slice: waiting on `task_122` before `task_127`
+Current slice: production protocol reconciliation (`task_122`); `task_127` follows its merge
 
 ## Outcome
 
@@ -28,9 +28,11 @@ requiring the primary agent to remember every tracking command.
 | `task_129` Lease-backed background execution | done | `task_128`, `task_125` | Recoverable bounded task workers |
 | `task_130` Rolling decomposition qualification | blocked | `task_127`, `task_129` | Coverage and recovery at 50, 250, and 1000 tasks |
 
-`task_122` is owned by the existing Tasker hardening epic. PRs `#708` and
-`#709` remain prerequisites for planner integration but do not block the
-manual coordinator.
+`task_122` is owned by the Tasker hardening epic. The production planning
+protocol in `docs/specs/tasker-planning-protocol.md` supersedes the isolated
+proposals in PRs `#708` and `#709`; close those drafts after the replacement
+merges. The planner retains its task dependency and becomes ready when that
+protocol task is marked done. The manual coordinator is independent.
 
 ## Latest Slice
 

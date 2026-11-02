@@ -59,6 +59,7 @@ test("gateway continuation keeps checklist context from autopilot-go style comma
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -166,6 +167,7 @@ test("gateway continuation honors configured maxIgnoredCompletionCycles", async 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -259,6 +261,7 @@ test("gateway continuation default stops on first stalled completion cycle", asy
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [

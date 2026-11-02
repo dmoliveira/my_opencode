@@ -99,7 +99,7 @@ export function buildHookMessageBody(content, identity) {
     return {
         ...(identity.agent ? { agent: identity.agent } : {}),
         ...(identity.model ? { model: identity.model } : {}),
-        parts: [{ type: "text", text: normalized }],
+        parts: [{ type: "text", text: normalized, synthetic: true }],
     };
 }
 export function mergeHookMessageIdentity(base, override) {

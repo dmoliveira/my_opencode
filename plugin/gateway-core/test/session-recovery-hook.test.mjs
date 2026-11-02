@@ -27,6 +27,7 @@ test("session-recovery resumes recoverable session errors", async () => {
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -85,6 +86,7 @@ test("session-recovery skips ambiguous incomplete assistant tails during idle", 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -135,6 +137,7 @@ test("session-recovery skips non-recoverable errors", async () => {
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async promptAsync() {
             promptCalls += 1
           },
@@ -176,6 +179,7 @@ test("session-recovery skips context-overflow session errors", async () => {
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async promptAsync() {
             promptCalls += 1
           },
@@ -217,6 +221,7 @@ test("session-recovery resumes recoverable errors without message history API", 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async promptAsync() {
             promptCalls += 1
           },
@@ -258,6 +263,7 @@ test("session-recovery resumes structured provider overload session errors", asy
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async promptAsync() {
             promptCalls += 1
           },
@@ -306,6 +312,7 @@ test("session-recovery handles prompt injection failure without throwing", async
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async promptAsync() {
             promptCalls += 1
             throw new Error("prompt failed")
@@ -348,6 +355,7 @@ test("session-recovery skips injection while assistant turn is incomplete", asyn
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -401,6 +409,7 @@ test("session-recovery falls back to injection when history probe fails", async 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             throw new Error("history unavailable")
           },
@@ -446,6 +455,7 @@ test("session-recovery injects parent continuation after delegated task abort", 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -509,6 +519,7 @@ test("session-recovery forces delegated abort injection even with incomplete par
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -569,6 +580,7 @@ test("session-recovery rescues silent delegated abort on idle using message hist
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -641,6 +653,7 @@ test("session-recovery ignores idle rescue when aborted parent already has visib
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -709,6 +722,7 @@ test("session-recovery rescues stale running question tool on idle using message
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -781,6 +795,7 @@ test("session-recovery skips incomplete assistant tail when latest assistant mes
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -836,6 +851,7 @@ test("session-recovery ignores stale question rescue when latest message is user
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -904,6 +920,7 @@ test("session-recovery still rescues incomplete-tail recovery when question is n
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -974,6 +991,7 @@ test("session-recovery rescues stale running askuserquestion tool on idle using 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -1038,6 +1056,7 @@ test("session-recovery does not proactively recover fresh question lifecycle on 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             messageCalls += 1
             return { data: [] }
@@ -1095,6 +1114,7 @@ test("session-recovery clears proactive question tracking after user reply", asy
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             messageCalls += 1
             return { data: [] }
@@ -1164,6 +1184,7 @@ test("session-recovery injects fallback when idle session ends with incomplete n
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -1223,6 +1244,7 @@ test("session-recovery skips fallback when idle session ends with step-start and
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -1281,6 +1303,7 @@ test("session-recovery downgrades repeated provider header timeouts to a lighter
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [

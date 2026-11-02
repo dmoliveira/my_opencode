@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { loadAgentMetadata, } from "../shared/agent-metadata.js";
 import { upsertDelegationPromptBlock } from "../shared/delegation-context.js";
@@ -104,7 +105,7 @@ export function createAgentContextShaperHook(options) {
                     metadata,
                 });
                 const prompt = String(eventPayload.output?.args?.prompt ?? "");
-                const nextPrompt = upsertDelegationPromptBlock(prompt, "[agent-context-shaper] delegated task focus", buildTaskFocusReminder({
+                const nextPrompt = isTaskerResearchArgs(eventPayload.output?.args) ? prompt : upsertDelegationPromptBlock(prompt, "[agent-context-shaper] delegated task focus", buildTaskFocusReminder({
                     sessionId: sid,
                     traceId,
                     subagentType,

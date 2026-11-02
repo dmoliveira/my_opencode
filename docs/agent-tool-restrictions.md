@@ -13,8 +13,8 @@ This document defines explicit deny-list expectations for agent safety boundarie
 
 | Agent | Denied Tools |
 | --- | --- |
-| `orchestrator` | none |
-| `tasker` | `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
+| `orchestrator` | `todowrite`, `todoread` |
+| `tasker` | `write`, `edit`, `webfetch`, `todowrite`, `todoread` |
 | `explore` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `librarian` | `bash`, `write`, `edit`, `task`, `todowrite`, `todoread` |
 | `oracle` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
@@ -25,6 +25,14 @@ This document defines explicit deny-list expectations for agent safety boundarie
 | `strategic-planner` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `ambiguity-analyst` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
 | `plan-critic` | `bash`, `write`, `edit`, `webfetch`, `task`, `todowrite`, `todoread` |
+
+## Tasker planning gateway
+
+Tasker may delegate at most two bounded read-only requests to `explore` or
+`librarian`. The mandatory gateway validates the packet and final arguments,
+keeps research descendants read-only, and authorizes only scoped planning
+operations. Task/epic/session lifecycle, including cancellation, stays with an
+execution agent. See [the production protocol](specs/tasker-planning-protocol.md).
 
 ## Validation
 

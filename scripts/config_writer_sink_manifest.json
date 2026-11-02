@@ -3378,15 +3378,6 @@
     "language": "python",
     "file": "tasker_e2e_sandbox.py",
     "function": "prepare_tasker_runtime",
-    "kind": "path.symlink_to",
-    "destination": "agent_dir / 'tasker.md'",
-    "count": 1,
-    "classification": "isolated_fixture_exemption"
-  },
-  {
-    "language": "python",
-    "file": "tasker_e2e_sandbox.py",
-    "function": "prepare_tasker_runtime",
     "kind": "path.write_text",
     "destination": "config_root / 'opencode.json'",
     "count": 1,
@@ -3514,15 +3505,6 @@
     "file": "tasker_e2e_sandbox.py",
     "function": "prepare_tasker_runtime",
     "kind": "path.mkdir",
-    "destination": "codememory_root",
-    "count": 1,
-    "classification": "isolated_fixture_exemption"
-  },
-  {
-    "language": "python",
-    "file": "tasker_e2e_sandbox.py",
-    "function": "prepare_tasker_runtime",
-    "kind": "path.mkdir",
     "destination": "config_home",
     "count": 1,
     "classification": "isolated_fixture_exemption"
@@ -3576,7 +3558,61 @@
     "language": "python",
     "file": "tasker_e2e_sandbox.py",
     "function": "prepare_tasker_runtime",
-    "kind": "path.symlink_to",
+    "kind": "path.write_text",
+    "destination": "codememory_config",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "restore_dist_files",
+    "kind": "shutil.copytree",
+    "destination": "live_root",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "sync_dist_files",
+    "kind": "shutil.copytree",
+    "destination": "backup_root",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_live_relaunch_smoke.py",
+    "function": "sync_dist_files",
+    "kind": "shutil.copytree",
+    "destination": "live_root",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "path.write_text",
+    "destination": "agent_dir / f'{name}.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "shutil.copy2",
+    "destination": "agent_dir / 'tasker.md'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_e2e_sandbox.py",
+    "function": "prepare_tasker_runtime",
+    "kind": "shutil.copy2",
     "destination": "workspace / 'AGENTS.md'",
     "count": 1,
     "classification": "isolated_fixture_exemption"
@@ -3585,26 +3621,71 @@
     "language": "python",
     "file": "tasker_e2e_sandbox.py",
     "function": "prepare_tasker_runtime",
-    "kind": "path.symlink_to",
+    "kind": "shutil.copytree",
     "destination": "workspace / 'docs'",
     "count": 1,
     "classification": "isolated_fixture_exemption"
   },
   {
     "language": "python",
-    "file": "tasker_e2e_sandbox.py",
-    "function": "prepare_tasker_runtime",
-    "kind": "path.write_text",
-    "destination": "codememory_config",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
+    "kind": "path.chmod",
+    "destination": "launcher",
     "count": 1,
     "classification": "isolated_fixture_exemption"
   },
   {
     "language": "python",
-    "file": "tasker_e2e_sandbox.py",
-    "function": "prepare_tasker_runtime",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
+    "kind": "path.chmod",
+    "destination": "victim_config",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
+    "kind": "path.mkdir",
+    "destination": "victim / '.codememory'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
+    "kind": "path.symlink_to",
+    "destination": "Path(runtime['TASKER_E2E_OC_WRAPPER']).parent / tool",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
     "kind": "path.write_text",
-    "destination": "workspace_codememory / 'config.sqlite.yaml'",
+    "destination": "config_path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
+    "kind": "path.write_text",
+    "destination": "launcher",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "tasker_production_live_smoke.py",
+    "function": "run",
+    "kind": "path.write_text",
+    "destination": "victim_config",
     "count": 1,
     "classification": "isolated_fixture_exemption"
   }

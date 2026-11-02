@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { getRecentDelegationOutcomes, registerDelegationPolicyProposal, } from "../shared/delegation-runtime-state.js";
@@ -57,7 +58,8 @@ export function createDelegationOutcomeLearnerHook(options) {
                 if (adaptedCategory !== currentCategory) {
                     args.category = adaptedCategory;
                 }
-                args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[DELEGATION LEARNER]", hint);
+                if (!isTaskerResearchArgs(args))
+                    args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[DELEGATION LEARNER]", hint);
             }
             registerDelegationPolicyProposal({
                 sessionId: sessionId(eventPayload),

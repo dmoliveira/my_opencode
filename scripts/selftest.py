@@ -565,7 +565,7 @@ exit 0
                     "edit: false",
                     "Current backend adapter: Codememory via `oc`.",
                     "Never edit repo files, write code, run git/gh, run tests/builds, create worktrees, open PRs, or execute implementation steps.",
-                    "Use bash only for `oc`, `command -v oc`, and closely related backend health/install checks.",
+                    "Use bash only for `oc` and exact `command -v oc`.",
                 ]
             },
             "explore.md": {
@@ -792,11 +792,11 @@ exit 0
         tasker_allowed_tools = set(tasker_tool_surface.get("allowed", []))
         tasker_denied_tools = set(tasker_tool_surface.get("denied", []))
         expect(
-            {"bash", "read", "list", "glob", "grep"}.issubset(tasker_allowed_tools),
+            {"bash", "read", "list", "glob", "grep", "task"}.issubset(tasker_allowed_tools),
             "tasker agent-catalog metadata should keep the planning-friendly read/bash tool surface",
         )
         expect(
-            {"write", "edit", "task", "todowrite", "todoread"}.issubset(
+            {"write", "edit", "webfetch", "todowrite", "todoread"}.issubset(
                 tasker_denied_tools
             ),
             "tasker agent-catalog metadata should keep implementation and todo mutation tools denied",

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import GatewayCorePlugin from "../dist/index.js"
+import { packet } from "./tasker-protocol-fixture.mjs"
+let nextCall = 0
 
 function chatParams(sessionID, agent) {
   return {
@@ -21,18 +23,19 @@ function chatOutput() {
 
 async function before(plugin, sessionID, command, agent) {
   return plugin["tool.execute.before"](
-    { tool: "bash", sessionID, ...(agent ? { agent } : {}) },
+    { tool: "bash", sessionID, callID: `integration-${++nextCall}`, ...(agent ? { agent } : {}) },
     { args: { command } },
   )
 }
 
 test("keeps the command boundary when hooks are disabled or reordered", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-tasker-integration-"))
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "gateway-tasker-integration-")))
   try {
     const plugin = GatewayCorePlugin({ directory }, {
       hooks: { enabled: false, disabled: ["tasker-command-gateway"], order: ["think-mode"] },
     })
     await plugin["chat.params"](chatParams("tasker-disabled-hooks", "tasker"), chatOutput())
+    await plugin["chat.message"]({ sessionID: "tasker-disabled-hooks", prompt: `Use scope 'sandbox', worktree '${directory}', branch 'sandbox/tasker'.` })
     await assert.rejects(
       before(plugin, "tasker-disabled-hooks", "oc current; echo unsafe"),
       /tasker_command_boundary_blocked/,
@@ -51,6 +54,7 @@ test("keeps the command boundary when hooks are disabled or reordered", async ()
       chatParams("tasker-reordered-hooks", "tasker"),
       chatOutput(),
     )
+    await reordered["chat.message"]({ sessionID: "tasker-reordered-hooks", prompt: `Use scope 'sandbox', worktree '${directory}', branch 'sandbox/tasker'.` })
     await assert.rejects(
       before(reordered, "tasker-reordered-hooks", "oc current; echo unsafe"),
       /tasker_command_boundary_blocked/,
@@ -61,13 +65,14 @@ test("keeps the command boundary when hooks are disabled or reordered", async ()
 })
 
 test("resolves identity from authoritative session messages and cleans deleted sessions", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-tasker-identity-"))
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "gateway-tasker-identity-")))
   try {
     let messageReads = 0
     const plugin = GatewayCorePlugin({
       directory,
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             messageReads += 1
             return messageReads === 1 ? { data: [{ info: { role: "assistant", agent: "tasker" } }] } : { data: [] }
@@ -75,6 +80,7 @@ test("resolves identity from authoritative session messages and cleans deleted s
         },
       },
     }, { hooks: { enabled: false } })
+    await plugin["chat.message"]({ sessionID: "tasker-from-history", prompt: `Use scope 'sandbox', worktree '${directory}', branch 'sandbox/tasker'.` })
     await before(plugin, "tasker-from-history", "oc current")
     await plugin.event({ event: { type: "session.deleted", properties: { id: "tasker-from-history" } } })
     await assert.rejects(
@@ -87,7 +93,7 @@ test("resolves identity from authoritative session messages and cleans deleted s
 })
 
 test("leaves a proven non-tasker session unchanged", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-non-tasker-"))
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "gateway-non-tasker-")))
   try {
     const plugin = GatewayCorePlugin({ directory }, { hooks: { enabled: false } })
     await plugin["chat.params"](chatParams("reviewer-session", "reviewer"), chatOutput())
@@ -97,65 +103,43 @@ test("leaves a proven non-tasker session unchanged", async () => {
   }
 })
 
-test("binds writes to the sandbox declared by the planning prompt", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "gateway-tasker-sandbox-"))
+test("binds typed creation to the immutable prompt and native command directory", async () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "gateway-tasker-sandbox-")))
+  const sessionID = "tasker-sandbox"
   try {
     const plugin = GatewayCorePlugin({ directory }, { hooks: { enabled: false } })
-    await plugin["chat.params"](chatParams("tasker-sandbox", "tasker"), chatOutput())
-    await plugin["chat.message"]({
-      sessionID: "tasker-sandbox",
-      prompt: "Use scope 'sandbox', worktree '/tmp/worktree', and branch 'sandbox/tasker'.",
-    })
-    await plugin["chat.message"]({
-      sessionID: "tasker-sandbox",
-      prompt: "Use scope 'other', worktree '/tmp/other', and branch 'other'.",
-    })
-    await before(
-      plugin,
-      "tasker-sandbox",
-      'oc add task "planned" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker',
-    )
-    await assert.rejects(
-      before(
-        plugin,
-        "tasker-sandbox",
-        'oc add task "foreign" --scope other --worktree /tmp/worktree --branch sandbox/tasker',
-      ),
-      /tasker_command_boundary_blocked/,
-    )
-    await before(plugin, "tasker-sandbox", "oc find planned --type task --scope sandbox")
-    await plugin["tool.execute.after"](
-      {
-        tool: "bash",
-        sessionID: "tasker-sandbox",
-        agent: "tasker",
-        args: { command: "oc find planned --type task --scope sandbox" },
-      },
-      {
-        output: '{"items":[{"id":"task_119","scope_key":"sandbox","title":"mentions task_999"}]}',
-      },
-    )
-    await before(plugin, "tasker-sandbox", "oc set task_119 status doing")
-    await assert.rejects(
-      before(plugin, "tasker-sandbox", "oc set task_999 status doing"),
-      /tasker_command_boundary_blocked/,
-    )
-    await assert.rejects(
-      before(plugin, "tasker-sandbox", "oc find foreign --type task --scope other"),
-      /tasker_command_boundary_blocked/,
-    )
-    await before(plugin, "tasker-sandbox", "oc find other --type task --scope sandbox")
-    await plugin["tool.execute.after"](
-      {
-        tool: "bash",
-        sessionID: "tasker-sandbox",
-        agent: "tasker",
-        args: { command: "oc find other --type task --scope sandbox" },
-      },
-      { output: '{"items":[{"id":"task_120","scope_key":"sandbox"}]}' },
-    )
-    await before(plugin, "tasker-sandbox", "oc set task_120 status doing")
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+    await plugin["chat.params"](chatParams(sessionID, "tasker"), chatOutput())
+    await plugin["chat.message"]({ sessionID, prompt: `Use scope 'sandbox', worktree '${directory}', and branch 'sandbox/tasker'.` })
+    await plugin["chat.message"]({ sessionID, prompt: "Use scope 'other', worktree '/tmp/other', and branch 'other'." })
+    const execute = async (command, result) => {
+      const input = { tool: "bash", sessionID, callID: `integration-${++nextCall}` }
+      const output = { args: { command } }
+      await plugin["tool.execute.before"](input, output)
+      assert.equal(output.args.workdir, directory)
+      await plugin["tool.execute.after"]({ ...input, args: output.args }, { output: JSON.stringify(result), metadata: { exit: 0 } })
+    }
+    const add = `oc add task planned --scope sandbox --worktree ${directory} --branch sandbox/tasker --format json`
+    await assert.rejects(before(plugin, sessionID, add), /lookup_required/)
+    await execute("oc find planned --type task --scope sandbox --limit 100 --format json", { type: "find_result", entity_type: "task", query: "planned", scope_key: "sandbox", count: 0, items: [] })
+    await execute(add, { id: "task_119", type: "task", title: "planned", scope_key: "sandbox" })
+    for (const command of ["oc set task_119 status doing --format json", `oc add task foreign --scope other --worktree ${directory} --branch sandbox/tasker --format json`, "oc find foreign --type task --scope other --format json", "oc set task_999 goal unrelated --reason requested --expected-revision 1 --format json"])
+      await assert.rejects(before(plugin, sessionID, command), /tasker_command_boundary_blocked/)
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+test("structured research survives optional hooks without routing or prose mutation", async () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "gateway-tasker-research-")))
+  try {
+    const plugin = GatewayCorePlugin({ directory }, { hooks: { enabled: true, order: ["agent-model-resolver", "agent-context-shaper", "agent-discoverability-injector", "hook-semantic-bridge", "adaptive-delegation-policy", "agent-denied-tool-enforcer"] } })
+    await plugin["chat.params"](chatParams("research-parent", "tasker"), chatOutput())
+    await plugin["chat.message"]({ sessionID: "research-parent", prompt: `Use scope 'sandbox', worktree '${directory}', and branch 'sandbox/tasker'.` })
+    const input = { tool: "task", sessionID: "research-parent", callID: "research-call" }
+    const output = { args: { subagent_type: "explore", description: "Inspect planning documentation", prompt: packet() } }
+    await plugin["tool.execute.before"](input, output)
+    assert.equal(output.args.subagent_type, "explore")
+    assert.ok(output.args.prompt.includes(packet()))
+    assert.ok(output.args.prompt.endsWith("do not execute implementation or validation."))
+    assert.ok(!output.args.prompt.includes("[agent-context-shaper]"))
+    await plugin["tool.execute.after"]({ ...input, args: output.args }, { output: "Evidence: docs:1", metadata: {} })
+  } finally { rmSync(directory, { recursive: true, force: true }) }
 })

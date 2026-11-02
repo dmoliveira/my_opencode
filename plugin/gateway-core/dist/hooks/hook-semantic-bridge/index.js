@@ -1,3 +1,4 @@
+import { isTaskerResearchArgs } from "../tasker-command-gateway/research-policy.js";
 import { writeGatewayEventAudit } from "../../audit/event-audit.js";
 import { upsertDelegationPromptLine } from "../shared/delegation-context.js";
 import { resolveDelegationTraceId } from "../shared/delegation-trace.js";
@@ -46,7 +47,8 @@ export function createHookSemanticBridgeHook(options) {
             }
             const mapping = matches.map((entry) => `${entry.key}->${entry.local}`).join("; ");
             const hint = `[HOOK SEMANTIC BRIDGE] Upstream semantics detected. Local runtime mappings: ${mapping}.`;
-            args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[HOOK SEMANTIC BRIDGE]", hint);
+            if (!isTaskerResearchArgs(args))
+                args.prompt = upsertDelegationPromptLine(String(args.prompt ?? ""), "[HOOK SEMANTIC BRIDGE]", hint);
             const directory = typeof eventPayload.directory === "string" && eventPayload.directory.trim()
                 ? eventPayload.directory
                 : options.directory;

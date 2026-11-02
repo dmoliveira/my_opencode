@@ -38,6 +38,7 @@ test("stop-continuation-guard blocks idle continuation after stop command", asyn
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [
@@ -113,6 +114,7 @@ test("stop-continuation-guard handles command.execute.before pause flow", async 
       },
       client: {
         session: {
+          async get({ path }) { return { data: { id: path.id } } },
           async messages() {
             return {
               data: [

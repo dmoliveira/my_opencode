@@ -14,6 +14,19 @@ interface GatewayContext {
     }) => LlmDecisionRuntime;
     client?: {
         session?: {
+            get?(args: {
+                path: {
+                    id: string;
+                };
+                query?: {
+                    directory?: string;
+                };
+            }): Promise<{
+                data?: {
+                    id?: string;
+                    parentID?: string;
+                };
+            }>;
             messages(args: {
                 path: {
                     id: string;

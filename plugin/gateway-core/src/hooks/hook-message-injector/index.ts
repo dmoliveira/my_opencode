@@ -25,7 +25,7 @@ interface SessionClient {
   promptAsync(args: {
     path: { id: string }
     body: {
-      parts: Array<{ type: string; text: string }>
+      parts: Array<{ type: string; text: string; synthetic?: boolean }>
       agent?: string
       model?: { providerID: string; modelID: string; variant?: string }
     }
@@ -155,7 +155,7 @@ export async function inspectHookMessageSafety(args: {
 
 // Builds promptAsync body payload from content and optional identity.
 export function buildHookMessageBody(content: string, identity: HookMessageIdentity): {
-  parts: Array<{ type: string; text: string }>
+  parts: Array<{ type: string; text: string; synthetic?: boolean }>
   agent?: string
   model?: { providerID: string; modelID: string; variant?: string }
 } {
@@ -163,7 +163,7 @@ export function buildHookMessageBody(content: string, identity: HookMessageIdent
   return {
     ...(identity.agent ? { agent: identity.agent } : {}),
     ...(identity.model ? { model: identity.model } : {}),
-    parts: [{ type: "text", text: normalized }],
+    parts: [{ type: "text", text: normalized, synthetic: true }],
   }
 }
 
