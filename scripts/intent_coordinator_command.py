@@ -16,6 +16,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+# The proposal-only paths must not create interpreter cache files.
+sys.dont_write_bytecode = True
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
@@ -1061,6 +1064,11 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("doctor", parents=[common])
     schema = subparsers.add_parser("schema")
     schema.add_argument("--json", action="store_true")
+    for command in ("research", "plan"):
+        planner = subparsers.add_parser(command, parents=[common])
+        planner.add_argument("--file", type=Path, required=True)
+        planner.add_argument("--root", type=Path, default=Path.cwd())
+        planner.add_argument("--ingress-file", type=Path)
     return parser
 
 
@@ -1090,6 +1098,10 @@ def main(argv: list[str]) -> int:
         json_output = bool(getattr(args, "json", False))
         if args.command == "schema":
             return _emit(schema_report(), json_output)
+        if args.command in {"research", "plan"}:
+            from intent_planner import command_report
+
+            return _emit(command_report(args), True)
         runner = make_oc_runner(
             oc_bin=DEFAULT_OC_BIN,
             config_path=DEFAULT_OC_CONFIG,
