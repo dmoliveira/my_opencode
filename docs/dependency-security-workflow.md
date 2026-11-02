@@ -66,6 +66,51 @@ node plugin/gateway-core/test/dependency-authorization-audit-smoke.mjs
 
 The smoke requires real registry access and the existing scanner cache; unit tests use synthetic boundaries. Full gateway tests and repository checks remain required before delivery. Do not represent unavailable checks, an unrelated baseline failure, or source-only tests as successful activation.
 
+### Raw result dispatch boundary
+
+For native `tool.execute.after`, the selected dependency receiver runs exactly
+once before the validation-evidence ledger and presentation hooks. The remaining
+hooks retain their relative order. This is an AFTER-only boundary; global hook
+priorities, BEFORE dispatch and final command binding are unchanged. Watchdog
+notices remain visible, but are appended only after strict receipt verification.
+Producer output must still be exactly the canonical frame: producer chatter,
+footers, duplicate fields/frames, trailing bytes and malformed JSON are rejected.
+Later presentation cannot turn rejected output into authorization.
+
+Every failed AFTER dispatch result sends an awaited internal
+`tool.execute.after.error` cancellation to that selected dependency receiver only.
+It clears the actual session's audit/metadata state and pending capabilities.
+Missing identity cannot clear other sessions. Critical/blocked errors still
+surface the original error; tolerated failures still continue, after revocation.
+No receipt is persisted and there is no caller-selected raw-output field or
+authorization flag.
+
+Rebuild before running the focused dispatch proof:
+
+```sh
+npm --prefix plugin/gateway-core run build
+npm --prefix plugin/gateway-core run lint
+node --test plugin/gateway-core/test/raw-result-dispatch.test.mjs
+```
+
+The portable test uses test-process-only resolver doubles with the real guard,
+ledgers, continuity checks, sockets, full plugin and watchdog. It covers audit
+and metadata authority, critical/blocked/tolerated/ledger failures, cleanup timing,
+pending socket removal, session isolation, one-use permission and strict parsing.
+It never executes setup or requires installed resolver/scanner tooling.
+
+The opt-in `test/dependency-metadata-promotion-smoke.mjs` requires the documented
+enforced sidecar and installed pinned tools. Its explicit hook selection includes
+the watchdog. Empty synthetic read completions prime the unchanged configured
+call threshold; the actual CHECK result must acquire a visible watchdog footer
+and still authorize exactly one synthetic metadata promotion. Separate probes
+append chatter to actual producer output and require rejection. Only owned
+synthetic inputs are changed; no installer runs. Child counts are observed;
+checker command counts are labelled as expectations or upper bounds.
+
+This scoped proof does not replace full clean checks, independent review/CI or a
+fresh enabled linked-host watchdog proof before resuming private consumers.
+
 ## Phase A: read-only editable-root feasibility
 
 `captureMetadata` uses the named informational policy

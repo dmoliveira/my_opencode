@@ -5,6 +5,7 @@ import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, read
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import GatewayCorePlugin from "../dist/index.js"
+import { DEFAULT_GATEWAY_CONFIG } from "../dist/config/schema.js"
 import { ENV, digest, safeRead, metadataCandidate, metadataPaths, decodeMetadataContext } from "../dist/hooks/dependency-risk-guard/safety.js"
 import { decodeMetadataInvocation } from "../dist/hooks/dependency-risk-guard/protocol.js"
 import { createDependencyRiskGuardHook } from "../dist/hooks/dependency-risk-guard/index.js"
@@ -18,6 +19,9 @@ const temporaryRoot = realpathSync(tmpdir())
 const outcomes = []
 let children = 0
 let sdkProbes = 0
+let watchdogFooters = 0
+let watchdogPrimingCompletions = 0
+let strictProducerRejections = 0
 async function child(command, root, staging) {
   children++
   // Must yield to the host's private socket server; spawnSync deadlocks redemption.
@@ -57,7 +61,7 @@ try {
       if (environment) { mkdirSync(join(root, ".venv")); writeFileSync(join(root, ".venv", "sentinel"), "synthetic environment; preserve\n") }
       const sentinelHash = environment ? digest(safeRead(join(root, ".venv", "sentinel"))) : null
       plugin = GatewayCorePlugin({ directory: root, config: { hooks: { enabled: true, disabled: [],
-        order: ["noninteractive-shell-guard", "dependency-risk-guard", "validation-evidence-ledger"] }, dependencyRiskGuard: { enabled: true } } })
+        order: ["noninteractive-shell-guard", "long-turn-watchdog", "dependency-risk-guard", "validation-evidence-ledger"] }, dependencyRiskGuard: { enabled: true } } })
       const before = async (callID, command) => {
         const input = { tool: "bash", sessionID, callID }, output = { args: { command } }
         await plugin["tool.execute.before"](input, output)
@@ -67,13 +71,30 @@ try {
       const run = async (request) => {
         const r = await child(request.output.args.command, root, staging)
         assert.equal(r.exit, 0, r.stderr)
-        await plugin["tool.execute.after"]({ ...request.input, args: request.output.args }, { output: r.stdout, metadata: { exit: r.exit } })
+        const checking = request.input.callID === "check-call"
+        if (checking) {
+          await plugin["chat.message"]({ sessionID, message: "Owned synthetic metadata watchdog proof" })
+          const threshold = config.longTurnWatchdog?.toolCallWarningThreshold ?? DEFAULT_GATEWAY_CONFIG.longTurnWatchdog.toolCallWarningThreshold
+          // Empty read completions increment the real watchdog without emitting an early notice.
+          for (let n = 1; n < threshold; n++) {
+            await plugin["tool.execute.after"]({ tool: "read", sessionID, callID: `watchdog-prime-${n}` }, { output: "" })
+            watchdogPrimingCompletions++
+          }
+        }
+        const output = { output: r.stdout, metadata: { exit: r.exit } }
+        await plugin["tool.execute.after"]({ ...request.input, args: request.output.args }, output)
+        assert.ok(output.output.startsWith(r.stdout))
+        if (checking) {
+          assert.match(output.output, /\[Turn Watchdog\]: Long turn/)
+          watchdogFooters++
+        }
         assert.deepEqual(readdirSync(staging), [])
         return JSON.parse(r.stdout)
       }
       if (probes) {
         // Explicit synthetic SDK/boundary probes, using actual checker frames only.
         for (const attack of ["missing-final-check", "late-command", "wrong-call", "wrong-session", "wrong-command", "string-exit", "malformed-frame",
+          "producer-footer", "producer-chatter", "producer-trailing", "producer-duplicate-frame",
           "compacted", "deleted", "before-error", "unrelated-bash", "normal-audit", "normal-setup", "concurrent-check", "missing-final-migrate", "cancelled-migrate", "lost-completion"]) {
           sdkProbes++
           const sid = `synthetic-sdk-${attack}`
@@ -102,7 +123,14 @@ try {
                 await hook.event("session.deleted", { properties: { sessionID: sid } })
               } else if (attack === "wrong-command") await after(q, r, { args: { command: q.output.args.command + " " } })
               else if (attack === "string-exit") await after(q, r, {}, { metadata: { exit: "0" } })
-              else if (attack === "malformed-frame") await after(q, r, {}, { output: r.stdout.replace('"v":1', '"v":1,"v":1') })
+               else if (attack === "malformed-frame") await after(q, r, {}, { output: r.stdout.replace('"v":1', '"v":1,"v":1') })
+               else if (attack.startsWith("producer-")) {
+                 const output = attack === "producer-footer" ? r.stdout + "[Turn Watchdog]: Long turn\n"
+                   : attack === "producer-chatter" ? "producer chatter\n" + r.stdout
+                   : attack === "producer-trailing" ? r.stdout + "\n" : r.stdout + r.stdout
+                 await after(q, r, {}, { output })
+                 strictProducerRejections++
+               }
               else await after(q, r)
               if (["compacted", "deleted", "before-error"].includes(attack)) await hook.event(attack === "compacted" ? "session.compacted" : attack === "deleted" ? "session.deleted" : "tool.execute.before.error", { properties: { sessionID: sid } })
               if (attack === "unrelated-bash") await request("unrelated", "true")
@@ -165,7 +193,7 @@ try {
       await assert.rejects(before("setup-never-executed", "uv sync --locked"))
       await assert.rejects(before("retry-never-executed", "dependency-security migrate-uv-lock-virtual"))
       assert.ok(safeRead(join(root, "uv.lock")).equals(actual)); assert.ok(readFileSync(paths.backup).equals(original))
-      outcomes.push({ linked, environment, checkerCommands: 6, nativeChildren: 2, backupVerified: true,
+       outcomes.push({ linked, environment, expectedCheckerCommands: 6, nativeChildren: 2, backupVerified: true,
         nonLockInputsUnchanged: true, environmentPreserved: true, setupDeniedBeforeExecution: true, retryDeniedBeforeExecution: true,
         exactInodeTransition: "host verified retained candidate descriptor at native completion", hashes: { original: checked.original, candidate: checked.candidate } })
     } finally {
@@ -173,7 +201,8 @@ try {
       rmSync(base, { recursive: true, force: true })
     }
   }
-  console.log(JSON.stringify({ syntheticOnly: true, syntheticSdkProbes: sdkProbes, children, checkerCommands: children * 3, installers: 0,
+  console.log(JSON.stringify({ syntheticOnly: true, syntheticSdkProbes: sdkProbes, children, checkerCommandUpperBound: children * 3, installers: 0,
+    watchdogFooters, watchdogPrimingCompletions, strictProducerRejections,
     guarantee: "atomic replacement and recovery evidence across process failure, not power-loss durability", outcomes }, null, 2))
 } finally {
   for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value }

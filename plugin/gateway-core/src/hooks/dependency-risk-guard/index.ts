@@ -137,7 +137,7 @@ export function createDependencyRiskGuardHook(options: {
   return {
     id: "dependency-risk-guard",
     priority: 415,
-    events: ["tool.execute.before", "tool.execute.before.final", "tool.execute.after", "tool.execute.before.error", "session.deleted", "session.compacted"],
+    events: ["tool.execute.before", "tool.execute.before.final", "tool.execute.after", "tool.execute.before.error", "tool.execute.after.error", "session.deleted", "session.compacted"],
     async event(type: string, payload: unknown): Promise<void> {
       if (!options.enabled) {
         return
@@ -174,6 +174,11 @@ export function createDependencyRiskGuardHook(options: {
           clear(session)
           throw new Error("dependency_authorization_final_command_mismatch")
         }
+        return
+      }
+      if (type === "tool.execute.after.error") {
+        // Internal cancellation must never turn missing identity into a global clear.
+        if (session) clear(session)
         return
       }
       if (type === "session.deleted" || type === "session.compacted" || type === "tool.execute.before.error") {
