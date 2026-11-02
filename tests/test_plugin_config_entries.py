@@ -57,6 +57,8 @@ class PluginConfigEntriesTest(unittest.TestCase):
             self.assertEqual(2, module.opencode_major_version())
             run.return_value = subprocess.CompletedProcess([], 1, "v2.2.5", "")
             self.assertIsNone(module.opencode_major_version())
+            run.return_value = subprocess.CompletedProcess([], 0, "other 1.2.3 v2.2.5", "")
+            self.assertIsNone(module.opencode_major_version())
             run.side_effect = subprocess.TimeoutExpired("opencode", 5)
             self.assertIsNone(module.opencode_major_version())
 

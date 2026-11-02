@@ -35,4 +35,6 @@ Experimental, unconfigured adapters cover V2 model-context and native transport 
 
 These are **not** complete gateway protection or parity. In particular, transport-hook ordering and non-native providers, WebSocket behavior, images and other encodings, large/resumed histories, all four request kinds live, tool errors, command and event lifecycles, and the remaining guards require validation. The adapters are intentionally not registered in the user's configuration.
 
+The isolated V2 runtime created `session_v2`, `session_message`, and `session_part` tables. The legacy stale-session scanner now reports an incompatible schema and refuses repairs when `session_v2` exists, even if old V1 tables remain. A scoped repair retains scan errors rather than reporting success. V2-native diagnosis and repair remain unimplemented. The installer also refuses V2 before changing files while the configured V1 gateway is incompatible.
+
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.

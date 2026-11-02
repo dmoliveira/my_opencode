@@ -2569,7 +2569,10 @@ def opencode_major_version() -> int | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    match = re.search(r"\b(?:v)?(\d+)\.\d+\.\d+\b", result.stdout)
+    match = re.fullmatch(
+        r"(?:opencode\s+)?v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?",
+        result.stdout.strip(),
+    )
     return int(match.group(1)) if result.returncode == 0 and match else None
 
 

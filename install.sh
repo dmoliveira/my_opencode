@@ -95,6 +95,25 @@ if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,
 	exit 2
 fi
 
+# The configured gateway is a V1 plugin. Do not replace an existing config or
+# install an apparently protected runtime when V2 cannot load that plugin.
+if command -v opencode >/dev/null 2>&1; then
+	if ! OPENCODE_VERSION="$("$PYTHON_BIN" -c 'import subprocess; print(subprocess.run(["opencode", "--version"], check=True, capture_output=True, text=True, timeout=5).stdout.strip())' 2>/dev/null)"; then
+		printf "Error: unable to determine OpenCode compatibility; no installation changes were made.\n" >&2
+		exit 1
+	fi
+	if [[ "$OPENCODE_VERSION" =~ ^(opencode[[:space:]]+)?v?([0-9]+)\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+		OPENCODE_MAJOR="${BASH_REMATCH[2]}"
+		if [ "${#OPENCODE_MAJOR}" -gt 3 ] || [ "$OPENCODE_MAJOR" -ge 2 ]; then
+			printf "Error: the gateway plugin is not yet compatible with OpenCode V2; no installation changes were made. See docs/plan/doing/opencode-v2-migration.md.\n" >&2
+			exit 1
+		fi
+	else
+		printf "Error: unrecognized OpenCode version; no installation changes were made.\n" >&2
+		exit 1
+	fi
+fi
+
 mkdir -p "$CONFIG_DIR"
 
 if [ -d "$INSTALL_DIR/.git" ]; then

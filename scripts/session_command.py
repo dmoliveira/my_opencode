@@ -1681,6 +1681,7 @@ def _scan_runtime_stuck_sessions(
     runtime_db_journal_mode: str | None = None
     runtime_db_sqlite_version: str | None = None
     runtime_db_missing_tables: list[str] = []
+    runtime_db_v2_detected = False
     runtime_db_json1_available = False
     runtime_db_json1_checked = False
     runtime_db_indexes: dict[str, list[str]] = {}
@@ -1727,6 +1728,7 @@ def _scan_runtime_stuck_sessions(
             "runtime_db_journal_mode": runtime_db_journal_mode,
             "runtime_db_sqlite_version": runtime_db_sqlite_version,
             "runtime_db_missing_tables": runtime_db_missing_tables,
+            "runtime_db_v2_detected": runtime_db_v2_detected,
             "runtime_db_json1_available": runtime_db_json1_available,
             "runtime_db_indexes": runtime_db_indexes,
             "runtime_db_index_columns": runtime_db_index_columns,
@@ -1776,6 +1778,9 @@ def _scan_runtime_stuck_sessions(
             str(row[0])
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
+        # A migrated V2 database can retain V1 tables. Never diagnose or repair
+        # those stale tables as if they were the active V2 session store.
+        runtime_db_v2_detected = "session_v2" in tables
         journal_row = conn.execute("PRAGMA journal_mode").fetchone()
         runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
         version_row = conn.execute("SELECT sqlite_version()").fetchone()
@@ -1813,11 +1818,16 @@ def _scan_runtime_stuck_sessions(
                 + ", ".join(runtime_db_missing_tables)
             )
             add_remediation("runtime_schema_incompatible")
+        if runtime_db_v2_detected:
+            problems.append(
+                "OpenCode V2 session schema detected; legacy session scan and repair are unavailable"
+            )
+            add_remediation("runtime_schema_incompatible")
         if runtime_db_json1_checked and not runtime_db_json1_available:
             problems.append("runtime session database SQLite build lacks JSON1 support")
             add_remediation("runtime_json1_unavailable")
 
-        if runtime_db_missing_tables or not runtime_db_json1_available:
+        if runtime_db_v2_detected or runtime_db_missing_tables or not runtime_db_json1_available:
             runtime_db_scan_mode = "incompatible"
         else:
             missing_index_prefixes = _missing_runtime_index_prefixes(
@@ -2464,7 +2474,12 @@ def _repair_runtime_stuck_sessions(
         return list(deduplicated.values())
 
     candidate_findings = collect_candidates(scan)
-    base_problems = [] if scope_session_id else scan["problems"]
+    # Scoping can suppress findings outside the target, not a failed scan.
+    base_problems = (
+        scan["problems"]
+        if not scope_session_id or not scan.get("runtime_db_scan_complete")
+        else []
+    )
     if not apply_changes or not candidate_findings or not db_path.exists():
         return {
             "warnings": scan["warnings"],
@@ -2498,6 +2513,12 @@ def _repair_runtime_stuck_sessions(
             progress_this_round = 0
             round_repairs: list[dict] = []
             conn.execute("BEGIN IMMEDIATE")
+            if conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'"
+            ).fetchone():
+                raise sqlite3.OperationalError(
+                    "OpenCode V2 session schema detected; legacy repair refused"
+                )
             for candidate_index, finding in enumerate(remaining_candidates):
                 # Savepoint identifiers cannot be bound parameters; keep them internal and fixed-format.
                 savepoint_name = f"repair_{candidate_index}"

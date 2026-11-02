@@ -174,10 +174,19 @@ hooks-install: ## Install pre-commit git hooks
 
 install-test install-test-full: SHELL := /bin/bash
 
-install-test: ## Run installer smoke test in temp HOME
+install-test: ## Run V2 refusal and legacy installer smoke tests in temp HOME
 	@set -euo pipefail; \
 	TMP_HOME="$$(mktemp -d)"; \
 	trap 'rm -rf "$$TMP_HOME"' EXIT HUP INT TERM; \
+	$(PYTHON) -m unittest discover -s tests -p test_install_v2_safety.py; \
+	if command -v opencode >/dev/null 2>&1 && OPENCODE_TEST_VERSION="$$(opencode --version 2>/dev/null)" && [[ "$$OPENCODE_TEST_VERSION" =~ (^|[^0-9])v?([0-9]+)\.[0-9]+\.[0-9]+ ]] && [ "$${BASH_REMATCH[2]}" -ge 2 ]; then \
+	  if [ "$${MY_OPENCODE_RUN_LIVE_RELAUNCH_SMOKE:-0}" = "1" ]; then echo "A real V1 OpenCode is required for the legacy live relaunch smoke" >&2; exit 1; fi; \
+	  mkdir -p "$$TMP_HOME/test-bin"; \
+	  printf '%s\n' '#!/bin/sh' 'if [ "$${1-}" = "--version" ]; then echo "opencode v1.18.18"; else exit 1; fi' > "$$TMP_HOME/test-bin/opencode"; \
+	  chmod 700 "$$TMP_HOME/test-bin/opencode"; \
+	  export PATH="$$TMP_HOME/test-bin:$$PATH"; \
+	  echo "Legacy installer configuration test: using a V1 version fixture, not a live V1 runtime"; \
+	fi; \
 	SOURCE_REPO="$(PWD)"; \
 	SOURCE_REF="$$(git rev-parse --abbrev-ref HEAD)"; \
 	mkdir -p "$$TMP_HOME/.config/opencode"; \

@@ -1889,6 +1889,71 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             any(call.args and call.args[0] == "BEGIN" for call in connection.execute.call_args_list)
         )
 
+    def test_v2_schema_blocks_legacy_scan_and_scoped_repair_even_with_v1_tables(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            self._create_runtime_fixture(db_path, now_ms=1_800_000_000_000)
+            connection = sqlite3.connect(db_path)
+            try:
+                connection.execute("CREATE TABLE session_v2 (id TEXT PRIMARY KEY)")
+                connection.execute("INSERT INTO session_v2 VALUES ('synthetic-v2')")
+                connection.commit()
+            finally:
+                connection.close()
+            before = self._quiescent_snapshot(db_path)
+            with (
+                patch.object(module, "_scan_runtime_stuck_sessions_indexed_queries") as indexed,
+                patch.object(module, "_scan_runtime_stuck_sessions_legacy_queries") as legacy,
+                patch.object(module, "_backup_runtime_database") as backup,
+            ):
+                scan = module._scan_runtime_stuck_sessions(db_path, 300)
+                result = module._repair_runtime_stuck_sessions(
+                    db_path, 300, apply_changes=True, include_generic=True,
+                    scope_session_id="synthetic-v2",
+                )
+            self.assertTrue(scan["runtime_db_v2_detected"])
+            self.assertEqual("incompatible", scan["runtime_db_scan_mode"])
+            self.assertIn("runtime_schema_incompatible", scan["remediation_codes"])
+            self.assertTrue(any("V2 session schema" in item for item in result["problems"]))
+            self.assertEqual(0, result["repaired_count"])
+            self.assertIsNone(result["backup_path"])
+            self.assertEqual(before, self._quiescent_snapshot(db_path))
+            indexed.assert_not_called()
+            legacy.assert_not_called()
+            backup.assert_not_called()
+
+    def test_v2_schema_appearing_after_preview_blocks_repair_under_write_lock(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=1,
+            )
+            before = self._canonical_rows(db_path)
+            real_backup = module._backup_runtime_database
+
+            def backup_then_migrate(path: Path) -> Path:
+                backup_path = real_backup(path)
+                connection = sqlite3.connect(path)
+                try:
+                    connection.execute("CREATE TABLE session_v2 (id TEXT PRIMARY KEY)")
+                    connection.commit()
+                finally:
+                    connection.close()
+                return backup_path
+
+            with patch.object(module, "_backup_runtime_database", side_effect=backup_then_migrate):
+                result = module._repair_runtime_stuck_sessions(
+                    db_path, 300, apply_changes=True, include_generic=False,
+                    scope_session_id=fixture["positive_ids"][0],
+                )
+            self.assertEqual(1, result["candidate_count"])
+            self.assertEqual(0, result["repaired_count"])
+            self.assertTrue(any("V2 session schema" in item for item in result["problems"]))
+            self.assertEqual(before, self._canonical_rows(db_path))
+
     def test_missing_schema_and_json1_are_distinct_from_open_failure(self) -> None:
         module = self._module()
         now_ms = 1_800_000_000_000

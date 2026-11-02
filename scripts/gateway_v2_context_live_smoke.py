@@ -5,7 +5,9 @@ This does not validate the complete gateway or provider boundary.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -17,6 +19,7 @@ from gateway_secret_redaction_live_smoke import (
     CaptureState,
     isolated_env,
 )
+from session_command import _repair_runtime_stuck_sessions, _scan_runtime_stuck_sessions
 
 ROOT = Path(__file__).resolve().parent.parent
 CANARY = "V2SyntheticSecret_123456789"
@@ -147,6 +150,49 @@ def main() -> int:
                 and "late-marker [REDACTED]" in aisdk_captured
                 and "aisdk-control-marker" in aisdk_captured
             )
+            database_tables = {}
+            v2_columns = {}
+            for database in home.rglob("*.db"):
+                try:
+                    connection = sqlite3.connect(
+                        f"{database.as_uri()}?mode=ro", uri=True
+                    )
+                    try:
+                        database_tables[str(database.relative_to(home))] = [
+                            row[0]
+                            for row in connection.execute(
+                                "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+                            )
+                        ]
+                        for table in ("session_v2", "session_message", "session_part"):
+                            v2_columns[table] = [
+                                row[1] for row in connection.execute(f"PRAGMA table_info({table})")
+                            ]
+                    finally:
+                        connection.close()
+                except sqlite3.Error:
+                    database_tables[str(database.relative_to(home))] = ["unreadable"]
+            runtime_db = home / ".local" / "share" / "opencode" / "opencode.db"
+            runtime_probe_safe = False
+            if runtime_db.is_file():
+                before_digest = hashlib.sha256(runtime_db.read_bytes()).hexdigest()
+                scan = _scan_runtime_stuck_sessions(runtime_db, 300)
+                repair = _repair_runtime_stuck_sessions(
+                    runtime_db,
+                    300,
+                    apply_changes=True,
+                    include_generic=True,
+                    scope_session_id="synthetic-v2",
+                )
+                runtime_probe_safe = (
+                    scan.get("runtime_db_v2_detected") is True
+                    and scan.get("runtime_db_scan_mode") == "incompatible"
+                    and bool(repair.get("problems"))
+                    and repair.get("repaired_count") == 0
+                    and repair.get("backup_path") is None
+                    and hashlib.sha256(runtime_db.read_bytes()).hexdigest()
+                    == before_digest
+                )
             passed = (
                 result.returncode == 0
                 and request_count > 0
@@ -156,6 +202,7 @@ def main() -> int:
                 and "late-marker [REDACTED]" in captured
                 and negative_failed_closed
                 and aisdk_protected
+                and runtime_probe_safe
             )
             print(
                 json.dumps(
@@ -171,6 +218,9 @@ def main() -> int:
                         "negative_request_count": negative_requests,
                         "aisdk_protected": aisdk_protected,
                         "aisdk_request_count": len(aisdk_requests),
+                        "isolated_databases": database_tables,
+                        "isolated_v2_columns": v2_columns,
+                        "v2_legacy_repair_refused": runtime_probe_safe,
                     }
                 )
             )
