@@ -18,6 +18,12 @@ function targetPath(payload: ToolBeforePayload): string {
   return String(args?.filePath ?? args?.path ?? args?.file_path ?? "").trim()
 }
 
+/** Accept only the exact mandatory runtime prefix for this actual session. */
+export function nativeDependencyCommand(command: string, session: string): { command: string; prefix: string } {
+  const prefix = `OPENCODE_SESSION_ID='${session.replace(/'/g, `'"'"'`)}' `
+  return session && command.startsWith(prefix) ? { command: command.slice(prefix.length), prefix } : { command, prefix: "" }
+}
+
 /** Instrumented command guard, not a sandbox for arbitrary user-authored programs. */
 export function dependencyCommandRisk(command: string): boolean {
   const normalized = command.replace(/[\\'"]/g, "").trim()
@@ -114,7 +120,9 @@ export function createDependencyRiskGuardHook(options: {
       }
       const tool = String(eventPayload.input?.tool ?? "").toLowerCase()
       if (tool === "bash") {
-        const command = String(eventPayload.output?.args?.command ?? "")
+        const rawCommand = String(eventPayload.output?.args?.command ?? "")
+        const { command, prefix } = nativeDependencyCommand(rawCommand, session)
+        const rewritten = (value: string): string => prefix + value
         if (!command) {
           return
         }
@@ -128,7 +136,7 @@ export function createDependencyRiskGuardHook(options: {
               const snapshot = capture(directory)
               if (exists(join(snapshot.root, ".venv"))) throw new Error("environment_exists")
               const scope = { session, call, root: snapshot.root, fingerprint: snapshot.fingerprint }
-              const pending = ledger.begin(scope, (nonce) => runnerCommand(snapshot, "audit", nonce))
+              const pending = ledger.begin(scope, (nonce) => rewritten(runnerCommand(snapshot, "audit", nonce)))
               bindings.set(session, { kind: "inflight-audit", snapshot, call, command: pending.command, until: pending.until })
               eventPayload.output!.args!.command = pending.command
             } else {
@@ -151,7 +159,7 @@ export function createDependencyRiskGuardHook(options: {
               })
               if (bindings.get(session) !== reservation) { permit.close(); throw new Error("authorization_cancelled") }
               capabilities.set(session, permit)
-              reservation.command = runnerCommand(snapshot, "setup", permit.nonce, permit.path, authority.auditorRoot, authority.auditorFingerprint)
+              reservation.command = rewritten(runnerCommand(snapshot, "setup", permit.nonce, permit.path, authority.auditorRoot, authority.auditorFingerprint))
               reservation.until = permit.until
               eventPayload.output!.args!.command = reservation.command
             }
@@ -160,7 +168,7 @@ export function createDependencyRiskGuardHook(options: {
         }
         const commandHit = command === AUTH_REQUEST || command === SETUP_REQUEST ||
           dependencyCommandRisk(command) ||
-          commandPatterns.some((pattern) => pattern.test(command))
+          commandPatterns.some((pattern) => pattern.test(rawCommand))
         if (!commandHit) {
           clear(session)
           return

@@ -10,7 +10,8 @@ import { AuthorizationLedger, parseFrame, PENDING_MS, PERMIT_MS, MAX_STATE } fro
 import { requirements, hostRequirements, validateAudit, samePackages, execute } from "../dist/hooks/dependency-risk-guard/runner.js"
 import { safeRead, validateProject, digest, capture, captureAuditor, recapture, directoryIdentity, snapshotFingerprint, encodeSnapshot, decodeSnapshot, exists, ENV, runnerCommand, RUNNER } from "../dist/hooks/dependency-risk-guard/safety.js"
 import { capability } from "../dist/hooks/dependency-risk-guard/capability.js"
-import { createDependencyRiskGuardHook, dependencyCommandRisk } from "../dist/hooks/dependency-risk-guard/index.js"
+import { createDependencyRiskGuardHook, dependencyCommandRisk, nativeDependencyCommand } from "../dist/hooks/dependency-risk-guard/index.js"
+import { createNoninteractiveShellGuardHook } from "../dist/hooks/noninteractive-shell-guard/index.js"
 
 const ownedTemp = (prefix) => realpathSync(mkdtempSync(join(tmpdir(), prefix)))
 const hash = "a".repeat(64)
@@ -143,6 +144,30 @@ test("host markers are evaluated before duplicate checks; no row silently disapp
 
 for (const command of ["uv --version", "uv --help", "uv sync --help", "uv pip list", "uv pip sync --help", "npm --help", "npm run build", "npm run lint", "npm run test", "npm --prefix plugin/gateway-core run build", "node --test test/dependency-risk-guard-hook.test.mjs"]) {
   test(`metadata/build command remains available: ${command}`, () => assert.equal(dependencyCommandRisk(command), false))
+}
+
+test("only this actual session's exact runtime prefix is recognized and preserved", () => {
+  const prefix = "OPENCODE_SESSION_ID='synthetic-session' "
+  assert.deepEqual(nativeDependencyCommand(prefix + "uv sync --locked", "synthetic-session"), { command: "uv sync --locked", prefix })
+  for (const command of ["OPENCODE_SESSION_ID='other' uv sync --locked", "OPENCODE_SESSION_ID=synthetic-session uv sync --locked",
+    prefix + prefix + "uv sync --locked", "UV_INDEX_URL=other " + prefix + "uv sync --locked"]) {
+    assert.notEqual(nativeDependencyCommand(command, "synthetic-session").command, "uv sync --locked")
+  }
+})
+
+for (const command of ["uv --help", "npm --prefix plugin/gateway-core run lint", "npm run test"]) {
+  test(`actual mandatory session hook composes with safe command ${command}`, async () => {
+    const directory = ownedTemp("synthetic-runtime-prefix-")
+    try {
+      const input = { tool: "bash", sessionID: "synthetic-session", callID: "metadata-call" }
+      const output = { args: { command } }
+      const shell = createNoninteractiveShellGuardHook({ directory, enabled: true, injectEnvPrefix: true, envPrefixes: ["CI=true"], prefixCommands: ["git", "gh"], blockedPatterns: [] })
+      await shell.event("tool.execute.before", { input, output })
+      assert.equal(output.args.command, "OPENCODE_SESSION_ID='synthetic-session' " + command)
+      const guard = createDependencyRiskGuardHook({ directory, enabled: true, lockfilePatterns: [], commandPatterns: [] })
+      await guard.event("tool.execute.before", { input, output })
+    } finally { rmSync(directory, { recursive: true, force: true }) }
+  })
 }
 for (const text of ["", "demo>=1", "demo @ https://example.invalid/demo.whl", "-e .", "-r other.txt", "--index-url https://example.invalid",
   "demo==1", requirement + requirement, requirement.trim() + "; python_version > '3'", "demo[extra]==1 --hash=sha256:" + hash]) {
@@ -544,6 +569,7 @@ test("host refuses correlated success when the current auditor identity changed"
 })
 
 for (const command of ["uv sync --locked", "uv sync --locked --extra test", "uv sync", "sh -c 'uv sync --locked'", "'/trusted/uv' sync --locked",
+  "OPENCODE_SESSION_ID='other' npm run test", "OPENCODE_SESSION_ID='s' UV_INDEX_URL=other uv sync --locked", "OPENCODE_SESSION_ID='s' OPENCODE_SESSION_ID='s' uv sync --locked",
   "/tmp/attacker/npm run test", "/tmp/attacker/uv --help", "/tmp/attacker/pip list", "/tmp/attacker/npm --prefix project run build",
   "u\\v sync --locked", "npm ci", "npm install", "python -m pip install demo", "node /trusted/dependency-risk-guard/runner.js setup",
   "dependency-security authorize-uv-sync-locked --pass", "true; uv sync --locked", "UV_INDEX_URL=x uv sync --locked"]) {

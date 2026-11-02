@@ -31,6 +31,8 @@ Do not insert unrelated Bash commands between the two requests. Failure, expiry,
 
 Safe metadata/build forms use exact bare package-manager names, not arbitrary absolute paths or aliases. Explicit configured command denials still apply. The runtime verifies rewritten authorization/setup commands after every before-hook, including evidence recording.
 
+The mandatory shell hook adds the actual session identity internally. The dependency guard recognizes and preserves only that exact session prefix; this does not authorize caller-selected environment overrides, wrong sessions or duplicate assignments.
+
 The runner receives bounded canonical snapshot evidence containing executable/helper hashes, project input hashes, directory identities and the Git marker binding. That serialized evidence is not authority: exact host call correlation and the live one-shot capability are still required for setup.
 
 ## Privacy and deployment
