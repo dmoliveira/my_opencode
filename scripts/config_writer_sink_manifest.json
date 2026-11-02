@@ -2251,6 +2251,42 @@
   },
   {
     "language": "python",
+    "file": "intent_planner.py",
+    "function": "load_json",
+    "kind": "os.open",
+    "destination": "'/'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_planner.py",
+    "function": "open_file",
+    "kind": "os.open",
+    "destination": "part",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_planner.py",
+    "function": "open_file",
+    "kind": "os.open",
+    "destination": "parts[-1]",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "intent_planner.py",
+    "function": "research",
+    "kind": "os.open",
+    "destination": "root",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
     "file": "knowledge_capture_pipeline.py",
     "function": "save_entries",
     "kind": "path.mkdir",

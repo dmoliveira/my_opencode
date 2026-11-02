@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -18,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import GatewayCorePlugin from "../dist/index.js";
 import {
@@ -704,5 +706,79 @@ test("legacy messageId cannot override the official output message identity", as
 
     const [envelope] = readEnvelopes(stateDir);
     assert.equal(envelope.source.message_id, "official-output-id");
+  });
+});
+
+
+test("native ingress binds to read-only research and proposal-only admission", async () => {
+  await withDirectory(async (directory) => {
+    const stateDir = join(directory, "state");
+    const hook = createIntentIngressOutboxHook(hookOptions(directory, { stateDir }));
+    await sendMessage(hook, directory);
+    const [ingressPath] = envelopePaths(stateDir);
+    const ingressBytes = readFileSync(ingressPath, "utf8");
+    const envelope = JSON.parse(ingressBytes);
+    writeFileSync(join(directory, "design.md"), "Only the coordinator writes the graph.\n");
+    const source = {
+      kind: "user", id: envelope.source.message_id, summary: "Build safe intake",
+      session_id: envelope.source.session_id, content_sha256: envelope.content.sha256,
+    };
+    const request = {
+      version: 1, proposal_id: "request-native", scope: "example/repo", source,
+      research: [{ id: "design", path: "design.md", start_line: 1, end_line: 1 }],
+    };
+    const requestPath = join(directory, "request.json");
+    writeFileSync(requestPath, JSON.stringify(request));
+    const backend = fileURLToPath(new URL("../../../scripts/intent_coordinator_command.py", import.meta.url));
+    function invoke(command, inputPath) {
+      const result = spawnSync(process.env.PYTHON || "python3", [
+        "-B", backend, command, "--file", inputPath, "--root", directory,
+        "--ingress-file", ingressPath,
+      ], {
+        cwd: directory, encoding: "utf8", timeout: 10000,
+        env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1",
+          MY_OPENCODE_CODEMEMORY_BIN: "/planner-must-not-invoke-oc",
+          MY_OPENCODE_CODEMEMORY_CONFIG: "/planner-must-not-read-config" },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.stderr, "");
+      return { status: result.status, report: JSON.parse(result.stdout) };
+    }
+    const filesBeforeResearch = readdirSync(directory).sort();
+    const research = invoke("research", requestPath);
+    assert.equal(research.status, 0);
+    assert.deepEqual(readdirSync(directory).sort(), filesBeforeResearch);
+    assert.equal(research.report.artifact.ingress.envelope_id, envelope.envelope_id);
+    const draft = {
+      version: 1, research: research.report.artifact,
+      proposal: {
+        version: 1, proposal_id: request.proposal_id, scope: request.scope, source,
+        records: [{ key: "task:intake", entity_type: "task", title: "Build safe intake",
+          goal: "Return proposals without graph authority", summary: "Use bounded evidence and quality gates" }],
+        links: [],
+      },
+      assessments: [{ target: "record:task:intake", evidence: ["source", "design"],
+        rationale: "The user requests safe intake and the design requires a sole writer",
+        acceptance: "Research and admission emit proposals without graph or spool mutation" }],
+      unresolved: [],
+    };
+    const draftPath = join(directory, "draft.json");
+    writeFileSync(draftPath, JSON.stringify(draft));
+    const filesBeforePlan = readdirSync(directory).sort();
+    const admitted = invoke("plan", draftPath);
+    assert.equal(admitted.status, 0);
+    assert.equal(admitted.report.artifact.authority, "proposal-only");
+    assert.deepEqual(admitted.report.artifact.proposal.source, source);
+    assert.deepEqual(readdirSync(directory).sort(), filesBeforePlan);
+    assert.equal(readFileSync(ingressPath, "utf8"), ingressBytes);
+    assert.deepEqual(envelopePaths(stateDir), [ingressPath]);
+    assert.equal(invoke("plan", draftPath).report.artifact.proposal_sha256,
+      admitted.report.artifact.proposal_sha256);
+    writeFileSync(join(directory, "design.md"), "Changed evidence.\n");
+    const stale = invoke("plan", draftPath);
+    assert.equal(stale.status, 1);
+    assert.equal(stale.report.reason_code, "intent_planner_evidence_changed");
+    assert.equal(stale.report.artifact, undefined);
+    assert.equal(readFileSync(ingressPath, "utf8"), ingressBytes);
   });
 });
