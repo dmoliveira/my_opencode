@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +71,27 @@ class InstallV2SafetyTest(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unrecognized OpenCode version", result.stderr)
+            self.assertFalse((home / ".config" / "opencode").exists())
+
+    def test_missing_runtime_fails_without_creating_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary_dir = root / "bin"
+            binary_dir.mkdir()
+            (binary_dir / "python3").symlink_to(sys.executable)
+            git = binary_dir / "git"
+            git.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            git.chmod(0o700)
+            home = root / "home"
+            env = os.environ.copy()
+            env.update({"HOME": str(home), "PATH": str(binary_dir)})
+            env.pop("INSTALL_DIR", None)
+            result = subprocess.run(
+                ["/bin/bash", str(ROOT / "install.sh"), "--skip-self-check"],
+                env=env, capture_output=True, text=True, check=False, timeout=30,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("OpenCode is not installed or not on PATH", result.stderr)
             self.assertFalse((home / ".config" / "opencode").exists())
 
 

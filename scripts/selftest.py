@@ -13019,15 +13019,16 @@ exit 0
 
         result = run_gateway("status", "--json")
         gateway_status = parse_json_output(result.stdout)
-        gateway_cli_v2 = (gateway_status.get("opencode_cli_major") or 0) >= 2
+        gateway_major = gateway_status.get("opencode_cli_major")
+        gateway_cli_unsupported = gateway_major is None or gateway_major >= 2
         expect(
-            result.returncode == (1 if gateway_cli_v2 and gateway_status.get("enabled") else 0),
-            f"gateway status exit did not reflect V2 compatibility: {result.stderr}",
+            result.returncode == (1 if gateway_cli_unsupported and gateway_status.get("enabled") else 0),
+            f"gateway status exit did not reflect runtime compatibility: {result.stderr}",
         )
         expect(
             gateway_status.get("result")
-            == ("FAIL" if gateway_cli_v2 and gateway_status.get("enabled") else "PASS"),
-            "gateway status should flag the V1 plugin under the V2 CLI",
+            == ("FAIL" if gateway_cli_unsupported and gateway_status.get("enabled") else "PASS"),
+            "gateway status should flag the V1 plugin on unsupported or unknown runtimes",
         )
         expect(
             isinstance(gateway_status.get("orphan_cleanup"), dict),
@@ -13183,7 +13184,7 @@ exit 0
 
         result = run_gateway("status", "--json")
         expect(
-            result.returncode == (1 if gateway_cli_v2 else 0),
+            result.returncode == (1 if gateway_cli_unsupported else 0),
             f"gateway status stale cleanup failed: {result.stderr}",
         )
         gateway_status_stale = parse_json_output(result.stdout)
@@ -13215,7 +13216,7 @@ exit 0
         gateway_state_lock_token.chmod(0o600)
         result = run_gateway("status", "--json")
         expect(
-            result.returncode == (1 if gateway_cli_v2 else 0),
+            result.returncode == (1 if gateway_cli_unsupported else 0),
             f"gateway status lock diagnostics failed: {result.stderr}",
         )
         gateway_status_locked = parse_json_output(result.stdout)
@@ -13253,7 +13254,10 @@ exit 0
             "--force",
             "--json",
         )
-        expect(result.returncode == 0, f"gateway enable failed: {result.stderr}")
+        expect(
+            result.returncode == (1 if gateway_cli_unsupported else 0),
+            f"gateway forced enable did not respect runtime compatibility: {result.stderr}",
+        )
         gateway_enabled = parse_json_output(result.stdout)
         expect(
             gateway_enabled.get("enabled") is True,
@@ -13266,8 +13270,8 @@ exit 0
             env_override={"MY_OPENCODE_GATEWAY_FORCE_BUN_AVAILABLE": "0"},
         )
         expect(
-            result.returncode == (1 if gateway_cli_v2 else 0),
-            "gateway enable should reject the V1 entry on V2 and otherwise not require bun: "
+            result.returncode == (1 if gateway_cli_unsupported else 0),
+            "gateway enable should reject unsupported or unknown runtimes and otherwise not require bun: "
             + (result.stderr or result.stdout),
         )
         gateway_enabled_without_bun = parse_json_output(result.stdout)
@@ -19997,6 +20001,7 @@ version: 1
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
                 "gateway_plugin_incompatible_opencode_v2",
+                "gateway_plugin_runtime_unavailable",
             },
             "autopilot doctor should include deterministic gateway runtime mode diagnostics",
         )
@@ -20112,6 +20117,7 @@ version: 1
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
                 "gateway_plugin_incompatible_opencode_v2",
+                "gateway_plugin_runtime_unavailable",
             },
             "autopilot status should expose deterministic gateway runtime routing mode",
         )
@@ -20210,6 +20216,7 @@ version: 1
                 "gateway_plugin_disabled",
                 "gateway_plugin_not_ready",
                 "gateway_plugin_incompatible_opencode_v2",
+                "gateway_plugin_runtime_unavailable",
                 "gateway_plugin_ready",
             },
             "autopilot status should keep direct gateway diagnostics when bun is unavailable",

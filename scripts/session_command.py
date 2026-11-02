@@ -61,21 +61,26 @@ def _runtime_db_candidates() -> list[Path]:
     configured = os.environ.get("MY_OPENCODE_RUNTIME_DB_PATH", "").strip()
     if configured:
         return [Path(configured).expanduser()]
+    # OpenCode V2 may use an explicit database path. Do not fall back to a
+    # different existing database when that path has not been created yet.
+    opencode_db = os.environ.get("OPENCODE_DB", "").strip()
+    if opencode_db:
+        return [Path(opencode_db).expanduser()]
 
     home = Path.home()
     candidates: list[Path] = []
     xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
     if xdg_data_home:
-        candidates.append(Path(xdg_data_home).expanduser() / "opencode" / "opencode.db")
+        return [Path(xdg_data_home).expanduser() / "opencode" / "opencode.db"]
     candidates.append(home / ".local" / "share" / "opencode" / "opencode.db")
 
     if sys.platform == "darwin":
-        candidates.insert(0, home / "Library" / "Application Support" / "opencode" / "opencode.db")
+        candidates.append(home / "Library" / "Application Support" / "opencode" / "opencode.db")
     elif sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
         appdata = os.environ.get("APPDATA", "").strip()
         if local_appdata:
-            candidates.insert(0, Path(local_appdata) / "opencode" / "opencode.db")
+            candidates.append(Path(local_appdata) / "opencode" / "opencode.db")
         if appdata:
             candidates.append(Path(appdata) / "opencode" / "opencode.db")
 
@@ -1959,6 +1964,7 @@ def _runtime_doctor_fields(runtime: dict[str, Any]) -> dict[str, Any]:
         "runtime_db_journal_mode",
         "runtime_db_sqlite_version",
         "runtime_db_missing_tables",
+        "runtime_db_v2_detected",
         "runtime_db_json1_available",
         "runtime_db_indexes",
         "runtime_db_index_columns",
@@ -3090,6 +3096,17 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
     rows = _session_rows(index)
     if not rows:
         warnings.append("session index exists but no sessions are recorded yet")
+    diagnosis_quick_fixes: list[str] = []
+    if problems:
+        diagnosis_quick_fixes = [
+            "/doctor run",
+            f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
+        ]
+        if runtime.get("runtime_db_scan_complete"):
+            diagnosis_quick_fixes.extend([
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
+            ])
     return _emit(
         {
             "result": "PASS" if not problems else "FAIL",
@@ -3106,18 +3123,7 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             **_runtime_doctor_fields(runtime),
             "count": len(rows),
             "stale_seconds": stale_seconds,
-            "quick_fixes": (
-                [
-                    "/doctor run",
-                    f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
-                    f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
-                    f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
-                ]
-                if problems
-                else []
-            )
-            + sidecar_quick_fixes
-            + runtime_permission_quick_fixes,
+            "quick_fixes": diagnosis_quick_fixes + sidecar_quick_fixes + runtime_permission_quick_fixes,
         },
         json_output,
     )

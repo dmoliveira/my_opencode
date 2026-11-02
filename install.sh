@@ -112,6 +112,9 @@ if command -v opencode >/dev/null 2>&1; then
 		printf "Error: unrecognized OpenCode version; no installation changes were made.\n" >&2
 		exit 1
 	fi
+else
+	printf "Error: OpenCode is not installed or not on PATH; no installation changes were made.\n" >&2
+	exit 1
 fi
 
 mkdir -p "$CONFIG_DIR"
