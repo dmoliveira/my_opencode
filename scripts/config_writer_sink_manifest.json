@@ -3904,5 +3904,68 @@
     "destination": "project / 'seed.txt'",
     "count": 1,
     "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_tool_error_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.mkdir",
+    "destination": "plugin",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_tool_error_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.write_text",
+    "destination": "plugin / 'index.ts'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_tool_error_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.write_text",
+    "destination": "project / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_permission_rejection_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.mkdir",
+    "destination": "plugin",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_permission_rejection_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.open",
+    "destination": "root / 'server.log'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_permission_rejection_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.write_text",
+    "destination": "plugin / 'index.ts'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_permission_rejection_live_smoke.py",
+    "function": "run_case",
+    "kind": "path.write_text",
+    "destination": "project / 'opencode.json'",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
   }
 ]

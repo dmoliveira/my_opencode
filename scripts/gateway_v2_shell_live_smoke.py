@@ -112,12 +112,13 @@ def main() -> int:
             server.secret_file.write_text(CANARY, encoding="utf-8")
             (plugin / "index.ts").write_text(
                 'import { Plugin } from "@opencode/plugin"\n'
+                'import { Error as ToolError } from "@opencode/plugin/promise/tool"\n'
                 f"import {{ registerV2ShellGuards }} from {json.dumps(dist.as_uri())}\n"
                 f"import {{ registerV2ToolOutputRedaction }} from {json.dumps(output_dist.as_uri())}\n"
                 f"import {{ createSecretRedactor }} from {json.dumps(redactor_dist.as_uri())}\n"
                 'export default Plugin.define({ id: "v2-shell-probe", async setup(ctx) {\n'
                 f'  const redactor = createSecretRedactor({{ patterns: [{json.dumps(CANARY)}], redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
-                "  const disposeOutput = await registerV2ToolOutputRedaction(ctx.tool, redactor)\n"
+                "  const disposeOutput = await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version)\n"
                 "  const disposeShell = await registerV2ShellGuards(ctx.tool, async (sessionID) => (await ctx.session.get({ sessionID })).location.directory, {\n"
                 "    directory: ctx.location.directory, noninteractive: { enabled: true, injectEnvPrefix: false, envPrefixes: [], prefixCommands: [], blockedPatterns: [] },\n"
                 '    dangerous: { enabled: true, blockedPatterns: ["BLOCKED_SYNTHETIC"] }\n'

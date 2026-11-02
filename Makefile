@@ -110,6 +110,8 @@ gateway-v2-slice-smoke: ## Test experimental V2 security adapters against localh
 	$(PYTHON) scripts/gateway_v2_context_live_smoke.py
 	$(PYTHON) scripts/gateway_v2_shell_live_smoke.py
 	$(PYTHON) scripts/gateway_v2_worktree_live_smoke.py
+	$(PYTHON) scripts/gateway_v2_tool_error_live_smoke.py
+	$(PYTHON) scripts/gateway_v2_permission_rejection_live_smoke.py
 
 gateway-resume-redaction-e2e: ## Build and gate large-session resume redaction on OpenCode $(OPENCODE_RESUME_E2E_VERSION)
 	npm --prefix plugin/gateway-core run build
