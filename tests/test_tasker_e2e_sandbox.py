@@ -44,15 +44,13 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             "oc done task_1 && oc cancel task_2",
         )
         for command in commands:
-            with self.subTest(command=command):
-                with self.assertRaisesRegex(AssertionError, "unapproved"):
-                    tasker_e2e_sandbox.validate_tasker_shell_command(command)
+            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "unapproved"):
+                tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_rejects_non_codememory_commands(self) -> None:
         for command in ("git status", "gh pr list", "python3 helper.py", "make test"):
-            with self.subTest(command=command):
-                with self.assertRaisesRegex(AssertionError, "non-Codememory"):
-                    tasker_e2e_sandbox.validate_tasker_shell_command(command)
+            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "non-Codememory"):
+                tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_allows_single_write_with_global_options(self) -> None:
         tasker_e2e_sandbox.validate_tasker_shell_command(
@@ -68,11 +66,10 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             "oc find task\noc add task title",
         )
         for command in commands:
-            with self.subTest(command=command):
-                with self.assertRaisesRegex(
-                    AssertionError, "compound|chained|backend write"
-                ):
-                    tasker_e2e_sandbox.validate_tasker_shell_command(command)
+            with self.subTest(command=command), self.assertRaisesRegex(
+                AssertionError, "compound|chained|backend write"
+            ):
+                tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_rejects_multiple_or_chained_backend_writes(self) -> None:
         commands = (
@@ -80,15 +77,13 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             "oc --format json find task && oc --format json add task title",
         )
         for command in commands:
-            with self.subTest(command=command):
-                with self.assertRaisesRegex(AssertionError, "backend write"):
-                    tasker_e2e_sandbox.validate_tasker_shell_command(command)
+            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "backend write"):
+                tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_rejects_command_substitution(self) -> None:
         for command in ("oc get $(git rev-parse HEAD)", "oc get `whoami`"):
-            with self.subTest(command=command):
-                with self.assertRaisesRegex(AssertionError, "compound"):
-                    tasker_e2e_sandbox.validate_tasker_shell_command(command)
+            with self.subTest(command=command), self.assertRaisesRegex(AssertionError, "compound"):
+                tasker_e2e_sandbox.validate_tasker_shell_command(command)
 
     def test_refusal_allows_planning_write_with_execution_words_in_data(self) -> None:
         scenario = tasker_e2e_sandbox.Scenario(
@@ -162,6 +157,16 @@ class TaskerShellBoundaryTest(unittest.TestCase):
             self.assertTrue(config["plugin"][0].endswith("plugin/gateway-core/dist/index.js"))
             self.assertEqual("allow", config["permission"]["bash"])
             self.assertEqual("deny", config["permission"]["edit"])
+            tasker_spec = json.loads(
+                (REPO_ROOT / "agent" / "specs" / "tasker.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            denied_tools = tasker_spec["metadata"]["denied_tools"]
+            self.assertTrue(
+                all(config["permission"].get(tool) == "deny" for tool in denied_tools),
+                config["permission"],
+            )
 
     def test_runtime_environment_is_allowlisted_and_storage_is_disposable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
