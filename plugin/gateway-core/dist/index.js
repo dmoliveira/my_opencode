@@ -1131,6 +1131,19 @@ export default function GatewayCorePlugin(ctx, options) {
                     executedHooks.push(validationEvidenceLedger);
                 }
             }
+            // Nothing may dispatch after this check: even the evidence ledger is
+            // inside the final binding boundary for trusted security rewrites.
+            const dependencyGuard = selectedHooks.find((hook) => hook.id === "dependency-risk-guard");
+            if (dependencyGuard) {
+                const result = await dispatchHook({
+                    hook: dependencyGuard,
+                    eventType: "tool.execute.before.final",
+                    payload: { input, output, directory },
+                    directory,
+                });
+                if (!result.ok)
+                    throw result.error;
+            }
         }
         catch (error) {
             writeGatewayEventAudit(directory, {
