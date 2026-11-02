@@ -93,6 +93,7 @@ import { createAgentReservationGuardHook } from "./hooks/agent-reservation-guard
 import { createLlmDecisionRuntime, resolveLlmDecisionRuntimeConfigForHook, } from "./hooks/shared/llm-decision-runtime.js";
 import { safeCreateHook } from "./hooks/shared/safe-create-hook.js";
 import { dispatchGatewayHookEvent } from "./hooks/shared/hook-dispatch.js";
+import { dispatchToolAfterHooks } from "./hooks/shared/tool-after-dispatch.js";
 import { createHookDispatchLatencyCollector } from "./hooks/shared/hook-dispatch-latency.js";
 import { clearDelegationChildSessionLink, delegationTerminalChildSessionId, getDelegationChildSessionLink, } from "./hooks/shared/delegation-child-session.js";
 import { dispatchDelegationTerminalHooks } from "./hooks/shared/delegation-terminal-dispatch.js";
@@ -1306,29 +1307,7 @@ export default function GatewayCorePlugin(ctx, options) {
             has_output: typeof output.output === "string" && output.output.trim().length > 0,
         });
         const selectedHooks = hooksForEvent(hooks, "tool.execute.after");
-        if (validationEvidenceLedger &&
-            selectedHooks.includes(validationEvidenceLedger)) {
-            const result = await dispatchHook({
-                hook: validationEvidenceLedger,
-                eventType: "tool.execute.after",
-                payload: { input, output, directory },
-                directory,
-            });
-            if (!result.ok && (result.critical || result.blocked)) {
-                throw result.error;
-            }
-        }
-        for (const hook of selectedHooks.filter((candidate) => candidate.id !== "validation-evidence-ledger")) {
-            const result = await dispatchHook({
-                hook,
-                eventType: "tool.execute.after",
-                payload: { input, output, directory },
-                directory,
-            });
-            if (!result.ok && (result.critical || result.blocked)) {
-                throw result.error;
-            }
-        }
+        await dispatchToolAfterHooks(selectedHooks, { input, output, directory }, dispatchHook);
     }
     async function toolDefinition(input, output) {
         if (typeof output.description !== "string") {
