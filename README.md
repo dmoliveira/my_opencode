@@ -183,6 +183,7 @@ Recommended command split:
 - `/autopilot` for open-ended autonomous execution
 - `/autoflow` for explicit plan-file execution
 - `/intent` for bounded read-only research, proposal-only planning, and explicit Codememory preview/apply
+- `python3 scripts/task_graph_command.py frontier --limit 2 --json` for bounded advisory scheduling over the complete task graph
 - `/ox-*` for stable reusable prompt expansions that you want to keep refining over time
 
 Before implementation work, create a dedicated git worktree branch for the task. Do not edit task files from the main project folder, and do not `git checkout` or `git switch` that folder onto a task branch.

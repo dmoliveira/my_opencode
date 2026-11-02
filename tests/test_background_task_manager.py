@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import errno
 import hashlib
 import json
@@ -1607,6 +1608,154 @@ class BackgroundTaskManagerTest(unittest.TestCase):
             final = bg._snapshot_job(job["id"])
             assert final is not None
             self.assertEqual("cancelled", final["status"])
+
+    def test_scaled_process_reservation_race_and_owner_death_recovery(self) -> None:
+        for size in (50, 250, 1000):
+            with self.subTest(size=size), self.patched_store():
+                with bg.locked_jobs(writeback=True) as data:
+                    data["jobs"] = []
+                template, config_path = self.enqueue_lease(
+                    [sys.executable, "-c", "pass"]
+                )
+                jobs = []
+                for number in range(size):
+                    worktree = self.root / f"source-{number:05}"
+                    worktree.mkdir(exist_ok=True)
+                    job = copy.deepcopy(template)
+                    job["id"] = f"bg_qual_{number:05}"
+                    job["cwd"] = str(worktree)
+                    job["lease_request"].update(
+                        task_id=f"task_{number + 1}",
+                        session_id=f"session_{number + 1}",
+                        worktree_path=str(worktree),
+                    )
+                    jobs.append(job)
+                with bg.locked_jobs(writeback=True) as data:
+                    data["jobs"] = jobs
+                barrier = self.root / f"start-{size}"
+                release = self.root / f"release-{size}"
+                children = []
+                results = []
+                worker_code = """import json,sys,time
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import background_task_manager as bg
+barrier,release,ready,result=map(Path,sys.argv[2:])
+ready.write_text('ready')
+deadline=time.monotonic()+20
+while not barrier.exists() and time.monotonic()<deadline: time.sleep(.01)
+if not barrier.exists(): raise SystemExit(2)
+_,leased,_=bg._reserve_jobs(job_id=None,max_jobs=None,lease_max_concurrency=2)
+result.write_text(json.dumps({job['id']:job['current_attempt_id'] for job in leased}))
+while not release.exists() and time.monotonic()<deadline: time.sleep(.01)
+raise SystemExit(0 if release.exists() else 3)
+"""
+                try:
+                    ready_paths = []
+                    for worker in range(2):
+                        ready = self.root / f"ready-{size}-{worker}"
+                        result = self.root / f"result-{size}-{worker}"
+                        ready_paths.append(ready)
+                        results.append(result)
+                        children.append(
+                            subprocess.Popen(
+                                [
+                                    sys.executable,
+                                    "-c",
+                                    worker_code,
+                                    str(SCRIPTS),
+                                    str(barrier),
+                                    str(release),
+                                    str(ready),
+                                    str(result),
+                                ],
+                                env=self.env,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                            )
+                        )
+                    deadline = time.monotonic() + 15
+                    while not all(path.exists() for path in ready_paths):
+                        self.assertLess(
+                            time.monotonic(), deadline, "reservation workers not ready"
+                        )
+                        time.sleep(0.01)
+                    barrier.write_text("race")
+                    while not all(path.exists() for path in results):
+                        self.assertLess(
+                            time.monotonic(),
+                            deadline,
+                            "reservation workers did not settle",
+                        )
+                        time.sleep(0.01)
+                    admitted = {}
+                    for path in results:
+                        result = json.loads(path.read_text())
+                        self.assertFalse(set(admitted) & set(result))
+                        admitted.update(result)
+                    self.assertEqual(2, len(admitted))
+                    _, additional, _ = bg._reserve_jobs(
+                        job_id=None, max_jobs=None, lease_max_concurrency=2
+                    )
+                    self.assertEqual([], additional)
+                    with bg.locked_jobs(writeback=False) as data:
+                        active = {
+                            job["id"]: job["current_attempt_id"]
+                            for job in data["jobs"]
+                            if job["status"] == "running"
+                        }
+                        self.assertEqual(admitted, active)
+                        self.assertEqual(
+                            size - 2,
+                            sum(job["status"] == "queued" for job in data["jobs"]),
+                        )
+                    self.assertEqual(2, bg.reconcile_lease_jobs()["active"])
+                finally:
+                    release.write_text("settle")
+                    for child in children:
+                        stdout, stderr = child.communicate(timeout=10)
+                        self.assertEqual(0, child.returncode, stdout + stderr)
+
+                def source_factory(*, cwd, config_path=config_path, **_kwargs):
+                    number = int(Path(cwd).name.split("-")[-1]) + 1
+                    base = self.source_runner(config_path)
+
+                    def source(arguments, operation):
+                        result = base(arguments, operation)
+                        if operation == "task_lease_codememory_current":
+                            result.update(
+                                worktree_path=str(cwd),
+                                task_id=f"task_{number}",
+                                session_id=f"session_{number}",
+                            )
+                        elif operation == "task_lease_codememory_get":
+                            result["id"] = f"task_{number}"
+                        return result
+
+                    return source
+
+                with patch.object(bg, "make_oc_runner", side_effect=source_factory):
+                    recovered = bg.reconcile_lease_jobs()
+                self.assertEqual(2, recovered["failed"])
+                with bg.locked_jobs(writeback=False) as data:
+                    for job in data["jobs"]:
+                        if job["id"] in admitted:
+                            self.assertEqual("failed", job["status"])
+                            self.assertIsNone(job["current_attempt_id"])
+                            self.assertEqual(
+                                admitted[job["id"]], job["attempts"][0]["id"]
+                            )
+                            self.assertEqual(1, len(job["attempts"]))
+                            self.assertEqual(
+                                "known_no_effect",
+                                job["attempts"][0]["outcome_confidence"],
+                            )
+                _, next_jobs, _ = bg._reserve_jobs(
+                    job_id=None, max_jobs=None, lease_max_concurrency=2
+                )
+                self.assertEqual(2, len(next_jobs))
+                self.assertFalse(set(admitted) & {job["id"] for job in next_jobs})
 
     def test_lease_gate_write_failure_aborts_without_effect(self) -> None:
         command_marker = self.root / "lease-command-ran"

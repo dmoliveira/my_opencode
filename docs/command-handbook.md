@@ -643,6 +643,24 @@ For your LangGraph setup, default endpoint target is `http://localhost:3000/open
 
 - compatibility aliases are listed below; keep operator guidance canonical-first
 
+### Task Graph And Bounded Frontier
+
+```text
+python3 scripts/task_graph_command.py list --json
+python3 scripts/task_graph_command.py ready --json
+python3 scripts/task_graph_command.py frontier --limit 2 --json
+python3 scripts/task_graph_command.py project --scope <scope> --codememory-config <config> --check --json
+python3 scripts/task_graph_command.py doctor --json
+```
+
+`frontier` returns deterministic read-only scheduling advice and the projection
+revision when present. Existing `in_progress` tasks consume capacity; the default
+limit is two and the allowed range is 1–32. Over-capacity state is reported and
+admits zero additional candidates. The full graph remains intact. This command
+creates no reservations and grants no execution or lifecycle authority; execution
+still needs current Codememory task/session identity and fenced `/bg` admission.
+Use the direct backend shown above; this slice adds no slash-command alias.
+
 ### Compatibility aliases (secondary)
 
 - `/plan` -> compatibility/internal contract-checking wrapper; prefer `/autoflow` for new usage

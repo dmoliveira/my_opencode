@@ -518,6 +518,72 @@ Argument errors retain argparse exit 2. Planner paths always emit JSON.
   bounds, duplicate/conflict behavior, private paths, interruption recovery,
   restart persistence, and deterministic replay order.
 
-## Deferred Work
+## Rolling Decomposition Qualification
 
-- Scale qualification at 50, 250, and 1000 tasks: `task_130`.
+`make rolling-decomposition-live` qualifies 50, 250 and 1000 **task records,
+excluding epics**, against real isolated SQLite Codememory. The calling process
+requires an installed `oc`; no provider, credentials or host graph is needed.
+A nine-task calibration is available with
+`python3 scripts/rolling_decomposition_qualification.py --sizes 9`.
+
+Each explicit fixture requirement maps to exactly one task. The independent
+inventory is enumerated before coverage is checked; missing/duplicate atoms,
+duplicate task ownership, duplicate records/titles and broken hierarchy fail.
+Every task has a root-to-task path. Fresh add-only intake is a forest: each
+fragment has one epic, one foundation task and up to two dependent child tasks.
+This preserves the coordinator's ten-change ceiling (at most nine changes per
+fragment), rather than granting cross-proposal existing-record links or
+pretending the complete objective is one giant proposal.
+
+Every native fragment passes actual planner research/admission and coordinator
+apply. A lost-reply fault occurs after one native commit, leaving a prepared
+receipt; restart/retry must preserve exact final counts and identities. Applied
+replay must call no backend; changed-content replay and a new-ID duplicate-title
+proposal must fail before another mutation. A fresh authoritative double scan
+checks exact task coverage, dependency direction and every hierarchy edge. Epic
+inventory and hierarchy coverage are checked independently of projection, which
+intentionally materializes only tasks and dependencies.
+
+`python3 scripts/task_graph_command.py frontier --limit 2 [--json]` provides deterministic, read-only scheduling
+advice over the complete locally validated graph. Allowed limits are 1–32; current
+`in_progress` tasks occupy slots, and an already over-capacity state admits zero
+additional candidates. Failed, blocked, canceled, missing or cyclic prerequisites
+cannot make a task ready. It neither reserves work nor changes lifecycle. Advice
+is a sampled projection, not current execution authority; current task/session,
+exact lease and `/bg` capacity checks remain mandatory before effects.
+
+The large rolling model completes every fixture task exactly once in frontiers
+of at most two, detects deadlock, and reloads a persisted authoritative-fixture
+checkpoint without changing the next frontier. These completions are explicitly
+model inputs, not claims that 1000 command processes ran. At **each native scale**,
+a connected smoke selects two actual frontier tasks, creates isolated native
+sessions/lifecycle state, enqueues and executes two real lease-backed processes,
+and verifies a concurrent runner cannot start the third ready queued job. A
+blocked child is excluded from dispatch. Native process completion does not
+silently transition Codememory lifecycle.
+
+Separate 50/250/1000 queue tests race two independent reservation processes across
+a synchronized barrier. Live-owner reload preserves exact attempt identities and
+capacity; owner death follows existing known-pre-effect recovery, retains attempt
+history, and does not replay the abandoned jobs. Existing receipt/fencing tests
+continue to qualify uncertain post-effect outcomes; the new test does not invent
+a broad "restart is safe to retry" rule.
+
+Native budgets are fixed before each run from measured nine-task startup cost:
+0.20 seconds per expected bounded subprocess plus one complete timeout reserve
+(30 seconds for intake, 10 seconds for source scans), with conservative call-count
+bounds. Local projection/model budget is 30 seconds; connected execution is 60
+seconds. The harness reserves the entire configured subprocess timeout before
+starting each call, failing early if the remaining aggregate stage budget is too
+small. It reports elapsed time, operation count and budget separately by stage.
+There is no claim of constant-time intake or source snapshotting.
+
+All native state, sessions, jobs, receipts and projection artifacts are confined
+to temporary scenario roots. Child environments are allowlisted; in-process
+projection runtime and lock overrides are explicitly rebound under the scenario
+root and restored afterward. Negative tests use external sentinels to ensure
+inherited host overrides cannot redirect qualification writes. CLI-owned roots
+are removed after either success or failure. Fixture/unit gates run in
+`make validate`; native qualification is an explicit, slower operator gate.
+
+Measured results and limits: `docs/rolling-decomposition-qualification.md`.
