@@ -337,6 +337,11 @@ Use these directly in OpenCode:
 /session repair-runtime-permissions --apply --json
 ```
 
+`/session show`, `/session current`, and `/session handoff` fail when multiple
+parsed index rows have the selected ID; they do not choose a row. Unredacted
+output uses `session_index_duplicate_id`; redacted handoff reports the fixed
+`session_index_unavailable` error. This read-time check is not proof of
+uniqueness in other artifacts or after a later write.
 
 `/session handoff` emits a concise continuation summary for the latest indexed session (or a specific `--id`) with suggested next actions. Use `--launch-cwd` to generate a ready-to-run reopen command for a target worktree, and add `--fork` when you want the resumed session to branch from the current one.
 
