@@ -52,14 +52,12 @@ class PluginConfigEntriesTest(unittest.TestCase):
 
     def test_opencode_version_detection(self) -> None:
         module = importlib.import_module("gateway_command")
-        with patch.object(module.subprocess, "run") as run:
-            run.return_value = subprocess.CompletedProcess([], 0, "opencode v2.2.5\n", "")
+        with patch.object(module, "probe_opencode_version") as probe:
+            probe.return_value = "opencode v2.2.5"
             self.assertEqual(2, module.opencode_major_version())
-            run.return_value = subprocess.CompletedProcess([], 1, "v2.2.5", "")
+            probe.return_value = "other 1.2.3 v2.2.5"
             self.assertIsNone(module.opencode_major_version())
-            run.return_value = subprocess.CompletedProcess([], 0, "other 1.2.3 v2.2.5", "")
-            self.assertIsNone(module.opencode_major_version())
-            run.side_effect = subprocess.TimeoutExpired("opencode", 5)
+            probe.side_effect = module.OpenCodeVersionProbeError("unavailable")
             self.assertIsNone(module.opencode_major_version())
 
     def test_unknown_opencode_runtime_is_not_reported_as_ready(self) -> None:
@@ -96,6 +94,7 @@ class PluginConfigEntriesTest(unittest.TestCase):
             })
             for version, expected in (
                 ("opencode v2.2.5", "incompatible with OpenCode V2"),
+                ("opencode v0.9.0", "could not be verified"),
                 ("unknown-runtime", "could not be verified"),
             ):
                 with self.subTest(version=version):

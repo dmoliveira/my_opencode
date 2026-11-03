@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import ctypes
 import os
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -164,7 +166,7 @@ class BoundedSubprocessTest(unittest.TestCase):
         self.assertTrue(fake_process.killed)
 
     def test_registry_uses_known_command_classes(self) -> None:
-        self.assertEqual(42, len(OPERATION_CLASSES))
+        self.assertEqual(43, len(OPERATION_CLASSES))
         self.assertEqual("codememory_probe", OPERATION_CLASSES["rolling_qualification_probe"])
         self.assertEqual("codememory_mutation", OPERATION_CLASSES["rolling_qualification_mutation"])
         self.assertEqual(
@@ -447,6 +449,180 @@ class BoundedSubprocessTest(unittest.TestCase):
                 time.sleep(0.05)
             else:
                 self.fail("bounded timeout left a descendant process running")
+
+    def test_capped_timeout_kills_descendants_after_leader_exit(self) -> None:
+        policy = COMMAND_CLASS_POLICIES["git_probe"]
+        with tempfile.TemporaryDirectory() as tmp:
+            existing_readers = {
+                thread.ident
+                for thread in threading.enumerate()
+                if thread.name.startswith("bounded-")
+            }
+            child_pid_path = Path(tmp) / "child-pid"
+            child_script = (
+                "import os, pathlib, sys, time; "
+                "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); "
+                "time.sleep(5)"
+            )
+            script = (
+                "import pathlib, subprocess, sys, os, time; "
+                "subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]], "
+                "stdout=sys.stdout, stderr=sys.stderr); "
+                "deadline = time.monotonic() + 2; "
+                "path = pathlib.Path(sys.argv[1]); "
+                "exec(\"while not path.exists() and time.monotonic() < deadline:\\n"
+                "    time.sleep(.01)\"); "
+                "os._exit(0)"
+            )
+            started = time.monotonic()
+            with (
+                patch.dict(os.environ, {policy.environment_key: "1.5"}),
+                self.assertRaises(BoundedCommandError) as raised,
+            ):
+                run_bounded(
+                    [sys.executable, "-c", script, str(child_pid_path), child_script],
+                    operation="worktree_git_repository_probe",
+                    capture_output=True,
+                    max_output_bytes=512,
+                )
+            self.assertEqual(
+                "worktree_git_repository_probe_timeout", raised.exception.reason_code
+            )
+            self.assertLess(time.monotonic() - started, 4.0)
+            self.assertTrue(child_pid_path.exists())
+            child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                try:
+                    proc_stat = Path(f"/proc/{child_pid}/stat")
+                    if proc_stat.exists() and proc_stat.read_text().split()[2] == "Z":
+                        break
+                    os.kill(child_pid, 0)
+                except (ProcessLookupError, FileNotFoundError):
+                    break
+                except OSError as exc:
+                    if os.name == "nt" and getattr(exc, "winerror", None) == 87:
+                        break
+                    raise
+                time.sleep(0.05)
+            else:
+                self.fail("capped bounded timeout left a descendant process running")
+            self.assertFalse(
+                {
+                    thread.ident
+                    for thread in threading.enumerate()
+                    if thread.name.startswith("bounded-")
+                } - existing_readers
+            )
+
+    @unittest.skipUnless(os.name == "posix", "detached-session fixture requires POSIX")
+    def test_capped_timeout_does_not_wait_for_detached_pipe_holder(self) -> None:
+        policy = COMMAND_CLASS_POLICIES["git_probe"]
+        with tempfile.TemporaryDirectory() as tmp:
+            child_pid_path = Path(tmp) / "detached-pid"
+            child_script = (
+                "import os, pathlib, sys, time; "
+                "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); "
+                "time.sleep(3)"
+            )
+            script = (
+                "import pathlib, subprocess, sys, os, time; "
+                "subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]], "
+                "stdout=sys.stdout, stderr=sys.stderr, start_new_session=True); "
+                "deadline = time.monotonic() + 2; "
+                "path = pathlib.Path(sys.argv[1]); "
+                "exec(\"while not path.exists() and time.monotonic() < deadline:\\n"
+                "    time.sleep(.01)\"); "
+                "os._exit(0)"
+            )
+            started = time.monotonic()
+            existing_readers = {
+                thread.ident
+                for thread in threading.enumerate()
+                if thread.name.startswith("bounded-")
+            }
+            try:
+                with (
+                    patch.dict(os.environ, {policy.environment_key: "0.3"}),
+                    self.assertRaises(BoundedCommandError) as raised,
+                ):
+                    run_bounded(
+                        [sys.executable, "-c", script, str(child_pid_path), child_script],
+                        operation="worktree_git_repository_probe",
+                        capture_output=True,
+                        max_output_bytes=512,
+                    )
+                self.assertEqual(
+                    "worktree_git_repository_probe_timeout", raised.exception.reason_code
+                )
+                self.assertLess(time.monotonic() - started, 2.0)
+                self.assertFalse(
+                    {
+                        thread.ident
+                        for thread in threading.enumerate()
+                        if thread.name.startswith("bounded-")
+                    } - existing_readers
+                )
+            finally:
+                if child_pid_path.exists() and time.monotonic() - started < 2.5:
+                    try:
+                        pid = int(child_pid_path.read_text(encoding="utf-8"))
+                        identity = subprocess.run(
+                            ["ps", "-p", str(pid), "-o", "command="],
+                            capture_output=True, text=True, check=False, timeout=2,
+                        )
+                        if str(child_pid_path) in identity.stdout and "time.sleep(3)" in identity.stdout:
+                            os.kill(pid, signal.SIGKILL)
+                    except (OSError, subprocess.SubprocessError):
+                        pass
+
+    def test_capped_text_capture_preserves_newlines_and_output_limit_reason(self) -> None:
+        completed = run_bounded(
+            [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'a\\r\\nb\\r')"],
+            operation="worktree_git_repository_probe",
+            capture_output=True,
+            text=True,
+            max_output_bytes=512,
+        )
+        self.assertEqual("a\nb\n", completed.stdout)
+        with self.assertRaises(BoundedCommandError) as raised:
+            run_bounded(
+                [sys.executable, "-c", "import sys; sys.stdout.buffer.write(bytes([195,169])*300)"],
+                operation="worktree_git_repository_probe",
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                max_output_bytes=511,
+            )
+        self.assertEqual("worktree_git_repository_probe_output_limit", raised.exception.reason_code)
+
+    def test_capped_timeout_when_direct_child_closes_output_pipes(self) -> None:
+        policy = COMMAND_CLASS_POLICIES["git_probe"]
+        with (
+            patch.dict(os.environ, {policy.environment_key: "0.3"}),
+            self.assertRaises(BoundedCommandError) as raised,
+        ):
+            run_bounded(
+                [sys.executable, "-c", "import os,time; os.close(1); os.close(2); time.sleep(30)"],
+                operation="worktree_git_repository_probe",
+                capture_output=True,
+                max_output_bytes=512,
+            )
+        self.assertEqual("worktree_git_repository_probe_timeout", raised.exception.reason_code)
+
+    @unittest.skipUnless(os.name == "posix", "selector path is POSIX-specific")
+    def test_capped_selector_failure_terminates_and_reports_error(self) -> None:
+        with (
+            patch.object(bounded_subprocess.selectors, "DefaultSelector", side_effect=OSError("fixture")),
+            self.assertRaises(BoundedCommandError) as raised,
+        ):
+            run_bounded(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                operation="worktree_git_repository_probe",
+                capture_output=True,
+                max_output_bytes=512,
+            )
+        self.assertEqual("worktree_git_repository_probe_command_error", raised.exception.reason_code)
 
     def test_invalid_configuration_does_not_launch(self) -> None:
         policy = COMMAND_CLASS_POLICIES["git_probe"]

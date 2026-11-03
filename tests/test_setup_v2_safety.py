@@ -150,6 +150,7 @@ class SetupV2SafetyTest(unittest.TestCase):
                 database = fixture.root / "user-runtime.sqlite"
                 database.write_text("user runtime record\n", encoding="utf-8")
                 fixture.runtime(
+                    '[ "${CI:-}" = "true" ] || exit 47\n'
                     'printf "probe cache" > "$HOME/probe-cache"\n'
                     'printf "probe cwd" > "$PWD/probe-cwd"\n'
                     'if [ -n "${OPENCODE_DB:-}" ]; then printf changed > "$OPENCODE_DB"; fi\n'
