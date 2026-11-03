@@ -76,18 +76,14 @@ Examples:
 /ox-ux --target https://dmoliveira.github.io/top-uni/ --focus hierarchy,copy,states --goal "polish the browsing flow"
 ```
 
-Recommended first step for browser-first work:
-
-```text
-/devtools install playwright-cli
-npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
-```
-
-The install target verifies the exact package provenance in an isolated npm environment. Reuse the unique session for the audit and end it with `npx --yes @playwright/cli@0.1.17 -s=<unique-session> close`.
+**Safety hold:** Do not run live `/devtools install playwright-cli` or retry it.
+Preserve its existing cache, npm config, and attestation files until cache-write
+authority and no-clobber publication are qualified. Package provenance checks do
+not prove filesystem write safety. See `docs/command-handbook.md`.
 
 Execution split:
-- Use the verified `playwright-cli` path first for standard browser-first site/app audits and long persistent exploratory loops.
-- Use `/browser ensure --json` and `/mcp profile playwright` when integrated MCP network, storage, assertion, or vision tools are the better fit.
+- Choose a backend only after independently checking its effects on state that must be preserved; the hold does not qualify MCP or `npx` as safe alternatives.
+- Consider integrated MCP network, storage, assertion, or vision tools when their independently assessed state effects are acceptable.
 - Do not install external CLI skill bundles; use scoped `close`. Reserve `close-all` and `kill-all` for a fully owned disposable sandbox.
 - Keep `/ox-ux` as the routing contract either way so the agent still frames the work as a full UX audit instead of ad hoc browser poking.
 

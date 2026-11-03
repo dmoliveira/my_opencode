@@ -2,15 +2,21 @@
 
 Use this guide when the agent should turn a broad “test the UX” request into concrete browser scenarios.
 
+**Safety hold:** Do not run live `/devtools install playwright-cli` or retry it.
+Preserve its existing cache, npm config, and attestation files until cache-write
+authority and no-clobber publication are qualified. See `docs/command-handbook.md`.
+Check any alternative backend independently; this hold does not qualify MCP or
+an `npx` invocation as safe for state that must be preserved.
+
 ## Operating split
 
-- **Verified `playwright-cli` first** for normal websites, SPAs, dashboards, forms, responsive checks, and longer exploratory loops.
-- **Playwright MCP** when integrated network, storage, assertion, vision, or host-managed browser tools materially simplify the flow.
-- Run `/devtools install playwright-cli` before the CLI path, use a unique session, and close only that session.
+- Choose a browser backend only after confirming its state effects are safe for the task.
+- Playwright MCP may help when integrated network, storage, assertion, vision, or host-managed browser tools are needed; assess it independently.
+- Use a unique session and close only that session when doing so is safe.
 
 ## Scenario matrix
 
-| Scenario | Default path | Why |
+| Scenario | Candidate path, subject to the hold | Why |
 | --- | --- | --- |
 | Marketing site / docs / landing page | `playwright-cli` | Compact snapshots and repeated interactions |
 | Product flow / dashboard / settings | `playwright-cli` | Persistent, token-efficient coding-agent flow |
@@ -47,7 +53,7 @@ Use this guide when the agent should turn a broad “test the UX” request into
 
 ### 4. Canvas, WebGL, or browser-gaming pass
 
-- start with `playwright-cli`
+- use `playwright-cli` only if it is independently available and safe for the task
 - capture a screenshot and identify the main interactive zones
 - test onboarding clarity, HUD readability, input discoverability, pause/settings, and failure/recovery loops
 - verify whether actions give immediate visible feedback
@@ -63,7 +69,7 @@ Use this guide when the agent should turn a broad “test the UX” request into
 
 ## Tool-selection rules
 
-- Verify the exact CLI package with `/devtools install playwright-cli` before use.
+- Do not bypass the Playwright CLI installation hold with another unqualified installer.
 - Use a unique `-s=<session>` value for each owned flow and finish with scoped `close`.
 - Do not install external CLI skill bundles. Use `close-all` or `kill-all` only in a fully owned disposable sandbox.
 - Prefer accessibility snapshots and refs first.

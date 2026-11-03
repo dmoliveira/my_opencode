@@ -34,11 +34,16 @@ Optional capability checks when you need them: [h:371d5a53]
 /tmux doctor --json [h:ae3cceae]
 ``` [h:0a584b58]
  [h:47685be0]
-For browser UX work, use the verified CLI path first:
-- `/devtools install playwright-cli` verifies `@playwright/cli@0.1.17` before exact on-demand execution.
+For browser UX work, choose a backend only after confirming it is safe for the state you must preserve:
 - Use a unique `-s=<session>` value and close only that session when the flow ends.
-- Use `/browser ensure --json` plus `/mcp profile playwright` when integrated MCP network, storage, assertion, or vision tools are the better fit.
+- Consider integrated MCP network, storage, assertion, or vision tools only after independently checking their state effects.
 - See `docs/playwright-ux-scenarios.md` for both paths. Do not install external CLI skill bundles.
+
+**Playwright CLI safety hold:** Do not run live `/devtools install playwright-cli`
+or retry it. Preserve the existing Playwright CLI cache, npm config files, and
+attestations until cache-write authority is qualified. Synthetic symlink and
+hardlink tests showed that installer writes can affect files outside the cache.
+See `docs/command-handbook.md`.
 
 **Safety hold:** Do not run live ast-grep installation, retries, recovery, or
 version probes, including `/devtools install ast-grep` and
@@ -49,8 +54,7 @@ journals and staged files.
 recommend installation; avoid them on live state that must be preserved or
 remain unaccessed, and disregard that recommendation. Auto-slash can also route
 an unspecified devtools install request to `install all`; do not execute it while
-the hold applies. See `docs/command-handbook.md`. Playwright CLI remains a separate
-explicit install.
+the hold applies. See `docs/command-handbook.md`.
 
 Exploratory examples after startup is healthy: [h:9e27aaf8]
  [h:e0a80255]

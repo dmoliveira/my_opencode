@@ -6,7 +6,8 @@ Note: this archive includes historical implementation notes and may mention lega
 
 **Safety hold:** Background mutations, untrusted background-record reads, and
 live ast-grep installation, retries, recovery, or version probes are not safe
-to run as examples. Preserve ast-grep journals and staged files.
+to run as examples. Live Playwright CLI installation and retries are also on
+hold. Preserve ast-grep journals and stages and the Playwright CLI cache.
 `/doctor`, `/doctor status`, and `/doctor run` also access the background store
 and its lock; avoid them on live state that must be preserved. Some health and
 swarm operations read background records. See `docs/command-handbook.md`.
@@ -610,13 +611,13 @@ Optional/manual add-ons:
 - Context7 only when you have a local CLI workflow you trust; keep the remote MCP path disabled by default when token cost matters.
 
 `/devtools status` and `/devtools doctor` inspect managed ast-grep state and may
-still recommend installation. Avoid them on live state that must be preserved or
-remain unaccessed, and disregard that recommendation while the safety hold applies.
+also inspect Playwright CLI state. They may still recommend the held installers.
+Avoid them on live state that must be preserved or remain unaccessed, and
+disregard those recommendations while the safety holds apply.
 Other commands:
 
 ```text
 /devtools help
-/devtools install playwright-cli
 /devtools hooks-install
 /tmux status --json
 /tmux doctor --json
@@ -640,7 +641,7 @@ direnv allow
 Notes:
 - Do not run live ast-grep installation, retries, recovery, or version probes, including `/devtools install ast-grep` and `/devtools install all`, until process containment, bounded draining, and recovery ownership and cleanup are qualified. Preserve existing journals and staged files. The installer targets pinned Darwin arm64 `ast-grep 0.45.0`; see `docs/command-handbook.md` for the safety hold.
 - `/devtools` observes all other host-managed tools and gives manual guidance without invoking a host package manager.
-- `playwright-cli` remains an exact explicit install and is never included in `install all`.
+- Do not run live Playwright CLI installation or retries. Preserve its existing cache, npm config, and attestation files; see `docs/command-handbook.md`.
 - `.pre-commit-config.yaml` is the canonical local hook configuration; `/devtools hooks-install` invokes the resolved local `pre-commit` executable with a finite deadline.
 - Browser-use and Context7 remain manual/opt-in because they need SDK/API-key or CLI-specific setup outside the default host-tool path.
 - Prefer tmux session names with an AI/OpenCode prefix such as `ai-oc-<task>` so cleanup and resume targeting stay obvious.
