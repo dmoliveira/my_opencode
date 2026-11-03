@@ -5,6 +5,7 @@ import errno
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -1186,6 +1187,49 @@ def _run_application_validation(
             timeout=remaining_timeout(),
             check=False,
         )
+    except subprocess.TimeoutExpired as exc:
+        raise _error(
+            "runtime_snapshot_application_timeout",
+            "OpenCode disposable snapshot validation exceeded its deadline",
+            phase="application_validation",
+        ) from exc
+    except UnicodeError:
+        raise _error(
+            "runtime_snapshot_application_version_invalid",
+            "OpenCode validator returned an invalid version",
+            phase="application_validation",
+        ) from None
+    if version.returncode != 0:
+        raise _error(
+            "runtime_snapshot_application_open_failed",
+            "OpenCode could not identify the disposable snapshot validator",
+            phase="application_validation",
+        )
+    try:
+        version_text = version.stdout.strip()
+        match = (
+            re.fullmatch(
+                r"(?:opencode\s+)?v?(\d+)\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?",
+                version_text,
+            )
+            if len(version_text.encode("utf-8")) <= 256
+            else None
+        )
+    except UnicodeError:
+        match = None
+    if match is None:
+        raise _error(
+            "runtime_snapshot_application_version_invalid",
+            "OpenCode validator returned an invalid version",
+            phase="application_validation",
+        )
+    if int(match.group(1)) != 1:
+        raise _error(
+            "runtime_snapshot_application_version_unsupported",
+            "the selected OpenCode executable cannot use the verified V1 snapshot validator",
+            phase="application_validation",
+        )
+    try:
         query = subprocess.run(
             [
                 str(binary.path),
@@ -1209,17 +1253,16 @@ def _run_application_validation(
             "OpenCode disposable snapshot validation exceeded its deadline",
             phase="application_validation",
         ) from exc
-    if version.returncode != 0 or query.returncode != 0:
+    except UnicodeError:
+        raise _error(
+            "runtime_snapshot_application_output_invalid",
+            "OpenCode disposable snapshot validation returned invalid JSON",
+            phase="application_validation",
+        ) from None
+    if query.returncode != 0:
         raise _error(
             "runtime_snapshot_application_open_failed",
             "OpenCode could not open the disposable runtime snapshot",
-            phase="application_validation",
-        )
-    version_text = version.stdout.strip()
-    if not version_text or len(version_text.encode("utf-8")) > 256:
-        raise _error(
-            "runtime_snapshot_application_version_invalid",
-            "OpenCode validator returned an invalid version",
             phase="application_validation",
         )
     try:
@@ -1675,7 +1718,7 @@ def create_runtime_history_snapshot(
             },
             "limitations": [
                 "consistent_completed_online_backup_not_invocation_start_state",
-                "same_version_open_proves_readability_not_restoration",
+                "selected_binary_open_does_not_identify_source_service_or_prove_restoration",
                 "same_uid_swap_and_restore_not_excluded_by_path_based_sqlite_api",
                 "wal_reader_may_update_transient_source_shm_coordination_state",
             ],
