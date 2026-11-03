@@ -507,12 +507,14 @@ are not atomic with signals. Do not use `/bg read` or `/bg status <id>` on
 untrusted job records: a stored path can disclose another file's contents.
 These issues were confirmed with synthetic fixtures, not live jobs.
 
-Other `/bg` diagnostics and listing commands read or initialize the store and
-open its lock even without job writeback. A synthetic test showed that a
-symlinked lock can cause the target file's permissions to be changed. Avoid
-these commands on live state that must be preserved. `/doctor`, `/doctor status`,
-and `/doctor run` include a background doctor check, and `/agent-pool health`
-invokes background status, so they have the same risk. `/health`,
+Other `/bg` diagnostics and listing commands read or initialize the store even
+without job writeback. The lock now refuses observed symlinks, hardlinks,
+nonregular files, unsafe parent paths, and non-private existing locks without
+repairing them. This does not make subsequent pathname-based store access or
+noncooperating writers safe. Avoid these commands on live state that must be
+preserved. `/doctor`, `/doctor status`, and `/doctor run` include a background
+doctor check, and `/agent-pool health` invokes background status, so they have
+the same risk. `/health`,
 `/health status`, and `/health drift` may refresh by reading the background job
 index; some swarm lane operations also read linked job records. Avoid those
 paths when records are untrusted. Health derives its index path from the config

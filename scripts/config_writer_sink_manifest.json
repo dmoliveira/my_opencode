@@ -280,15 +280,6 @@
   },
   {
     "language": "python",
-    "file": "background_task_manager.py",
-    "function": "locked_jobs",
-    "kind": "path.open",
-    "destination": "LOCK_PATH",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
     "file": "build_agents.py",
     "function": "build_agents",
     "kind": "path.mkdir",

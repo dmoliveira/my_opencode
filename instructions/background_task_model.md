@@ -11,9 +11,10 @@ Stored artifact paths can truncate or replace unrelated files, and process
 signals are not atomically bound to identity. Do not use `/bg read` or
 `/bg status <id>` on untrusted records: they can expose contents of a stored
 path. Other `/bg` diagnostics and listings access the store and its lock; avoid
-them on live state that must be preserved. A symlinked lock can cause another
-file's permissions to change. `/doctor`, `/doctor status`, and `/doctor run`
-include a background check; `/agent-pool health` invokes background status.
+them on live state that must be preserved. Observed unsafe locks are refused
+without repair, but pathname-based store access remains unsafe. `/doctor`,
+`/doctor status`, and `/doctor run` include a background check;
+`/agent-pool health` invokes background status.
 Health refreshes and some swarm lane operations can also read job records;
 avoid them when records are untrusted. These restrictions remain even though
 terminal artifact deletion is deferred.

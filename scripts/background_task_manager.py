@@ -17,7 +17,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import session_sidecar_security as sidecar_security  # type: ignore
 from config_layering import load_layered_config  # type: ignore
 from task_lease_command import (  # type: ignore
     DEFAULT_OC_BIN,
@@ -43,12 +44,6 @@ from task_lease_command import (  # type: ignore
 from task_lease_command import (  # type: ignore
     DEFAULT_STATE_PATH as DEFAULT_LEASE_STATE_PATH,
 )
-
-try:
-    import fcntl
-except ImportError as exc:  # pragma: no cover
-    raise SystemExit(f"error: unsupported platform for file locking: {exc}")
-
 
 BG_ROOT = Path(
     os.environ.get("MY_OPENCODE_BG_DIR", "~/.config/opencode/my_opencode/bg")
@@ -308,11 +303,23 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 
 @contextmanager
 def locked_jobs(writeback: bool = True):
-    ensure_store()
-    with LOCK_PATH.open("a+", encoding="utf-8") as lock_file:
-        if hasattr(os, "fchmod"):
-            os.fchmod(lock_file.fileno(), 0o600)
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(
+                sidecar_security.secure_sidecar_lock(
+                    LOCK_PATH,
+                    repair_existing=False,
+                    reject_parent_symlink=True,
+                )
+            )
+        except sidecar_security.SidecarSecurityError as exc:
+            reason_code = (
+                "bg_store_lock_timeout"
+                if exc.reason_code == "session_sidecar_lock_timeout"
+                else "bg_store_lock_unsafe"
+            )
+            raise BackgroundStoreError(reason_code, "background store lock refused") from exc
+        ensure_store()
         data = json.loads(JOBS_PATH.read_text(encoding="utf-8"))
         data.setdefault("version", 1)
         data.setdefault("jobs", [])

@@ -333,7 +333,7 @@ def _validate_creation_base(value: os.stat_result) -> None:
         )
 
 
-def _parent_plan(path: Path) -> _ParentPlan:
+def _parent_plan(path: Path, *, reject_parent_symlink: bool = False) -> _ParentPlan:
     logical_target = _absolute(path)
     logical_parent = logical_target.parent
     pending = list(logical_parent.parts[1:])
@@ -355,6 +355,12 @@ def _parent_plan(path: Path) -> _ParentPlan:
                 phase="authority",
             ) from exc
         if stat.S_ISLNK(metadata.st_mode):
+            if reject_parent_symlink and not pending:
+                raise _error(
+                    "session_sidecar_unsafe_parent",
+                    "session sidecar final parent cannot be a symlink",
+                    phase="authority",
+                )
             link_count += 1
             try:
                 cursor_metadata = os.lstat(cursor)
@@ -467,9 +473,14 @@ def _verify_authority(authority: _Authority) -> None:
 
 
 @contextmanager
-def _sidecar_authority(path: Path, *, create_parent: bool) -> Iterator[_Authority | None]:
+def _sidecar_authority(
+    path: Path,
+    *,
+    create_parent: bool,
+    reject_parent_symlink: bool = False,
+) -> Iterator[_Authority | None]:
     _require_supported_platform()
-    plan = _parent_plan(path)
+    plan = _parent_plan(path, reject_parent_symlink=reject_parent_symlink)
     if plan.missing_parts and not create_parent:
         yield None
         return
@@ -1604,6 +1615,8 @@ def _secure_sidecar_file_lock(
     path: Path,
     *,
     timeout_seconds: float = 5.0,
+    repair_existing: bool = True,
+    reject_parent_symlink: bool = False,
 ) -> Iterator[None]:
     _require_supported_platform()
     try:
@@ -1623,12 +1636,22 @@ def _secure_sidecar_file_lock(
     if timeout_seconds < 0:
         raise ValueError("timeout_seconds must be non-negative")
     normalized = _absolute(path)
-    with _sidecar_authority(normalized, create_parent=True) as authority:
+    with _sidecar_authority(
+        normalized,
+        create_parent=True,
+        reject_parent_symlink=reject_parent_symlink,
+    ) as authority:
         assert authority is not None
         before = _raw_target_stat(authority)
         if before is not None:
             _validate_target(before, require_private=False)
             mode = stat.S_IMODE(before.st_mode)
+            if not repair_existing and mode != PRIVATE_FILE_MODE:
+                raise _error(
+                    "session_sidecar_insecure_permissions",
+                    "existing sidecar lock must be private",
+                    phase="lock",
+                )
             if PRIVATE_FILE_MODE & ~mode:
                 raise _error(
                     "session_sidecar_insecure_permissions",
@@ -1670,7 +1693,14 @@ def _secure_sidecar_file_lock(
                     phase="lock",
                 )
             _validate_target(before, require_private=False)
-            if PRIVATE_FILE_MODE & ~stat.S_IMODE(before.st_mode):
+            mode = stat.S_IMODE(before.st_mode)
+            if not repair_existing and mode != PRIVATE_FILE_MODE:
+                raise _error(
+                    "session_sidecar_insecure_permissions",
+                    "concurrent sidecar lock must be private",
+                    phase="lock",
+                )
+            if PRIVATE_FILE_MODE & ~mode:
                 raise _error(
                     "session_sidecar_insecure_permissions",
                     "concurrent sidecar lock lacks owner read/write permissions",
@@ -1704,6 +1734,12 @@ def _secure_sidecar_file_lock(
                     phase="lock",
                 )
             if stat.S_IMODE(opened.st_mode) != PRIVATE_FILE_MODE:
+                if before is not None and not repair_existing:
+                    raise _error(
+                        "session_sidecar_insecure_permissions",
+                        "existing sidecar lock must be private",
+                        phase="lock",
+                    )
                 os.fchmod(descriptor, PRIVATE_FILE_MODE)
                 os.fsync(descriptor)
                 opened = os.fstat(descriptor)
@@ -1748,12 +1784,16 @@ def secure_sidecar_lock(
     path: Path,
     *,
     timeout_seconds: float = 5.0,
+    repair_existing: bool = True,
+    reject_parent_symlink: bool = False,
 ) -> Iterator[None]:
     _require_supported_platform()
     if timeout_seconds < 0:
         raise ValueError("timeout_seconds must be non-negative")
     normalized = _absolute(path)
-    key = _canonical_path_key(_parent_plan(normalized).target)
+    key = _canonical_path_key(
+        _parent_plan(normalized, reject_parent_symlink=reject_parent_symlink).target
+    )
     with _PROCESS_LOCKS_GUARD:
         process_lock = _PROCESS_LOCKS.setdefault(key, threading.Lock())
     deadline = time.monotonic() + timeout_seconds
@@ -1765,7 +1805,12 @@ def secure_sidecar_lock(
         )
     try:
         remaining = max(0.0, deadline - time.monotonic())
-        with _secure_sidecar_file_lock(path, timeout_seconds=remaining):
+        with _secure_sidecar_file_lock(
+            path,
+            timeout_seconds=remaining,
+            repair_existing=repair_existing,
+            reject_parent_symlink=reject_parent_symlink,
+        ):
             yield
     finally:
         process_lock.release()

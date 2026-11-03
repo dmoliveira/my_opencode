@@ -142,8 +142,9 @@ Import validates the full export before opening or changing the store, publishes
 
 `/agent-pool health` invokes background status; `/doctor`, `/doctor status`,
 and `/doctor run` include a background check. Avoid them on live state that
-must be preserved; a symlinked background lock can change another file's
-permissions. Some swarm lane operations can also read untrusted job records.
+must be preserved; rejecting an observed unsafe lock does not make the rest of
+the store access safe. Some swarm lane operations can also read untrusted job
+records.
 
 ```text
 /delivery status --json

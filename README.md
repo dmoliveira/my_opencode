@@ -64,8 +64,8 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 
 **Safety hold:** Avoid live background job mutations, untrusted background job
 reads, and ast-grep installation or version probes. Some diagnostics can also
-change file permissions through the background lock. See `docs/command-handbook.md`
-for affected commands and remaining risks.
+access or initialize the background store. See `docs/command-handbook.md` for
+affected commands and remaining risks.
 
 - 🧠 Built-in `/mcp` command for `status`, `help`, `doctor`, `profile`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.
