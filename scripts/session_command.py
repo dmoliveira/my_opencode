@@ -3172,10 +3172,10 @@ def _command_doctor(argv: list[str], index_path: Path) -> int:
             "/doctor run",
             f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
         ]
-        if runtime.get("runtime_db_scan_complete"):
+        if runtime.get("runtime_db_scan_complete") is True:
             diagnosis_quick_fixes.extend([
-                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
-                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --json",
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --json",
             ])
     return _emit(
         {
