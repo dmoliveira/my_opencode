@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import selectors
 import signal
 import subprocess
 import threading
@@ -40,6 +41,9 @@ COMMAND_CLASS_POLICIES: dict[str, CommandClassPolicy] = {
     ),
     "codememory_lease_probe": CommandClassPolicy(
         "MY_OPENCODE_CODEMEMORY_LEASE_PROBE_TIMEOUT_SECONDS", 2.0, 2.0
+    ),
+    "opencode_version_probe": CommandClassPolicy(
+        "MY_OPENCODE_VERSION_PROBE_TIMEOUT_SECONDS", 5.0, 5.0
     ),
     "codememory_mutation": CommandClassPolicy(
         "MY_OPENCODE_CODEMEMORY_MUTATION_TIMEOUT_SECONDS", 30.0, 120.0
@@ -90,6 +94,7 @@ OPERATION_CLASSES: dict[str, str] = {
     "task_lease_codememory_doctor": "codememory_lease_probe",
     "task_lease_codememory_current": "codememory_lease_probe",
     "task_lease_codememory_get": "codememory_lease_probe",
+    "opencode_version_probe": "opencode_version_probe",
 }
 
 
@@ -248,6 +253,77 @@ def _reap_process(process: subprocess.Popen[Any]) -> tuple[Any, Any]:
         )
 
 
+def _communicate_limited_posix(
+    process: subprocess.Popen[Any],
+    job: _WindowsJob | None,
+    *,
+    timeout_seconds: float,
+    max_output_bytes: int,
+    text_mode: bool,
+) -> tuple[Any, Any, str | None]:
+    if process.stdout is None or process.stderr is None:
+        raise ValueError("bounded output capture requires stdout and stderr pipes")
+    streams = {"stdout": process.stdout, "stderr": process.stderr}
+    encodings = {
+        name: (getattr(stream, "encoding", None), getattr(stream, "errors", None))
+        for name, stream in streams.items()
+    }
+    chunks = {"stdout": bytearray(), "stderr": bytearray()}
+    captured_bytes = 0
+    outcome: str | None = None
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        with selectors.DefaultSelector() as selector:
+            for name, stream in streams.items():
+                selector.register(stream, selectors.EVENT_READ, data=name)
+            while selector.get_map():
+                remaining = max(0, deadline - time.monotonic())
+                events = selector.select(remaining)
+                if not events:
+                    outcome = "timeout"
+                    break
+                for key, _ in events:
+                    chunk = os.read(
+                        key.fd, min(8192, max_output_bytes + 1 - captured_bytes)
+                    )
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    available = max(0, max_output_bytes - captured_bytes)
+                    chunks[key.data].extend(chunk[:available])
+                    captured_bytes += len(chunk)
+                    if captured_bytes > max_output_bytes:
+                        outcome = "output_limit"
+                        break
+                if outcome is not None:
+                    break
+        if outcome is None:
+            try:
+                process.wait(timeout=max(0, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                outcome = "timeout"
+        if outcome is not None:
+            _terminate_process_tree(process, job)
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        for stream in streams.values():
+            stream.close()
+
+    if text_mode:
+
+        def text(name: str) -> str:
+            encoding, errors = encodings[name]
+            decode_errors = "replace" if outcome is not None else errors or "strict"
+            value = bytes(chunks[name]).decode(encoding or "utf-8", decode_errors)
+            return value.replace("\r\n", "\n").replace("\r", "\n")
+
+        return text("stdout"), text("stderr"), outcome
+    return bytes(chunks["stdout"]), bytes(chunks["stderr"]), outcome
+
+
 def _communicate_limited(
     process: subprocess.Popen[Any],
     job: _WindowsJob | None,
@@ -256,6 +332,14 @@ def _communicate_limited(
     max_output_bytes: int,
     text_mode: bool,
 ) -> tuple[Any, Any, str | None]:
+    if os.name == "posix":
+        return _communicate_limited_posix(
+            process,
+            job,
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=max_output_bytes,
+            text_mode=text_mode,
+        )
     if process.stdout is None or process.stderr is None:
         raise ValueError("bounded output capture requires stdout and stderr pipes")
     lock = threading.Lock()
@@ -290,6 +374,13 @@ def _communicate_limited(
                         output_limit_reached.set()
         except (OSError, ValueError) as exc:
             reader_errors.append(exc)
+        finally:
+            # A detached descendant can retain a pipe after the timeout. The
+            # daemon reader owns its stream so the caller never blocks closing it.
+            try:
+                stream.close()
+            except (OSError, ValueError):
+                pass
 
     readers = [
         threading.Thread(
@@ -305,7 +396,8 @@ def _communicate_limited(
 
     deadline = time.monotonic() + timeout_seconds
     outcome: str | None = None
-    while process.poll() is None:
+    # A child can outlive the leader while keeping either output pipe open.
+    while process.poll() is None or any(reader.is_alive() for reader in readers):
         if output_limit_reached.is_set():
             outcome = "output_limit"
             break
@@ -321,14 +413,11 @@ def _communicate_limited(
     except subprocess.TimeoutExpired:
         _terminate_process_tree(process, job)
         process.wait(timeout=1)
+    reader_deadline = time.monotonic() + 1.0
     for reader in readers:
-        reader.join(timeout=5)
-    if any(reader.is_alive() for reader in readers):
-        for stream in (process.stdout, process.stderr):
-            stream.close()
+        reader.join(timeout=max(0, reader_deadline - time.monotonic()))
+    if outcome is None and any(reader.is_alive() for reader in readers):
         raise OSError("bounded output reader did not terminate")
-    for stream in (process.stdout, process.stderr):
-        stream.close()
     if outcome is None and output_limit_reached.is_set():
         outcome = "output_limit"
     if reader_errors and outcome is None:

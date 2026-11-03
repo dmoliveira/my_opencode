@@ -98,7 +98,74 @@ fi
 # The configured gateway is a V1 plugin. Do not replace an existing config or
 # install an apparently protected runtime when V2 cannot load that plugin.
 if command -v opencode >/dev/null 2>&1; then
-	if ! OPENCODE_VERSION="$("$PYTHON_BIN" -c 'import subprocess; print(subprocess.run(["opencode", "--version"], check=True, capture_output=True, text=True, timeout=5).stdout.strip())' 2>/dev/null)"; then
+	# This installer can be streamed before the repository exists, so the
+	# isolated version probe must remain self-contained.
+	if ! OPENCODE_VERSION="$("$PYTHON_BIN" - 2>/dev/null <<'PY'
+import os
+import selectors
+import shutil
+import signal
+import subprocess
+import tempfile
+import time
+
+binary = shutil.which("opencode")
+if not binary:
+    raise RuntimeError("OpenCode executable unavailable")
+with tempfile.TemporaryDirectory(prefix="my-opencode-version-") as home:
+    env = {key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL") if key in os.environ}
+    env.update(
+        CI="true",
+        GIT_TERMINAL_PROMPT="0",
+        GCM_INTERACTIVE="never",
+        HOME=home,
+        XDG_CONFIG_HOME=os.path.join(home, "config"),
+        XDG_DATA_HOME=os.path.join(home, "data"),
+        XDG_STATE_HOME=os.path.join(home, "state"),
+        XDG_CACHE_HOME=os.path.join(home, "cache"),
+        XDG_RUNTIME_DIR=home,
+        TMPDIR=home,
+        TMP=home,
+        TEMP=home,
+    )
+    process = subprocess.Popen(
+        [os.path.abspath(binary), "--version"], stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, start_new_session=True,
+        cwd=home, env=env,
+    )
+    assert process.stdout is not None
+    output = bytearray()
+    deadline = time.monotonic() + 5
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                if not selector.select(max(0, deadline - time.monotonic())):
+                    raise subprocess.TimeoutExpired(process.args, 5)
+                chunk = os.read(process.stdout.fileno(), 513 - len(output))
+                if not chunk:
+                    break
+                output.extend(chunk)
+                if len(output) > 512:
+                    raise ValueError("OpenCode version output is too large")
+        process.wait(timeout=max(0, deadline - time.monotonic()))
+        if process.returncode != 0:
+            raise ValueError("OpenCode version probe failed")
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+    finally:
+        process.stdout.close()
+print(output.decode("utf-8").strip())
+PY
+	)"; then
 		printf "Error: unable to determine OpenCode compatibility; no installation changes were made.\n" >&2
 		exit 1
 	fi
@@ -106,6 +173,9 @@ if command -v opencode >/dev/null 2>&1; then
 		OPENCODE_MAJOR="${BASH_REMATCH[2]}"
 		if [ "${#OPENCODE_MAJOR}" -gt 3 ] || [ "$OPENCODE_MAJOR" -ge 2 ]; then
 			printf "Error: the gateway plugin is not yet compatible with OpenCode V2; no installation changes were made. See docs/plan/doing/opencode-v2-migration.md.\n" >&2
+			exit 1
+		elif [ "$OPENCODE_MAJOR" != "1" ]; then
+			printf "Error: only OpenCode V1 is supported by this installer; no installation changes were made.\n" >&2
 			exit 1
 		fi
 	else

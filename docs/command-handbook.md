@@ -286,6 +286,8 @@ Read-only Git/GitHub guards, status checks, and capped metadata lookups use expl
 
 When set, an override must be a finite positive number no greater than its hard cap. Empty, nonnumeric, zero, negative, non-finite, or over-cap values fail the operation rather than restoring an unbounded call. On timeout, the bounded runner starts the invoked `git` or `gh` command in an isolated process group, terminates that group, and waits for the direct child before returning the reason. This contains descendant processes such as credential or SSH helpers on POSIX hosts; Windows uses a new process group with direct-child fallback when group termination is unavailable.
 
+The gateway's isolated executable-version probe also uses this runner. `MY_OPENCODE_VERSION_PROBE_TIMEOUT_SECONDS` defaults to 5 seconds and cannot exceed 5; termination and cleanup add a short grace period. Processes that deliberately escape the process group or Windows job are outside this containment boundary. The probe checks the selected CLI, not a separate service.
+
 ## Session digest inside OpenCode 🧾
 
 Use these directly in OpenCode:
