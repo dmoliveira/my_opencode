@@ -2945,6 +2945,15 @@
   {
     "language": "python",
     "file": "session_sidecar_security.py",
+    "function": "_read_authorized_bytes",
+    "kind": "os.open",
+    "destination": "authority.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_sidecar_security.py",
     "function": "_sidecar_authority",
     "kind": "os.mkdir",
     "destination": "component",
@@ -2974,15 +2983,6 @@
     "file": "session_sidecar_security.py",
     "function": "atomic_write_private_json",
     "kind": "os.replace",
-    "destination": "authority.name",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "session_sidecar_security.py",
-    "function": "read_private_bytes",
-    "kind": "os.open",
     "destination": "authority.name",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"

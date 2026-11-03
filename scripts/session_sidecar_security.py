@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import json
 import os
 import stat
@@ -9,11 +10,11 @@ import threading
 import time
 import unicodedata
 import uuid
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator, Mapping
-
+from typing import Any
 
 PRIVATE_FILE_MODE = 0o600
 PRIVATE_DIRECTORY_MODE = 0o700
@@ -51,6 +52,7 @@ class SidecarSnapshot:
     size: int
     mtime_ns: int
     ctime_ns: int
+    content_sha256: bytes | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -775,6 +777,78 @@ def _read_bounded(descriptor: int, max_bytes: int) -> bytes:
     return data
 
 
+def _read_authorized_bytes(
+    authority: _Authority,
+    normalized: Path,
+    *,
+    max_bytes: int,
+    allow_missing: bool,
+) -> SecureBytes | None:
+    before = _raw_target_stat(authority)
+    if before is None:
+        if allow_missing:
+            return None
+        raise _error(
+            "session_sidecar_unsafe_target",
+            "session sidecar does not exist",
+            phase="read",
+        )
+    _validate_target(before, require_private=True)
+    if before.st_size > max_bytes:
+        raise _error(
+            "session_sidecar_too_large",
+            "session sidecar exceeds the configured read limit",
+            phase="read",
+        )
+    try:
+        descriptor = os.open(
+            authority.name,
+            _file_read_flags(),
+            dir_fd=authority.parent_fd,
+        )
+    except OSError as exc:
+        raise _error(
+            "session_sidecar_unsafe_target",
+            "session sidecar could not be opened safely",
+            phase="read",
+        ) from exc
+    try:
+        opened = os.fstat(descriptor)
+        if _stat_signature(opened) != _stat_signature(before):
+            raise _error(
+                "session_sidecar_snapshot_changed",
+                "session sidecar changed while opening",
+                phase="read",
+            )
+        data = _read_bounded(descriptor, max_bytes)
+        completed = os.fstat(descriptor)
+    except OSError as exc:
+        raise _error(
+            "session_sidecar_read_error",
+            "session sidecar could not be read safely",
+            phase="read",
+        ) from exc
+    finally:
+        os.close(descriptor)
+    after = _raw_target_stat(authority)
+    if (
+        after is None
+        or _stat_signature(opened) != _stat_signature(completed)
+        or _stat_signature(completed) != _stat_signature(after)
+        or len(data) != completed.st_size
+    ):
+        raise _error(
+            "session_sidecar_snapshot_changed",
+            "session sidecar changed while reading",
+            phase="read",
+        )
+    _verify_authority(authority)
+    snapshot = replace(
+        _snapshot(normalized, completed), content_sha256=hashlib.sha256(data).digest()
+    )
+    return SecureBytes(data, snapshot)
+
+
 def read_private_bytes(
     path: Path,
     *,
@@ -794,59 +868,9 @@ def read_private_bytes(
                 "session sidecar parent does not exist",
                 phase="read",
             )
-        before = _raw_target_stat(authority)
-        if before is None:
-            if allow_missing:
-                return None
-            raise _error(
-                "session_sidecar_unsafe_target",
-                "session sidecar does not exist",
-                phase="read",
-            )
-        _validate_target(before, require_private=True)
-        if before.st_size > max_bytes:
-            raise _error(
-                "session_sidecar_too_large",
-                "session sidecar exceeds the configured read limit",
-                phase="read",
-            )
-        try:
-            descriptor = os.open(
-                authority.name,
-                _file_read_flags(),
-                dir_fd=authority.parent_fd,
-            )
-        except OSError as exc:
-            raise _error(
-                "session_sidecar_unsafe_target",
-                "session sidecar could not be opened safely",
-                phase="read",
-            ) from exc
-        try:
-            opened = os.fstat(descriptor)
-            if _stat_signature(opened) != _stat_signature(before):
-                raise _error(
-                    "session_sidecar_snapshot_changed",
-                    "session sidecar changed while opening",
-                    phase="read",
-                )
-            data = _read_bounded(descriptor, max_bytes)
-            completed = os.fstat(descriptor)
-        finally:
-            os.close(descriptor)
-        after = _raw_target_stat(authority)
-        if (
-            after is None
-            or _stat_signature(opened) != _stat_signature(completed)
-            or _stat_signature(completed) != _stat_signature(after)
-        ):
-            raise _error(
-                "session_sidecar_snapshot_changed",
-                "session sidecar changed while reading",
-                phase="read",
-            )
-        _verify_authority(authority)
-        return SecureBytes(data, _snapshot(normalized, completed))
+        return _read_authorized_bytes(
+            authority, normalized, max_bytes=max_bytes, allow_missing=allow_missing
+        )
 
 
 def read_private_json(
@@ -927,6 +951,8 @@ def _replacement_state(
     temporary_name: str,
     temporary_identity: tuple[int, int] | None,
     source_snapshot: SidecarSnapshot | None,
+    *,
+    max_bytes: int,
 ) -> bool | None:
     try:
         if temporary_identity is None:
@@ -946,13 +972,16 @@ def _replacement_state(
             int(temporary.st_dev),
             int(temporary.st_ino),
         ) == temporary_identity
+        current = _read_authorized_bytes(
+            authority, authority.target, max_bytes=max_bytes, allow_missing=True
+        )
         source_unchanged = (
-            target is None
+            current is None
             if source_snapshot is None
-            else target is not None and _same_snapshot(target, source_snapshot)
+            else current is not None and current.snapshot == source_snapshot
         )
         return False if temporary_unchanged and source_unchanged else None
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - preserve an indeterminate replacement outcome
         return None
 
 
@@ -984,14 +1013,10 @@ def atomic_write_private_json(
     normalized = _absolute(path)
     with _sidecar_authority(normalized, create_parent=True) as authority:
         assert authority is not None
-        source_metadata = _raw_target_stat(authority)
-        if source_metadata is not None:
-            _validate_target(source_metadata, require_private=True)
-        source_snapshot = (
-            _snapshot(normalized, source_metadata)
-            if source_metadata is not None
-            else None
+        source = _read_authorized_bytes(
+            authority, normalized, max_bytes=max_bytes, allow_missing=True
         )
+        source_snapshot = source.snapshot if source is not None else None
         if expected_snapshot is not _EXPECTED_UNSET:
             if expected_snapshot is None:
                 if source_snapshot is not None:
@@ -1000,22 +1025,29 @@ def atomic_write_private_json(
                         "session sidecar appeared after its caller snapshot",
                         phase="publish",
                     )
-            elif not isinstance(expected_snapshot, SidecarSnapshot) or (
-                source_metadata is None
-                or not _same_snapshot(source_metadata, expected_snapshot)
+            elif (
+                not isinstance(expected_snapshot, SidecarSnapshot)
+                or expected_snapshot.content_sha256 is None
             ):
+                raise _error(
+                    "session_sidecar_snapshot_unverified",
+                    "session sidecar snapshot has no verified content fingerprint",
+                    phase="publish",
+                )
+            elif source_snapshot != expected_snapshot:
                 raise _error(
                     "session_sidecar_snapshot_changed",
                     "session sidecar changed after its caller snapshot",
                     phase="publish",
                 )
+        del source
         temporary_name = f".{authority.name}.{uuid.uuid4().hex}.tmp"
         temporary_identity: tuple[int, int] | None = None
         committed = False
         try:
             descriptor = os.open(
                 temporary_name,
-                os.O_WRONLY
+                os.O_RDWR
                 | os.O_CREAT
                 | os.O_EXCL
                 | os.O_NOFOLLOW
@@ -1030,6 +1062,15 @@ def atomic_write_private_json(
                 os.fchmod(descriptor, PRIVATE_FILE_MODE)
                 _write_all(descriptor, encoded)
                 os.fsync(descriptor)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                staged_contents = _read_bounded(descriptor, max_bytes)
+                if staged_contents != encoded:
+                    raise _error(
+                        "session_sidecar_snapshot_changed",
+                        "staged session sidecar content changed before publication",
+                        phase="stage",
+                    )
+                del staged_contents
                 staged = os.fstat(descriptor)
                 named_stage = os.stat(
                     temporary_name,
@@ -1049,15 +1090,12 @@ def atomic_write_private_json(
             finally:
                 os.close(descriptor)
 
-            current = _raw_target_stat(authority)
-            if source_snapshot is None:
-                if current is not None:
-                    raise _error(
-                        "session_sidecar_snapshot_changed",
-                        "session sidecar appeared before publication",
-                        phase="publish",
-                    )
-            elif current is None or not _same_snapshot(current, source_snapshot):
+            current = _read_authorized_bytes(
+                authority, normalized, max_bytes=max_bytes, allow_missing=True
+            )
+            current_snapshot = current.snapshot if current is not None else None
+            del current
+            if current_snapshot != source_snapshot:
                 raise _error(
                     "session_sidecar_snapshot_changed",
                     "session sidecar changed before publication",
@@ -1077,6 +1115,7 @@ def atomic_write_private_json(
                     temporary_name,
                     temporary_identity,
                     source_snapshot,
+                    max_bytes=max_bytes,
                 )
                 if replacement_state is False:
                     raise _error(
@@ -1116,7 +1155,22 @@ def atomic_write_private_json(
                     committed=True,
                     durability="uncertain",
                 )
-            return PublicationResult(True, "synced", _snapshot(normalized, final))
+            verified = _read_authorized_bytes(
+                authority, normalized, max_bytes=max_bytes, allow_missing=False
+            )
+            assert verified is not None
+            if (
+                (verified.snapshot.dev, verified.snapshot.ino) != temporary_identity
+                or verified.data != encoded
+            ):
+                raise _error(
+                    "session_sidecar_durability_uncertain",
+                    "published session sidecar content could not be verified",
+                    phase="durability",
+                    committed=True,
+                    durability="uncertain",
+                )
+            return PublicationResult(True, "synced", verified.snapshot)
         except SidecarSecurityError as exc:
             if committed and not exc.committed:
                 raise _error(

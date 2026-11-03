@@ -307,7 +307,9 @@ Use these directly in OpenCode:
 
 The digest command writes to `~/.config/opencode/digests/last-session.json` by default.
 
-For automatic digest-on-exit behavior, opt in when launching the wrapper:
+Automatic digest-on-exit is disabled by default. Do not opt in unless other
+digest and index writers, including noncooperating hooks, can be excluded for
+the whole operation. The optional wrapper setting is:
 
 ```bash
 MY_OPENCODE_AUTO_DIGEST=1 ~/.config/opencode/my_opencode/scripts/opencode_session.sh
@@ -376,7 +378,14 @@ races. Stop the owner and verify recovery before any explicit repair.
 
 Preflight requires room for the backup, a disposable validation copy, 1 MiB of metadata allowance, and at least 64 MiB or 10% reserve. Backup, manifest creation, hashing, and consistency checks stay bound to open staging descriptors. Before publication, the command streams the backup into an isolated XDG/HOME/TMPDIR sandbox and opens that copy with the installed OpenCode binary. That application check proves readability only, not supported restoration. A completed Online Backup reflects one consistent state reached during the operation, not necessarily invocation-start state. Normal WAL-reader coordination may update transient source SHM read marks, but the command does not write runtime database or WAL content. Pre-publication failures remove only identity-tracked partial/sandbox artifacts. Publication uses an atomic no-replace rename. A post-rename durability failure reports `committed=true`, `durability=uncertain`, and the bundle path; inspect that bundle before retrying.
 
-Digest and index readers require private sidecars before parsing them. A permissive corrupt index therefore needs two explicit steps: run `/session repair-sidecars --apply --json` to narrow its mode, then run `/digest run --reason manual` to classify and preserve the unchanged corrupt bytes. Digest publication uses two atomic generations around the independent index update; a final digest failure does not roll back an index that already committed. External post-session and final hooks are rechecked afterward, but the built-in flow never rewrites or tightens a hook-modified file.
+Digest and index readers require private sidecars before parsing them. A permissive corrupt index therefore needs two explicit steps: run `/session repair-sidecars --apply --json` to narrow its mode, then run `/digest run --reason manual` to classify and preserve the unchanged corrupt bytes. An existing digest that is malformed, invalid UTF-8, or not a JSON object is left unchanged and causes digest runs to fail before hooks or publication; inspect and recover it separately. Digest publication uses two atomic generations around the independent index update; a final digest failure does not roll back an index that already committed. Observed content or identity changes during the post-session hook or before publication cause failure instead of an intentional overwrite; the final hook is rechecked without another built-in rewrite.
+
+These bounded content checks and cooperative locks are observations, not an
+atomic compare-and-swap. A noncooperating writer can change a sidecar during a
+read or after its last check and before replacement. Exclude such writers for
+the entire digest/index operation; do not rely on fingerprint matches to prove
+that concurrent changes cannot be lost. Hooks must not continue writing after
+they return.
 
 If `/digest run` detects a corrupt session index, it leaves the active bytes unchanged and exits nonzero. When source and destination safety checks pass, it stores an owner-only hash-addressed copy under `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index` and reports stable recovery metadata; collisions or unsafe paths fail closed without claiming preservation. Set `MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR` only to another private location outside active configuration. Stop index writers, inspect any reported local copy/checksum, repair or replace the active index from a verified source, then run `/digest run --reason manual` and `/session doctor --json`. Session readers never create quarantine artifacts; `--redact` failures expose only `session_index_unavailable`.
 

@@ -535,12 +535,28 @@ def command_run(argv: list[str]) -> int:
     post_result = None
     try:
         digest_existed_before_post = _preflight_digest_transaction(path)
+        before = _read_digest(path, allow_missing=True)
+        if (before is not None) != digest_existed_before_post:
+            raise SidecarSecurityError(
+                "session_sidecar_snapshot_changed",
+                "digest existence changed after preflight",
+                phase="preflight",
+            )
+        before_snapshot = before[1] if before is not None else None
+        del before
         digest = build_digest(reason=reason, cwd=cwd)
         if run_post:
             post_config = load_post_session_config()
             post_result = run_post_session(post_config, reason=reason, digest_path=path)
             digest["post_session"] = post_result
-            _revalidate_after_hook(path, required=digest_existed_before_post)
+            observed = _revalidate_after_hook(path, required=digest_existed_before_post)
+            observed_snapshot = observed[1] if observed is not None else None
+            if observed_snapshot != before_snapshot:
+                raise SidecarSecurityError(
+                    "session_sidecar_snapshot_changed",
+                    "digest changed during post-session hook",
+                    phase="hook_revalidation",
+                )
     except SidecarSecurityError as exc:
         return _print_sidecar_failure(path, exc, generation="preflight")
 
@@ -564,7 +580,7 @@ def command_run(argv: list[str]) -> int:
             timeout_seconds=timeout_ms / 1000.0,
         ):
             _preflight_digest_transaction(path)
-            initial_publication = write_digest(path, digest)
+            initial_publication = write_digest(path, digest, expected_snapshot=before_snapshot)
             try:
                 session_index = update_session_index(digest)
             except Exception:
