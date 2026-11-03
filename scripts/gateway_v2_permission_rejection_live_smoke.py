@@ -85,6 +85,7 @@ def run_case(
         plugin = project / "v2-probe"
         plugin.mkdir(parents=True)
         marker = root / "redactor-called"
+        identity_marker = root / "host-cause.json"
         started, aborted, after = root / "started", root / "aborted", root / "after"
         dist = ROOT / "plugin/gateway-core/dist"
         (plugin / "index.ts").write_text(
@@ -94,12 +95,36 @@ def run_case(
             f"import {{ registerV2ToolOutputRedaction }} from {json.dumps((dist / 'v2/tool-output-redaction.js').as_uri())}\n"
             f"import {{ createSecretRedactor }} from {json.dumps((dist / 'hooks/shared/secret-redaction.js').as_uri())}\n"
             'export default Plugin.define({ id: "v2-permission-rejection-probe", async setup(ctx) {\n'
-            f'  await ctx.tool.hook("execute.after", () => writeFileSync({json.dumps(str(after))}, "after"))\n'
+            '  if (ctx.app.version !== "2.2.5") throw new Error("fixture requires OpenCode 2.2.5")\n'
+            '  let capturedDecline\n'
+            '  await ctx.tool.hook("execute.after", event => {\n'
+            f'    writeFileSync({json.dumps(str(after))}, "after")\n'
+            '    if (event.tool !== "synthetic_probe" || event.status !== "error") return\n'
+            '    const mode = process.env.V2_SMOKE_CONTROL\n'
+            '    if (mode === "drop_cause") {\n'
+            '      event.error = new ToolError({ message: "synthetic rejection" })\n'
+            f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true }}))\n'
+            '    }\n'
+            '    if (mode === "throw_after") {\n'
+            f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true }}))\n'
+            '      throw new Error("synthetic after-hook failure")\n'
+            '    }\n'
+            '    if (mode === "host_clone") {\n'
+            '      const cause = Object.getOwnPropertyDescriptor(event.error, "error")?.value\n'
+            '      const tag = capturedDecline && Object.getOwnPropertyDescriptor(capturedDecline, "_tag")?.value\n'
+            '      const same = !!capturedDecline && cause === capturedDecline && tag === "Permission.DeclinedError"\n'
+            '      if (!same) throw new Error("synthetic host identity not observed")\n'
+            '      const clone = Object.create(Object.getPrototypeOf(capturedDecline))\n'
+            '      Object.defineProperties(clone, { _tag: { value: "Permission.DeclinedError", enumerable: true }, message: { value: "" }, stack: { value: "" } })\n'
+            '      event.error = new ToolError({ message: "synthetic rejection", error: clone })\n'
+            f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, same }}))\n'
+            '    }\n'
+            '  })\n'
             f'  const redactor = process.env.V2_SMOKE_REDACTOR_FAIL === "1" ? {{ async redactMutableValueAsync() {{ writeFileSync({json.dumps(str(marker))}, "called"); throw new Error({json.dumps(REDACTOR_CANARY)}) }} }} : createSecretRedactor({{ patterns: {json.dumps([FEEDBACK_CANARY, ABORT_CANARY])}, redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
             '  if (process.env.V2_SMOKE_GUARD !== "off") await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version)\n'
             '  await ctx.tool.transform((editor) => editor.add({ name: "synthetic_probe", description: "permission rejection probe", options: { codemode: false }, input: { type: "object", properties: { kind: { type: "string" } }, required: ["kind"], additionalProperties: false }, async execute(input, tool) {\n'
             f'    if (process.env.V2_SMOKE_CANCEL === "1") {{ writeFileSync({json.dumps(str(started))}, "started"); await new Promise((_resolve, reject) => {{ const stop = () => {{ writeFileSync({json.dumps(str(aborted))}, "aborted"); reject(new Error({json.dumps(ABORT_CANARY)})) }}; if (tool.signal.aborted) stop(); else tool.signal.addEventListener("abort", stop, {{ once: true }}) }}); return {{ content: "CANCELLATION_BYPASSED" }} }}\n'
-            '    await ctx.permission.assert({ sessionID: tool.sessionID, agent: tool.agent, source: { type: "tool", messageID: tool.messageID, id: tool.id }, action: "synthetic_ask", resources: ["synthetic-resource"], save: ["synthetic-resource"] })\n'
+            '    try { await ctx.permission.assert({ sessionID: tool.sessionID, agent: tool.agent, source: { type: "tool", messageID: tool.messageID, id: tool.id }, action: "synthetic_ask", resources: ["synthetic-resource"], save: ["synthetic-resource"] }) } catch (error) { capturedDecline = error; throw error }\n'
             '    return { content: "PERMISSION_BYPASSED" }\n'
             "  } }))\n} })\n",
             encoding="utf-8",
@@ -130,8 +155,10 @@ def run_case(
         env.pop("OPENCODE_SESSION_ID", None)
         password = secrets.token_urlsafe(24)
         env["OPENCODE_PASSWORD"] = password
-        if mode == "baseline":
+        if mode in {"baseline", "host_clone", "drop_cause", "throw_after"}:
             env["V2_SMOKE_GUARD"] = "off"
+        if mode in {"host_clone", "drop_cause", "throw_after"}:
+            env["V2_SMOKE_CONTROL"] = mode
         if mode == "redactor_failure":
             env["V2_SMOKE_REDACTOR_FAIL"] = "1"
         if cancel:
@@ -213,6 +240,11 @@ def run_case(
                 server_log = (root / "server.log").read_text(
                     encoding="utf-8", errors="replace"
                 )
+                control_observation = (
+                    json.loads(identity_marker.read_text(encoding="utf-8"))
+                    if identity_marker.is_file()
+                    else {}
+                )
                 return {
                     "permission_requested": not cancel,
                     "tool_returned_to_model": any(
@@ -235,6 +267,9 @@ def run_case(
                     "session_outcome": info.get("outcome"),
                     "abort_signal_seen": aborted.is_file(),
                     "after_hook_seen": after.is_file(),
+                    "control_applied": control_observation.get("mode") == mode
+                    and control_observation.get("applied") is True,
+                    "host_cause_is_captured": control_observation.get("same"),
                     "abort_canary_on_wire": ABORT_CANARY in wire,
                     "abort_canary_in_database": persisted[ABORT_CANARY],
                 }
@@ -245,6 +280,24 @@ def run_case(
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+
+
+def control_evidence_passed(controls: dict[str, dict[str, Any]]) -> bool:
+    if set(controls) != {"host_clone", "drop_cause", "throw_after"}:
+        return False
+    for mode, row in controls.items():
+        if not isinstance(row, dict):
+            return False
+        expected_tool_result = mode != "host_clone"
+        if (
+            row.get("permission_requested") is not True
+            or row.get("after_hook_seen") is not True
+            or row.get("control_applied") is not True
+            or row.get("permission_bypassed") is not False
+            or row.get("tool_returned_to_model") is not expected_tool_result
+        ):
+            return False
+    return controls["host_clone"].get("host_cause_is_captured") is True
 
 
 def main() -> int:
@@ -264,6 +317,10 @@ def main() -> int:
         cancellation = {
             mode: run_case(capture, state, mode, False, cancel=True)
             for mode in ("baseline", "guarded")
+        }
+        controls = {
+            mode: run_case(capture, state, mode, False)
+            for mode in ("host_clone", "drop_cause", "throw_after")
         }
         passed = (
             all(
@@ -304,6 +361,7 @@ def main() -> int:
                 and not row["abort_canary_in_database"]
                 for row in cancellation.values()
             )
+            and control_evidence_passed(controls)
         )
         print(
             json.dumps(
@@ -311,6 +369,7 @@ def main() -> int:
                     "result": "PASS" if passed else "FAIL",
                     "cases": cases,
                     "cancellation": cancellation,
+                    "controls": controls,
                 }
             )
         )
