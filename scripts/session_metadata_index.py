@@ -69,6 +69,11 @@ DUPLICATE_ID_RECOVERY_STEPS = (
     "inspect duplicate identities privately; do not automatically deduplicate",
     "use an authorized, verified recovery process before resuming writes",
 )
+DUPLICATE_KEY_RECOVERY_STEPS = (
+    "stop session-index writers and preserve the original index",
+    "inspect duplicate JSON object keys privately; do not automatically deduplicate",
+    "use an authorized, verified recovery process before resuming writes",
+)
 
 
 def _map_sidecar_error(exc: SidecarSecurityError) -> SessionIndexError:
@@ -188,14 +193,31 @@ def _raise_corruption(kind: str, raw_bytes: bytes) -> None:
 
 
 def _parse_index_bytes(raw_bytes: bytes) -> dict[str, Any]:
+    duplicate_key_seen = False
+
+    def collect_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        nonlocal duplicate_key_seen
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                # Finish decoding so malformed JSON keeps its corruption path.
+                duplicate_key_seen = True
+            result[key] = value
+        return result
+
     try:
         text = raw_bytes.decode("utf-8")
     except UnicodeDecodeError:
         _raise_corruption("invalid_utf8", raw_bytes)
     try:
-        loaded = json.loads(text)
+        loaded = json.loads(text, object_pairs_hook=collect_pairs)
     except (json.JSONDecodeError, RecursionError):
         _raise_corruption("malformed_json", raw_bytes)
+    if duplicate_key_seen:
+        raise SessionIndexError(
+            "session index contains duplicate JSON object keys; index access refused",
+            reason_code="session_index_duplicate_key",
+        )
     if not isinstance(loaded, dict):
         _raise_corruption("non_object_root", raw_bytes)
 
@@ -811,6 +833,8 @@ def _recovery_steps(reason_code: str) -> list[str]:
         ]
     if reason_code == "session_index_duplicate_id":
         return list(DUPLICATE_ID_RECOVERY_STEPS)
+    if reason_code == "session_index_duplicate_key":
+        return list(DUPLICATE_KEY_RECOVERY_STEPS)
     return [
         "verify session index path ownership and access",
         "run /session doctor --json",

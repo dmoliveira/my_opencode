@@ -199,14 +199,19 @@ for inspection. In this version, `show`, `current`, and `handoff` reject multipl
 parsed index rows for the selected ID rather than choosing one. Unredacted output
 uses `session_index_duplicate_id`; redacted handoff retains the share-safe
 `session_index_unavailable` error. The check covers only the read snapshot: it
-does not validate duplicate JSON keys, prevent later writes, establish source
-identity, or cover other files or references in other stores. An index entry is
-not a complete list of filesystem artifacts. Preserve corrupt originals via the
-existing quarantine workflow. No per-session sidecar delete/redaction contract
-is implemented here.
+does not prevent later writes, establish source identity, or cover other files or
+references in other stores. The index parser separately rejects duplicate decoded
+JSON object keys at any depth with `session_index_duplicate_key`; redacted search
+and handoff retain the generic `session_index_unavailable` error. The parser does
+not normalize Unicode keys or prove uniqueness in other artifacts. An index entry
+is not a complete list of filesystem artifacts. Preserve corrupt originals via
+the existing quarantine workflow. No per-session sidecar delete/redaction
+contract is implemented here.
 
 Before updating or pruning, the index writer also refuses any duplicate parsed
 IDs, including unrelated IDs, without publishing or deduplicating the index.
+The same refusal applies to duplicate decoded JSON object keys; valid ambiguous
+JSON is not automatically quarantined or rewritten.
 The surrounding digest run is not atomic with that check: it may already have
 published a digest or created locks, and configured hooks can have effects.
 See `docs/runtime-db-schema.md` before inspection or recovery.

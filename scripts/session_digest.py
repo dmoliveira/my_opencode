@@ -26,6 +26,7 @@ from recovery_engine import (  # type: ignore
 from session_metadata_index import (  # type: ignore
     DEFAULT_INDEX_PATH,
     DUPLICATE_ID_RECOVERY_STEPS,
+    DUPLICATE_KEY_RECOVERY_STEPS,
     update_session_index,
 )
 from session_sidecar_security import (  # type: ignore
@@ -748,6 +749,11 @@ def collect_doctor(path: Path) -> dict:
         and session_index.get("reason_code") == "session_index_duplicate_id"
     ):
         quick_fixes = list(DUPLICATE_ID_RECOVERY_STEPS)
+    elif (
+        session_index.get("result") != "PASS"
+        and session_index.get("reason_code") == "session_index_duplicate_key"
+    ):
+        quick_fixes = list(DUPLICATE_KEY_RECOVERY_STEPS)
 
     return {
         "result": "PASS" if not problems else "FAIL",
