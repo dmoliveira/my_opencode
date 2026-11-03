@@ -77,3 +77,6 @@ cross-artifact inventory.
 The owner index writer also refuses any duplicate parsed IDs before pruning or
 publishing the index. A surrounding digest run may already have changed other
 artifacts, so this is not a cross-sidecar transaction.
+The shared index parser rejects duplicate decoded JSON object keys without
+automatically rewriting or quarantining syntactically valid ambiguous JSON.
+Neither check binds the index to other artifacts or excludes later writers.
