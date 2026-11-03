@@ -35,6 +35,7 @@ This repo-local index exists because `AGENTS.md` and related startup docs refere
 - `plan/opencode-reliability-review-runbook.md`: reusable reliability/E2E review campaign runbook
 - `specs/e8-plan-handoff-continuity-mapping.md`: continuity and handoff semantics
 - `specs/opencode-v2-owner-admission-proposal.md`: non-operational owner-bound execution requirements
+- `specs/background-artifact-authority.md`: design-only no-clobber and provenance requirements for background state
 - `plugin-gateway-plan.md`: gateway/plugin architecture and follow-up planning
 - `readme-deep-notes.md`: deeper architecture and release-history notes
 
