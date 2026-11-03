@@ -1,4 +1,4 @@
-# Local Data Lifecycle: Offline Planning Slice
+# Local Data Lifecycle: Planning and Read-Only Inventory
 
 Task: `task_26`. Status: **partial implementation; source mutation remains blocked**.
 
@@ -9,7 +9,7 @@ python3 scripts/data_lifecycle_command.py preview --file /private/staging/reques
 python3 scripts/data_lifecycle_command.py summarize-export --file /private/staging/export.json --store runtime_history
 ```
 
-Both commands emit JSON to stdout and execute no owner commands, subprocesses,
+These two commands emit JSON to stdout and execute no owner commands, subprocesses,
 network calls or writes. There is no `apply` operation and no new slash alias.
 The only file read is the explicitly supplied input. Input must be an existing
 current-user-owned private regular single-link file (`0600` or stricter) beneath
@@ -19,6 +19,8 @@ verified root-owned system aliases (for example, macOS `/var`). Parents may be
 `0755`; use a private `0700` staging directory outside synchronized repositories
 for this workflow. The reader
 does not repair permissions, copy unsafe inputs, or create missing files.
+The separate shared-memory inventory described below **does inspect** an
+explicitly selected source database in an isolated read-only worker.
 
 `preview` returns an `offline_workflow_plan`: a successful plan has `result: PASS`
 but **`status: blocked`**, `source_inspected: false`, `affected_count: null`, and
@@ -172,6 +174,9 @@ In a disposable OpenCode 2.2.5 instance, the installed API described paginated
 ID and cascaded to children. Its active-session endpoint described only
 foreground drains owned by that OpenCode process. Neither pagination nor that
 activity list establishes an atomic descendant inventory or writer exclusion.
+In a disposable race probe, a child created after a prior listing was also
+removed by a later parent delete. The initial listing included a next cursor,
+so this demonstrates a post-observation race, not complete pagination.
 
 ### Session Sidecars
 
@@ -198,6 +203,13 @@ is `oc --config <config> archive <recordID> --reason <reason> --format json`; it
 limited to memory/doc records and must preserve native reference/revision checks.
 No task/session cancellation, direct SQLite mutation or overridden reference check
 is added. Archive and operation history are retained, not securely erased.
+
+In a disposable SQLite-backed Codememory graph, archive previews provided a
+revision and plan hash. Applying one synthetic plan caused a second plan from
+the prior revision to be rejected; repeating the successful request with the
+same request ID and hash returned a replay of the same operation. This evidence
+applies only to that native reversible archive flow, not erasure or cross-store
+retry safety.
 
 ## Remaining Blocker For Task 26
 
