@@ -1601,9 +1601,13 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                         attempt["process_start_fingerprint"],
                         gate["process_start_fingerprint"],
                     )
+                    # Let the fenced worker reap the aborted gate before the
+                    # delayed cancel probes its process group. Otherwise macOS
+                    # can return EPERM for the transient zombie-only group,
+                    # for which cancellation correctly reports uncertainty.
+                    self.assertEqual("cancelled", runner.result(timeout=10)[0])
                     release_termination.set()
                     self.assertEqual(0, cancelled.result(timeout=10))
-                    runner.result(timeout=10)
             self.assertFalse(command_marker.exists())
             final = bg._snapshot_job(job["id"])
             assert final is not None
