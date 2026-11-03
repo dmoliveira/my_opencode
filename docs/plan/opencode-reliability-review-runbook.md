@@ -130,7 +130,14 @@ Run at session close:
 /continuation-stop --reason "manual checkpoint" --json
 ```
 
-Use `~/.config/opencode/my_opencode/scripts/opencode_session.sh` when testing exit-hook behavior so digest-on-exit and audit behavior are exercised too.
+When intentionally testing exit-digest and audit behavior, enable each opt-in
+before launching the wrapper (with a compatible gateway active for audit):
+
+```bash
+MY_OPENCODE_AUTO_DIGEST=1 MY_OPENCODE_GATEWAY_EVENT_AUDIT=1 ~/.config/opencode/my_opencode/scripts/opencode_session.sh
+```
+
+Both are off by default; audit traces are written to the configured local path.
 
 ## Epic and task-group map
 

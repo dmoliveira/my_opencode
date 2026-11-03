@@ -252,7 +252,7 @@ Use these directly in OpenCode:
 - event: `events.<type>`
 - per-event channel: `channels.<type>.sound|visual`
 
-`/notify inbox` reads the repo-local gateway event audit feed from `.opencode/gateway-events.jsonl` (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` when set). Enable gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` to populate inbox entries, but after a wrapped session use `/gateway continuation report` for the fastest `todo-continuation-enforcer` audit check.
+`/notify inbox` reads the repo-local gateway event audit feed from `.opencode/gateway-events.jsonl` (or `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` when set). Enable gateway event auditing with `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` before starting a compatible gateway to populate inbox entries. After an audited session, `/gateway continuation report` summarizes recorded `todo-continuation-enforcer` activity.
 
 For runtime AI-output injection work, treat the gateway event audit as the fastest way to identify the real render path instead of guessing from nearby lifecycle names. The practical mapping from the timestamp fix is:
 - `experimental.chat.messages.transform`: mutate message history or synthetic context before the model call
@@ -303,17 +303,19 @@ Use these directly in OpenCode:
 
 The digest command writes to `~/.config/opencode/digests/last-session.json` by default.
 
-For automatic digest-on-exit behavior (including `Ctrl+C`), launch OpenCode through:
+For automatic digest-on-exit behavior, opt in when launching the wrapper:
 
 ```bash
-~/.config/opencode/my_opencode/scripts/opencode_session.sh
+MY_OPENCODE_AUTO_DIGEST=1 ~/.config/opencode/my_opencode/scripts/opencode_session.sh
 ```
 
 Optional environment variables:
+- `MY_OPENCODE_AUTO_DIGEST` enables the exit digest when set to `1` (default `0`)
 - `MY_OPENCODE_DIGEST_PATH` custom output path
 - `MY_OPENCODE_DIGEST_HOOK` command to run after digest is written
 - `DIGEST_REASON_ON_EXIT` custom reason label (default `exit`)
-- `MY_OPENCODE_GATEWAY_EVENT_AUDIT` audit toggle for hook diagnostics (`opencode_session.sh` defaults to `1`; set `0` to disable)
+- `MY_OPENCODE_GATEWAY_EVENT_AUDIT` audit toggle for hook diagnostics (`opencode_session.sh` defaults to `0`; set `1` to opt in)
+- `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH` audit output path (defaults to `.opencode/gateway-events.jsonl` in the launch directory)
 - `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BYTES` max audit file size before rotation (`opencode_session.sh` defaults to `8388608`)
 - `MY_OPENCODE_GATEWAY_EVENT_AUDIT_MAX_BACKUPS` rotated audit backup count (`opencode_session.sh` defaults to `5`)
 
@@ -561,9 +563,9 @@ Notes:
 - `/gateway doctor --deep --json` runs uncached, loader-only direct and tuple contract probes in isolated temporary homes. It never runs legacy serve/model probes, never reads or changes the direct-loader cache, and returns only allowlisted status fields. `--deep` and `--fresh` are mutually exclusive.
 - `/gateway continuation report --json` summarizes recent `todo-continuation-enforcer` audit events so you can see reason codes, stages, and affected sessions quickly.
 - `/gateway continuation report --json` now also exposes `assistant_message_open_todo_events` so you can spot intermediate assistant replies that landed while todos were still open.
-- after a wrapped session, `/gateway continuation report` is the fastest check for recent `todo-continuation-enforcer` activity.
+- after a session with audit enabled and a compatible gateway active, `/gateway continuation report` summarizes recorded `todo-continuation-enforcer` activity.
 - parity and naming differences vs upstream are tracked in `docs/upstream-divergence-registry.md`.
-- `scripts/opencode_session.sh` now enables `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` by default with rotation; set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=0` to disable or override path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`.
+- `scripts/opencode_session.sh` defaults gateway event audit to `0`. Set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` before launch to opt in, and optionally override the path with `MY_OPENCODE_GATEWAY_EVENT_AUDIT_PATH`. The wrapper's rotation settings apply when auditing is active.
 - set `MY_OPENCODE_GATEWAY_DISPATCH_SAMPLE_RATE=<n>` to reduce noisy dispatch audit events (`message.*`, `session.*`, transform dispatch); `1` logs every event, default is `20`.
 
 Hook dispatch latency measurement is aggregate-only and uses the existing local event-audit opt-in. `hookDispatchLatency.enabled` defaults to `true`, but the collector is inactive unless `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` was effective when the plugin initialized. Set `hookDispatchLatency.enabled=false` in `gateway-core.config.json` and restart OpenCode to roll it back without changing hook order or outcomes. `windowMs` defaults to 900000 and is clamped to 60000–3600000; `minimumSamples` defaults to 100 and is clamped to 20–10000.
@@ -573,7 +575,7 @@ Each completed window keeps only fixed latency buckets and aggregate outcome cou
 Window rollover queues bounded background publication and never waits for audit I/O in hook dispatch. Loss counters are cleared only after the whole aggregate batch is written; rejected queues and failed writes carry into the next successful batch. Process exit can still discard the active partial window or queued records before that acknowledgement is durable. `hook_dispatch_latency.measurement_incomplete=true` means a series, detached window, or audit batch was dropped, rejected, or failed and the displayed measurement is not qualified for optimization. Status recomputes percentiles from the histogram and elapsed share from the persisted event-class denominator before accepting a record. It deduplicates the latest valid series from the active audit file only, returns at most 50, and exposes `runtime_collector_active=null` because the status process cannot assert how the live plugin initialized. Audit rotation applies to these records. To reset local history, stop OpenCode before deleting the active gateway audit and any rotated backups; that deletion removes all gateway audit history, not only latency aggregates.
 
 Debug and troubleshooting guidance:
-- if you launch through `scripts/opencode_session.sh`, gateway event audit is on by default; launch plain `opencode` or set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=0` when you want a quiet run.
+- gateway event audit is off by default, including through `scripts/opencode_session.sh`; set `MY_OPENCODE_GATEWAY_EVENT_AUDIT=1` before launch only when event traces are needed.
 - with audit enabled, expect small extra CPU/file-I/O overhead and log growth; this is not a direct model token-cost increase by itself.
 - after diagnosis, disable audit again to reduce background noise and disk churn.
 
