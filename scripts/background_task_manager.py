@@ -186,10 +186,10 @@ def ensure_store(*, root_fd: int | None = None) -> None:
     except OSError as exc:
         raise BackgroundStoreError("bg_store_index_unsafe", "background job index refused") from exc
 
-    initial = {"version": 1, "updated_at": to_iso(now_utc()), "jobs": []}
-    encoded = (json.dumps(initial, indent=2) + "\n").encode("utf-8")
     try:
         try:
+            initial = {"version": 1, "updated_at": to_iso(now_utc()), "jobs": []}
+            encoded = (json.dumps(initial, indent=2) + "\n").encode("utf-8")
             os.fchmod(descriptor, 0o600)
             remaining = memoryview(encoded)
             while remaining:

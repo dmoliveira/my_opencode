@@ -228,6 +228,33 @@ class BackgroundStoreSecurityTest(unittest.TestCase):
         self.assertTrue((self.store / "jobs.json").is_file())
         self.assertEqual(b"", (self.store / "jobs.json").read_bytes())
 
+    def test_initial_clock_failure_closes_and_preserves_new_index(self) -> None:
+        index = self.store / "jobs.json"
+        real_close = os.close
+        closed_index = False
+
+        def track_close(descriptor):
+            nonlocal closed_index
+            opened = os.fstat(descriptor)
+            if index.exists():
+                current = index.stat()
+                if (opened.st_dev, opened.st_ino) == (current.st_dev, current.st_ino):
+                    closed_index = True
+            real_close(descriptor)
+
+        with (
+            self.patched_store(),
+            patch.object(bg, "now_utc", side_effect=OSError("synthetic-private-canary")),
+            patch.object(bg.os, "close", side_effect=track_close),
+            self.assertRaises(bg.BackgroundStoreError) as caught,
+            bg.locked_jobs(writeback=False),
+        ):
+            self.fail("failed initialization was accepted")
+        self.assertEqual("bg_store_init_indeterminate", caught.exception.reason_code)
+        self.assertNotIn("synthetic-private-canary", str(caught.exception))
+        self.assertTrue(closed_index)
+        self.assertEqual(b"", index.read_bytes())
+
     def test_initial_directory_sync_failure_preserves_new_index(self) -> None:
         with (
             self.patched_store(),
