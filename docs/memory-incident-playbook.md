@@ -36,7 +36,7 @@ To inspect candidates without terminating them:
 ```
 
 Candidates are **unqualified observations**, not a safe termination plan.
-The command does not signal processes or resume panes, and preview no longer
+The command does not signal recovery targets or resume panes, and preview no longer
 updates the pane cache or starts an OpenCode session lookup. `--apply` fails
 closed. Thresholds used to select diagnostic candidates remain configurable via
 `memoryRecovery`:
@@ -71,9 +71,10 @@ New protection LaunchAgents cannot be enabled. An existing watcher that loads
 this version with `--watch --apply` continues on its configured schedule in
 diagnostic-only mode, warns on stderr, and records blocked cycles in its usual
 bounded state file. Finite watches still exit and may be restarted by launchd.
-The watcher does not signal processes or resume panes. A separately installed
-runtime or already-running process may still use older code; updating this
-repository does not stop or update it.
+The watcher does not signal recovery targets or resume panes. Its owned
+diagnostic helper processes may still be stopped on timeout. A separately
+installed runtime or already-running process may still use older code;
+updating this repository does not stop or update it.
 
 Existing LaunchAgent status and reports remain available:
 

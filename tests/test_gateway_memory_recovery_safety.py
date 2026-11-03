@@ -37,7 +37,7 @@ class GatewayMemoryRecoverySafetyTest(unittest.TestCase):
                 self.assertEqual(result, 1)
                 self.assertEqual(payload["result"], "FAIL")
                 self.assertEqual(payload["reason_code"], gateway.RECOVERY_IDENTITY_UNVERIFIED)
-                self.assertIn("No process was signaled", payload["error"])
+                self.assertIn("No recovery target was signaled", payload["error"])
 
     def test_direct_python_entrypoints_also_refuse_apply(self) -> None:
         with contextlib.redirect_stdout(io.StringIO()) as stdout, \

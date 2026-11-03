@@ -25,7 +25,7 @@ UTC = getattr(datetime, "UTC", timezone.utc)
 RECOVERY_IDENTITY_UNVERIFIED = "recovery_process_identity_unverified"
 RECOVERY_DISABLED_MESSAGE = (
     "Automatic memory recovery is disabled: process roles and stable identities "
-    "are not verified. No process was signaled."
+    "are not verified. No recovery target was signaled."
 )
 DEFAULT_LONG_TURN_WATCHDOG = {
     "enabled": True,
