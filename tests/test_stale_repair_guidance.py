@@ -170,7 +170,9 @@ class StaleRepairGuidanceTest(unittest.TestCase):
         self.assertEqual(self.before, self.sentinel_state())
 
     def test_synthetic_database_preview_does_not_apply_or_create_backup(self) -> None:
-        db_path = self.root / "real synthetic runtime.sqlite3"
+        runtime_dir = self.root / "runtime"
+        runtime_dir.mkdir(mode=0o700)
+        db_path = runtime_dir / "real synthetic runtime.sqlite3"
         index_path = self.root / "index.json"
         index_path.write_text('{"version": 1, "sessions": []}\n', encoding="utf-8")
         index_path.chmod(0o600)
@@ -197,6 +199,7 @@ class StaleRepairGuidanceTest(unittest.TestCase):
         before_db = (db_path.read_bytes(), db_path.stat().st_ino, db_path.stat().st_mtime_ns)
         before_index = index_path.read_bytes()
         before_files = {path.name for path in self.root.iterdir()}
+        before_runtime_files = {path.name for path in runtime_dir.iterdir()}
         output = io.StringIO()
         with (
             patch.object(session, "DEFAULT_DIGEST_PATH", self.root / "digest.json"),
@@ -217,6 +220,16 @@ class StaleRepairGuidanceTest(unittest.TestCase):
             doctor = json.loads(output.getvalue())
             summary = gateway.runtime_session_health_summary(
                 db_path=db_path, generic_stale_problem_threshold=1
+            )
+            self.assertTrue(doctor["runtime_db_scan_complete"], doctor)
+            self.assertTrue(summary["runtime_db_scan_complete"], summary)
+            self.assertTrue(
+                any("--include-generic" in item for item in doctor["quick_fixes"]),
+                doctor,
+            )
+            self.assertTrue(
+                any("--include-generic" in item for item in summary["repair_commands"]),
+                summary,
             )
             commands = (
                 next(item for item in doctor["quick_fixes"] if "--include-generic" in item),
@@ -240,6 +253,7 @@ class StaleRepairGuidanceTest(unittest.TestCase):
         self.assertEqual(before_db, (db_path.read_bytes(), db_path.stat().st_ino, db_path.stat().st_mtime_ns))
         self.assertEqual(before_index, index_path.read_bytes())
         self.assertEqual(before_files, {path.name for path in self.root.iterdir()})
+        self.assertEqual(before_runtime_files, {path.name for path in runtime_dir.iterdir()})
         self.assertEqual(self.before, self.sentinel_state())
 
 
