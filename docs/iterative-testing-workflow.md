@@ -51,8 +51,9 @@ Use the strongest realistic isolated environment available without turning a nor
 `make selftest` ignores inherited `GIT_*`, `MY_OPENCODE_*`, `OPENCODE_*`, and
 `XDG_*` overrides in its own process, binds its home and XDG paths to temporary
 locations, and uses isolated Git configuration. Its `--since` tag coverage and
-image preference fixtures also use temporary paths. These safeguards do not
-isolate all checkout-relative or inherited state. Configuration transactions
+image preferences use temporary paths; image fixtures use a clean environment
+and synthetic Codex commands. These safeguards do not isolate all
+checkout-relative or inherited state. Configuration transactions
 still share the per-user `/tmp/my-opencode-config-locks-<uid>` registry, so an
 isolated home and `TMPDIR` are not an OS sandbox. When preserving local data
 matters, run the full self-test in a disposable standalone checkout inside an

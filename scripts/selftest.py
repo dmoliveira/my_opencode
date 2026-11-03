@@ -372,6 +372,41 @@ def _isolated_application_environment(
     return sanitized
 
 
+def _selftest_image_environment(tmp: Path, home: Path) -> dict[str, str]:
+    fixture_bin = tmp / "image-fixture-bin"
+    fixture_bin.mkdir(mode=0o700)
+    codex_stub = fixture_bin / "codex"
+    codex_stub.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    codex_stub.chmod(0o700)
+    environment = {
+        "HOME": str(home),
+        "USERPROFILE": str(home),
+        "TMPDIR": str(tmp),
+        "TMP": str(tmp),
+        "TEMP": str(tmp),
+        "PATH": os.pathsep.join((str(fixture_bin), os.defpath)),
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "LC_ALL": "C",
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_CACHE_HOME": str(home / ".cache"),
+        "XDG_DATA_HOME": str(home / ".local" / "share"),
+        "XDG_STATE_HOME": str(home / ".local" / "state"),
+        "XDG_CONFIG_DIRS": str(tmp / "image-config-dirs"),
+        "XDG_DATA_DIRS": str(tmp / "image-data-dirs"),
+        "XDG_RUNTIME_DIR": str(tmp / "xdg-runtime"),
+        "CODEX_HOME": str(tmp / "image-codex-home"),
+        "OPENAI_IMAGE_PROVIDER_CONFIG_PATH": str(tmp / "image-provider.txt"),
+        "OPENAI_IMAGE_PROVIDER_PREFERENCE": "",
+        "OPENAI_IMAGE_OUTPUT_LOCATION_CONFIG_PATH": str(tmp / "image-output-location.txt"),
+        "OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE": "",
+    }
+    if os.name == "nt":
+        for name in ("SYSTEMROOT", "WINDIR"):
+            if name in os.environ:
+                environment[name] = os.environ[name]
+    return _isolated_git_environment(environment)
+
+
 def initialize_validation_git_fixture(
     directory: Path, *, env: dict[str, str] | None = None
 ) -> None:
@@ -23032,11 +23067,7 @@ version: 1
 
         image_pref_path = tmp / "image-provider.txt"
         image_location_pref_path = tmp / "image-output-location.txt"
-        image_env = refactor_env.copy()
-        image_env["OPENAI_IMAGE_PROVIDER_CONFIG_PATH"] = str(image_pref_path)
-        image_env["OPENAI_IMAGE_PROVIDER_PREFERENCE"] = ""
-        image_env["OPENAI_IMAGE_OUTPUT_LOCATION_CONFIG_PATH"] = str(image_location_pref_path)
-        image_env["OPENAI_IMAGE_OUTPUT_LOCATION_PREFERENCE"] = ""
+        image_env = _selftest_image_environment(tmp, home)
 
         image_doctor = subprocess.run(
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "doctor", "--json"],
@@ -23129,7 +23160,7 @@ exit 1
             codex_script.chmod(0o755)
             codex_env = image_env.copy()
             codex_env["CODEX_HOME"] = str(codex_home)
-            codex_env["PATH"] = f"{codex_bin_dir}:{codex_env.get('PATH','')}"
+            codex_env["PATH"] = os.pathsep.join((str(codex_bin_dir), codex_env["PATH"]))
 
             image_status = subprocess.run(
                 [sys.executable, str(IMAGE_COMMAND_SCRIPT), "status", "--json"],
@@ -23371,7 +23402,7 @@ exit 1
             [sys.executable, str(IMAGE_COMMAND_SCRIPT), "setup-keys"],
             capture_output=True,
             text=True,
-            env=refactor_env,
+            env=image_env,
             check=False,
             cwd=REPO_ROOT,
         )
@@ -23400,7 +23431,7 @@ exit 1
             ],
             capture_output=True,
             text=True,
-            env=refactor_env,
+            env=image_env,
             check=False,
             cwd=REPO_ROOT,
         )
