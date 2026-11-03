@@ -1955,6 +1955,253 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             legacy.assert_not_called()
             backup.assert_not_called()
 
+    def test_v2_schema_case_variants_and_views_block_legacy_scan_and_repair(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        schema_markers = (
+            'CREATE TABLE "SESSION_V2" (id TEXT PRIMARY KEY)',
+            'CREATE TABLE "Session_V2" (id TEXT PRIMARY KEY)',
+            'CREATE VIEW "session_v2" AS SELECT id FROM session',
+            'CREATE VIEW "Session_V2" AS SELECT id FROM session',
+        )
+        for marker in schema_markers:
+            for indexes in (False, True):
+                with self.subTest(marker=marker, indexes=indexes), tempfile.TemporaryDirectory() as tmp:
+                    db_path = Path(tmp) / "opencode.db"
+                    fixture = self._create_tied_family_fixture(
+                        db_path, family="stale_running_tool", indexes=indexes,
+                        now_ms=now_ms, count=1,
+                    )
+                    with contextlib.closing(sqlite3.connect(db_path)) as connection:
+                        connection.execute(marker)
+                        connection.commit()
+                    before = self._quiescent_snapshot(db_path)
+                    with (
+                        patch.object(
+                            module, "_scan_runtime_stuck_sessions_indexed_queries",
+                            wraps=module._scan_runtime_stuck_sessions_indexed_queries,
+                        ) as indexed,
+                        patch.object(
+                            module, "_scan_runtime_stuck_sessions_legacy_queries",
+                            wraps=module._scan_runtime_stuck_sessions_legacy_queries,
+                        ) as legacy,
+                        patch.object(module, "_backup_runtime_database", wraps=module._backup_runtime_database) as backup,
+                    ):
+                        scan = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+                        repair = module._repair_runtime_stuck_sessions(
+                            db_path, 300, apply_changes=True, include_generic=True,
+                            scope_session_id=fixture["positive_ids"][0],
+                        )
+                    self.assertTrue(scan["runtime_db_v2_detected"])
+                    self.assertEqual("incompatible", scan["runtime_db_scan_mode"])
+                    self.assertFalse(scan["runtime_db_scan_complete"])
+                    self.assertIn("runtime_schema_incompatible", scan["remediation_codes"])
+                    self.assertTrue(any("V2 session schema" in item for item in repair["problems"]))
+                    self.assertEqual(0, repair["candidate_count"])
+                    self.assertEqual(0, repair["repaired_count"])
+                    self.assertIsNone(repair["backup_path"])
+                    self.assertEqual(before, self._quiescent_snapshot(db_path))
+                    indexed.assert_not_called()
+                    legacy.assert_not_called()
+                    backup.assert_not_called()
+
+    def test_unrelated_schema_names_do_not_block_a_legacy_scan(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=1,
+            )
+            with contextlib.closing(sqlite3.connect(db_path)) as connection:
+                connection.execute('CREATE TABLE "session_v2_archive" (id TEXT)')
+                connection.execute(
+                    'CREATE TRIGGER "session_v2" AFTER INSERT ON session BEGIN SELECT 1; END'
+                )
+                connection.commit()
+            before = self._quiescent_snapshot(db_path)
+            result = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+            self.assertFalse(result["runtime_db_v2_detected"])
+            self.assertTrue(result["runtime_db_scan_complete"])
+            self.assertIn(
+                fixture["positive_ids"][0],
+                [item.get("session_id") for item in result["stuck_findings"]],
+            )
+            self.assertEqual(before, self._quiescent_snapshot(db_path))
+
+    def test_incomplete_preview_never_authorizes_repair_candidates(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=1,
+            )
+            scan = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+            self.assertEqual(1, len(scan["stuck_findings"]))
+            scan["runtime_db_scan_complete"] = False
+            scan["runtime_db_v2_detected"] = True
+            scan["problems"] = ["OpenCode V2 session schema detected"]
+            before = self._quiescent_snapshot(db_path)
+            with (
+                patch.object(module, "_scan_runtime_stuck_sessions", return_value=scan),
+                patch.object(module, "_backup_runtime_database", wraps=module._backup_runtime_database) as backup,
+            ):
+                result = module._repair_runtime_stuck_sessions(
+                    db_path, 300, apply_changes=True, include_generic=False,
+                )
+            self.assertEqual(0, result["candidate_count"])
+            self.assertEqual(0, result["repaired_count"])
+            self.assertIn("OpenCode V2 session schema detected", result["problems"])
+            self.assertIsNone(result["backup_path"])
+            self.assertEqual(before, self._quiescent_snapshot(db_path))
+            backup.assert_not_called()
+
+    def test_incomplete_preview_reports_failure_with_or_without_scan_problems(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "missing.db"
+            index_path = root / "unused-index.json"
+            for permission_status, expected_problem in (
+                ("missing", "runtime session database scan did not complete"),
+                ("blocked", "runtime database permission safety check failed"),
+            ):
+                permission_summary = {
+                    "runtime_permission_status": permission_status,
+                    "runtime_permission_reason_code": "synthetic_test",
+                    "runtime_permission_repair_required": False,
+                    "runtime_permission_apply_allowed": False,
+                    "runtime_permission_findings": [],
+                }
+                for apply in (False, True):
+                    for scoped in (False, True):
+                        with self.subTest(permission_status=permission_status, apply=apply, scoped=scoped):
+                            args = ["--db-path", str(db_path), "--json"]
+                            if apply:
+                                args.append("--apply")
+                            if scoped:
+                                args.extend(["--session-id", "synthetic-session"])
+                            with (
+                                patch.object(module, "_runtime_permission_summary", return_value=permission_summary),
+                                contextlib.redirect_stdout(io.StringIO()) as output,
+                            ):
+                                code = module._command_repair_stale(args, index_path)
+                            report = json.loads(output.getvalue())
+                            self.assertEqual(1, code)
+                            self.assertEqual("FAIL", report["result"])
+                            self.assertIn(expected_problem, report["problems"])
+                            self.assertEqual(0, report["candidate_count"])
+                            self.assertEqual(0, report["repaired_count"])
+                            self.assertIsNone(report["backup_path"])
+                            self.assertFalse(db_path.exists())
+                            self.assertFalse(index_path.exists())
+
+    def test_missing_database_refuses_repair_with_real_permission_check(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "missing.db"
+            args = ["--db-path", str(db_path), "--apply", "--json"]
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                code = module._command_repair_stale(args, root / "unused-index.json")
+            report = json.loads(output.getvalue())
+            self.assertEqual(1, code)
+            self.assertEqual("FAIL", report["result"])
+            self.assertTrue(report["problems"])
+            self.assertEqual(0, report["repaired_count"])
+            self.assertIsNone(report["backup_path"])
+            self.assertFalse(db_path.exists())
+
+    def test_database_missing_after_preview_cannot_report_repair_success(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        for scoped in (False, True):
+            with self.subTest(scoped=scoped), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                db_path = root / "runtime # case.db"
+                fixture = self._create_tied_family_fixture(
+                    db_path, family="stale_running_tool", indexes=False,
+                    now_ms=now_ms, count=1,
+                )
+                scan = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+                self.assertTrue(scan["runtime_db_scan_complete"])
+                self.assertEqual(1, len(scan["stuck_findings"]))
+                db_path.unlink()
+                args = ["--db-path", str(db_path), "--apply", "--json"]
+                if scoped:
+                    args.extend(["--session-id", fixture["positive_ids"][0]])
+                with (
+                    patch.object(module, "_scan_runtime_stuck_sessions", return_value=scan),
+                    patch.object(module, "_backup_runtime_database") as backup,
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                ):
+                    code = module._command_repair_stale(args, root / "unused-index.json")
+                report = json.loads(output.getvalue())
+                self.assertEqual(1, code)
+                self.assertEqual("FAIL", report["result"])
+                self.assertIn("runtime session database disappeared after scan", report["problems"])
+                self.assertEqual(1, report["candidate_count"])
+                self.assertEqual(0, report["repaired_count"])
+                self.assertIsNone(report["backup_path"])
+                self.assertFalse(db_path.exists())
+                backup.assert_not_called()
+
+    def test_database_missing_after_backup_is_not_recreated(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "runtime # case.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False,
+                now_ms=now_ms, count=1,
+            )
+            before_rows = self._canonical_rows(db_path)
+            real_backup = module._backup_runtime_database
+
+            def backup_then_remove(path: Path) -> Path:
+                backup_path = real_backup(path)
+                path.unlink()
+                return backup_path
+
+            args = [
+                "--db-path", str(db_path), "--session-id", fixture["positive_ids"][0],
+                "--apply", "--json",
+            ]
+            with (
+                patch.object(module, "_backup_runtime_database", side_effect=backup_then_remove),
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                code = module._command_repair_stale(args, root / "unused-index.json")
+            report = json.loads(output.getvalue())
+            self.assertEqual(1, code)
+            self.assertEqual("FAIL", report["result"])
+            self.assertTrue(any("failed to open runtime session database for repair" in p for p in report["problems"]))
+            self.assertEqual(1, report["candidate_count"])
+            self.assertEqual(0, report["repaired_count"])
+            self.assertFalse(db_path.exists())
+            backup_path = Path(report["backup_path"])
+            self.assertTrue(backup_path.is_file())
+            self.assertEqual(before_rows, self._canonical_rows(backup_path))
+
+    def test_repair_handles_special_characters_in_database_path(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime # case.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False,
+                now_ms=now_ms, count=1,
+            )
+            result = module._repair_runtime_stuck_sessions(
+                db_path, 300, apply_changes=True, include_generic=False,
+                scope_session_id=fixture["positive_ids"][0],
+            )
+            self.assertEqual([], result["problems"])
+            self.assertEqual(1, result["repaired_count"])
+            self.assertTrue(Path(result["backup_path"]).is_file())
+
     def test_v2_doctor_reports_schema_without_suggesting_legacy_repairs(self) -> None:
         module = self._module()
         with tempfile.TemporaryDirectory() as tmp:
@@ -2015,6 +2262,144 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertEqual(0, result["repaired_count"])
             self.assertTrue(any("V2 session schema" in item for item in result["problems"]))
             self.assertEqual(before, self._canonical_rows(db_path))
+
+    def test_v2_alias_appearing_after_preview_blocks_repair_under_write_lock(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        for marker in (
+            'CREATE TABLE "SESSION_V2" (id TEXT PRIMARY KEY)',
+            'CREATE VIEW "Session_V2" AS SELECT id FROM session',
+        ):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as tmp:
+                db_path = Path(tmp) / "opencode.db"
+                fixture = self._create_tied_family_fixture(
+                    db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=1,
+                )
+                before = self._canonical_rows(db_path)
+                real_backup = module._backup_runtime_database
+                migrated = {}
+
+                def backup_then_migrate(
+                    path: Path, *, schema_marker=marker, backup_fn=real_backup, saved=migrated,
+                ) -> Path:
+                    backup_path = backup_fn(path)
+                    with contextlib.closing(sqlite3.connect(path)) as connection:
+                        connection.execute(schema_marker)
+                        connection.commit()
+                    saved["snapshot"] = self._quiescent_snapshot(path)
+                    return backup_path
+
+                with patch.object(module, "_backup_runtime_database", side_effect=backup_then_migrate):
+                    result = module._repair_runtime_stuck_sessions(
+                        db_path, 300, apply_changes=True, include_generic=False,
+                        scope_session_id=fixture["positive_ids"][0],
+                    )
+                self.assertEqual(1, result["candidate_count"])
+                self.assertEqual(0, result["repaired_count"])
+                self.assertTrue(any("V2 session schema" in item for item in result["problems"]))
+                self.assertEqual(before, self._canonical_rows(db_path))
+                self.assertEqual(migrated["snapshot"], self._quiescent_snapshot(db_path))
+
+    def test_v2_schema_appearing_after_repair_is_reported_by_rescan(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=1,
+            )
+            real_scan = module._scan_runtime_stuck_sessions
+            scans = 0
+            after_first_repair = None
+
+            def migrate_before_rescan(path: Path, stale_seconds: int, *args, **kwargs):
+                nonlocal scans, after_first_repair
+                scans += 1
+                if scans == 2:
+                    after_first_repair = self._canonical_rows(path)
+                    with contextlib.closing(sqlite3.connect(path)) as connection:
+                        connection.execute('CREATE TABLE "SESSION_V2" (id TEXT PRIMARY KEY)')
+                        connection.commit()
+                return real_scan(path, stale_seconds, *args, **kwargs)
+
+            with patch.object(module, "_scan_runtime_stuck_sessions", side_effect=migrate_before_rescan):
+                result = module._repair_runtime_stuck_sessions(
+                    db_path, 300, apply_changes=True, include_generic=False,
+                    scope_session_id=fixture["positive_ids"][0],
+                )
+            self.assertEqual(2, scans)
+            self.assertEqual(1, result["candidate_count"])
+            self.assertEqual(1, result["repaired_count"])
+            self.assertTrue(any("V2 session schema" in item for item in result["problems"]))
+            self.assertIsNotNone(result["backup_path"])
+            self.assertEqual(after_first_repair, self._canonical_rows(db_path))
+
+    def test_incomplete_post_repair_rescan_without_problems_is_not_success(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=1,
+            )
+            real_scan = module._scan_runtime_stuck_sessions
+            scans = 0
+
+            def incomplete_rescan(path: Path, stale_seconds: int, *args, **kwargs):
+                nonlocal scans
+                scans += 1
+                result = real_scan(path, stale_seconds, *args, **kwargs)
+                if scans == 2:
+                    result["runtime_db_scan_complete"] = False
+                    result["problems"] = []
+                return result
+
+            with patch.object(module, "_scan_runtime_stuck_sessions", side_effect=incomplete_rescan):
+                result = module._repair_runtime_stuck_sessions(
+                    db_path, 300, apply_changes=True, include_generic=False,
+                    scope_session_id=fixture["positive_ids"][0],
+                )
+            self.assertEqual(2, scans)
+            self.assertEqual(1, result["repaired_count"])
+            self.assertIn("runtime session database rescan did not complete", result["problems"])
+
+    def test_incomplete_post_repair_rescan_never_authorizes_another_round(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "opencode.db"
+            self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False, now_ms=now_ms, count=2,
+            )
+            real_scan = module._scan_runtime_stuck_sessions
+            scans = 0
+            deferred = []
+            after_first_repair = None
+
+            def incomplete_rescan_with_candidate(path: Path, stale_seconds: int, *args, **kwargs):
+                nonlocal scans, after_first_repair
+                scans += 1
+                result = real_scan(path, stale_seconds, *args, **kwargs)
+                if scans == 1:
+                    self.assertEqual(2, len(result["stuck_findings"]))
+                    deferred.extend(result["stuck_findings"][1:])
+                    result["stuck_findings"] = result["stuck_findings"][:1]
+                elif scans == 2:
+                    after_first_repair = self._canonical_rows(path)
+                    result["runtime_db_scan_complete"] = False
+                    result["problems"] = ["injected incomplete runtime rescan"]
+                    result["stuck_findings"] = deferred
+                return result
+
+            with patch.object(module, "_scan_runtime_stuck_sessions", side_effect=incomplete_rescan_with_candidate):
+                result = module._repair_runtime_stuck_sessions(
+                    db_path, 300, apply_changes=True, include_generic=False,
+                )
+            self.assertEqual(2, scans)
+            self.assertEqual(1, result["candidate_count"])
+            self.assertEqual(1, result["repaired_count"])
+            self.assertIn("injected incomplete runtime rescan", result["problems"])
+            self.assertEqual(after_first_repair, self._canonical_rows(db_path))
 
     def test_missing_schema_and_json1_are_distinct_from_open_failure(self) -> None:
         module = self._module()
