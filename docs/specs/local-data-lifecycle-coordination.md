@@ -139,7 +139,7 @@ recorded durably before the coordinator advances:
 | `verified_noop` | The owner proves that the complete authorized affected set is empty for the bound source generation, with the required protection. | Record the no-op; missing or incomplete inventory is not proof of emptiness. |
 | `committed` | A validated, durable owner receipt for the exact request, generation, and effect, with any owner-specific postcondition verified. | Preserve the receipt; do not repeat this effect merely because a later owner fails. |
 | `rolled_back` | Owner evidence establishes that rollback completed with no lasting in-scope effects, including effects outside its primary store. | Stop the request; any new attempt needs valid admission and owner-specific retry rules. |
-| `unknown` | An effect may have occurred, or journal, process, identity, durability, or owner evidence is missing or contradictory. | Stop new effects and preserve the journal and recovery artifacts. Only a qualified exact replay may be used for reconciliation as described below. |
+| `unknown` | An effect may have occurred, or journal, process, identity, durability, or owner evidence is missing or contradictory. | Stop dispatching other steps and preserve the journal and recovery artifacts. Only a qualified exact replay of the original step may be used for reconciliation as described below. |
 
 An `effect_possible` step without a valid terminal receipt projects to `unknown`,
 including a crash before the owner was actually invoked. An owner-reported
@@ -164,12 +164,17 @@ checks the original owner/backend and exact operation identity. It may adopt an
 authoritative terminal receipt, establish a proven no-effect result, or remain
 `unknown`. Exact replay can be used for reconciliation only if that particular
 owner has a tested contract covering concurrent and lost-response cases, retains
-the idempotency record, and accepts the **same** request ID and unchanged payload
-against the same backend. Revalidate all still-applicable authorization and
-fencing. If those conditions cannot be established, do not replay. Never infer
-that a different request ID or a repeated unconditional cascading delete is
-safe. A new attempt after a proven rollback is distinct from replay and requires
-fresh preconditions.
+complete idempotency history for the relevant period, and accepts the **same**
+request ID and unchanged payload against the same backend. A replay is not
+necessarily a read: if the original dispatch never reached the owner, replay may
+perform the first effect. The owner must atomically return the established result,
+or, when it can prove the request was never applied, revalidate the original
+authorization, binding, recovery and fencing conditions before applying it at
+most once. A missing or expired idempotency record alone does not prove no effect.
+If these conditions cannot be established, do not replay. Never infer that a
+different request ID or a repeated unconditional cascading delete is safe. A new
+attempt after a proven rollback is distinct from replay and requires fresh
+preconditions.
 
 Aggregate reporting must distinguish: no source effects; all requested effects
 committed or verified as no-ops within the approved scope; a known partial result;
@@ -210,8 +215,9 @@ only against synthetic stores, processes, identities, backups, and destinations.
   must stay unknown until owner-specific evidence justifies reconciliation.
 - Test exact replay with the same request ID and payload only for a qualifying
   owner, including concurrent submissions, lost responses, expired idempotency
-  history, changed payloads, and backend swaps. Non-idempotent owners must not
-  be retried automatically.
+  history, changed payloads, and backend swaps. When the original dispatch never
+  reached the owner, verify that replay checks the original preconditions before
+  its first effect. Non-idempotent owners must not be retried automatically.
 - Exercise committed/rolled-back/unknown combinations across owners. Verify
   partial and uncertain aggregate results, no automatic compensation, no later
   dispatch after failure, preserved recovery material, and no false erasure
