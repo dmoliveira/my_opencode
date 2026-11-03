@@ -114,6 +114,145 @@ class SessionDigestSecurityTest(unittest.TestCase):
             self.assertFalse(index_path.exists())
             self.assertFalse(module._digest_lock_path(digest_path).exists())
 
+    def test_post_session_content_change_is_preserved_before_publication(self) -> None:
+        for initially_exists in (False, True):
+            with self.subTest(initially_exists=initially_exists), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                digest_path = root / "digest.json"
+                index_path = root / "index.json"
+                if initially_exists:
+                    digest_path.write_bytes(b'{"generation": 1}')
+                    digest_path.chmod(0o600)
+                hook_bytes = b'{"generation": 2, "secret": "synthetic-hook-canary"}'
+                module, env = self._module(digest_path, index_path)
+
+                def modify(*_args, _path=digest_path, _hook_bytes=hook_bytes, **_kwargs):
+                    _path.write_bytes(_hook_bytes)
+                    _path.chmod(0o600)
+                    return {"attempted": True, "exit_code": 0, "timed_out": False}
+
+                with (
+                    patch.object(module, "build_digest", return_value={}),
+                    patch.object(module, "load_post_session_config", return_value={}),
+                    patch.object(module, "run_post_session", side_effect=modify),
+                    patch.object(module, "update_session_index") as update_index,
+                ):
+                    code, output = self._run(module, env, ["--run-post", "--path", str(digest_path)])
+                self.assertEqual(1, code, output)
+                self.assertIn("reason_code: session_sidecar_snapshot_changed", output)
+                self.assertIn("digest_committed: no", output)
+                self.assertNotIn("synthetic-hook-canary", output)
+                self.assertEqual(hook_bytes, digest_path.read_bytes())
+                update_index.assert_not_called()
+                self.assertFalse(index_path.exists())
+
+    def test_unparseable_existing_digest_is_preserved_before_hooks_or_publication(self) -> None:
+        cases = (
+            (b"{synthetic-malformed-canary", "session_sidecar_malformed_json"),
+            (b"\xffsynthetic-utf8-canary", "session_sidecar_invalid_utf8"),
+            (b'["synthetic-root-canary"]', "session_sidecar_invalid_root"),
+        )
+        for original, reason in cases:
+            for run_post in (False, True):
+                with self.subTest(reason=reason, run_post=run_post), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    digest_path, index_path = root / "digest.json", root / "index.json"
+                    digest_path.write_bytes(original)
+                    digest_path.chmod(0o600)
+                    inode = digest_path.stat().st_ino
+                    module, env = self._module(digest_path, index_path)
+                    args = ["--path", str(digest_path)] + (["--run-post"] if run_post else [])
+                    with (
+                        patch.object(module, "build_digest", return_value={}) as build_digest,
+                        patch.object(module, "run_post_session") as post_hook,
+                        patch.object(module, "update_session_index") as update_index,
+                    ):
+                        code, output = self._run(module, env, args)
+                    self.assertEqual(1, code, output)
+                    self.assertIn(f"reason_code: {reason}", output)
+                    self.assertIn("digest_committed: no", output)
+                    self.assertNotIn("canary", output)
+                    self.assertEqual(original, digest_path.read_bytes())
+                    self.assertEqual(inode, digest_path.stat().st_ino)
+                    build_digest.assert_not_called()
+                    post_hook.assert_not_called()
+                    update_index.assert_not_called()
+                    self.assertFalse(index_path.exists())
+                    self.assertFalse(module._digest_lock_path(digest_path).exists())
+
+    def test_unchanged_post_session_allows_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            digest_path, index_path = root / "digest.json", root / "index.json"
+            digest_path.write_bytes(b'{"generation": 1}')
+            digest_path.chmod(0o600)
+            module, env = self._module(digest_path, index_path)
+            with (
+                patch.object(module, "build_digest", return_value={}),
+                patch.object(module, "load_post_session_config", return_value={}),
+                patch.object(module, "run_post_session", return_value={"attempted": False}),
+                patch.object(module, "update_session_index", return_value={"result": "PASS"}) as update_index,
+            ):
+                code, output = self._run(module, env, ["--run-post", "--path", str(digest_path)])
+            self.assertEqual(0, code, output)
+            self.assertEqual("PASS", json.loads(digest_path.read_bytes())["session_index"]["result"])
+            update_index.assert_called_once()
+
+    def test_change_between_hook_revalidation_and_lock_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            digest_path, index_path = root / "digest.json", root / "index.json"
+            digest_path.write_bytes(b'{"generation": 1}')
+            digest_path.chmod(0o600)
+            replacement = b'{"generation": 2}'
+            module, env = self._module(digest_path, index_path)
+            real_lock = module.secure_sidecar_lock
+
+            @contextlib.contextmanager
+            def change_on_lock(*args, **kwargs):
+                with real_lock(*args, **kwargs):
+                    digest_path.write_bytes(replacement)
+                    digest_path.chmod(0o600)
+                    yield
+
+            with (
+                patch.object(module, "build_digest", return_value={}),
+                patch.object(module, "load_post_session_config", return_value={}),
+                patch.object(module, "run_post_session", return_value={"attempted": False}),
+                patch.object(module, "secure_sidecar_lock", side_effect=change_on_lock),
+                patch.object(module, "update_session_index") as update_index,
+            ):
+                code, output = self._run(module, env, ["--run-post", "--path", str(digest_path)])
+            self.assertEqual(1, code, output)
+            self.assertIn("reason_code: session_sidecar_snapshot_changed", output)
+            self.assertIn("generation: initial", output)
+            self.assertEqual(replacement, digest_path.read_bytes())
+            update_index.assert_not_called()
+
+    def test_change_while_building_without_hook_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            digest_path, index_path = root / "digest.json", root / "index.json"
+            digest_path.write_bytes(b'{"generation": 1}')
+            digest_path.chmod(0o600)
+            replacement = b'{"generation": 2}'
+            module, env = self._module(digest_path, index_path)
+
+            def change_during_build(**_kwargs):
+                digest_path.write_bytes(replacement)
+                digest_path.chmod(0o600)
+                return {}
+
+            with (
+                patch.object(module, "build_digest", side_effect=change_during_build),
+                patch.object(module, "update_session_index") as update_index,
+            ):
+                code, output = self._run(module, env, ["--path", str(digest_path)])
+            self.assertEqual(1, code, output)
+            self.assertIn("reason_code: session_sidecar_snapshot_changed", output)
+            self.assertEqual(replacement, digest_path.read_bytes())
+            update_index.assert_not_called()
+
     def test_final_hook_malformed_replacement_fails_after_commits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
