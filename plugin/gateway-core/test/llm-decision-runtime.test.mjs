@@ -13,6 +13,16 @@ import {
   truncateDecisionText,
 } from "../dist/hooks/shared/llm-decision-runtime.js"
 
+function completeTrace(text) {
+  const sessionID = "ses_fixture"
+  const messageID = "msg_fixture"
+  return [
+    { type: "step_start", sessionID, part: { type: "step-start", sessionID, messageID } },
+    { type: "text", sessionID, part: { type: "text", sessionID, messageID, text } },
+    { type: "step_finish", sessionID, part: { type: "step-finish", sessionID, messageID, reason: "stop" } },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n"
+}
+
 test("parseSingleCharDecision accepts only allowed single characters", () => {
   assert.equal(parseSingleCharDecision(" y ", ["Y", "N"]), "Y")
   assert.equal(parseSingleCharDecision("YES", ["Y", "N"]), "")
@@ -106,7 +116,7 @@ test("llm decision runtime accepts valid JSON text output", async () => {
       maxCacheEntries: 8,
     },
     runner: async () => ({
-      stdout: '{"type":"text","part":{"text":"Y"}}\n',
+      stdout: completeTrace("Y"),
       stderr: "",
     }),
   })
@@ -142,7 +152,7 @@ test("llm decision runtime rejects invalid multi-character output", async () => 
       maxCacheEntries: 8,
     },
     runner: async () => ({
-      stdout: '{"type":"text","part":{"text":"YES"}}\n',
+      stdout: completeTrace("YES"),
       stderr: "",
     }),
   })
@@ -181,7 +191,7 @@ test("llm decision runtime skips nested helper child processes", async () => {
       },
       runner: async () => {
         calls += 1
-        return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+        return { stdout: completeTrace("Y"), stderr: "" }
       },
     })
     const result = await runtime.decide({
@@ -265,7 +275,7 @@ test("llm decision runtime allows standalone opencode when explicitly enabled", 
     },
     runner: async () => {
       calls += 1
-      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      return { stdout: completeTrace("Y"), stderr: "" }
     },
   })
 
@@ -300,7 +310,7 @@ test("llm decision runtime rejects refusal-style text output", async () => {
       maxCacheEntries: 8,
     },
     runner: async () => ({
-      stdout: '{"type":"text","part":{"text":"I cannot comply"}}\n',
+      stdout: completeTrace("I cannot comply"),
       stderr: "",
     }),
   })
@@ -341,7 +351,7 @@ test("llm decision runtime forwards configured env to child runner", async () =>
     },
     runner: async (_args, _timeoutMs, _cwd, env) => {
       receivedEnv = env
-      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      return { stdout: completeTrace("Y"), stderr: "" }
     },
   })
 
@@ -416,7 +426,7 @@ test("llm decision runtime rejects wrapped xml-like output", async () => {
       maxCacheEntries: 8,
     },
     runner: async () => ({
-      stdout: '{"type":"text","part":{"text":"<answer>Y</answer>"}}\n',
+      stdout: completeTrace("<answer>Y</answer>"),
       stderr: "",
     }),
   })
@@ -450,7 +460,7 @@ test("llm decision runtime accepts single-char output wrapped in invisible unico
       maxCacheEntries: 8,
     },
     runner: async () => ({
-      stdout: '{"type":"text","part":{"text":"\u2068Y\u2069"}}\n',
+      stdout: completeTrace("\u2068Y\u2069"),
       stderr: "",
     }),
   })
@@ -499,7 +509,7 @@ test("llm decision runtime rejects whitespace-padded explanation output", async 
       maxCacheEntries: 8,
     },
     runner: async () => ({
-      stdout: '{"type":"text","part":{"text":" Y because the evidence says so "}}\n',
+      stdout: completeTrace(" Y because the evidence says so "),
       stderr: "",
     }),
   })
@@ -535,7 +545,7 @@ test("llm decision runtime caches accepted decisions", async () => {
     },
     runner: async () => {
       calls += 1
-      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      return { stdout: completeTrace("Y"), stderr: "" }
     },
   })
   const request = {
@@ -577,7 +587,7 @@ test("llm decision runtime does not reuse a cached decision for a different long
     },
     runner: async () => {
       calls += 1
-      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      return { stdout: completeTrace("Y"), stderr: "" }
     },
   })
   const textPrefix = "shared intent " + "x".repeat(300)
@@ -627,7 +637,7 @@ test("llm decision runtime prunes cache to max entries", async () => {
     },
     runner: async () => {
       calls += 1
-      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      return { stdout: completeTrace("Y"), stderr: "" }
     },
   })
   const base = {
@@ -709,7 +719,7 @@ test("llm decision runtime enforces max concurrency limit (prevents runaway subp
     runner: async () => {
       runnerCalls++
       await firstRunnerDone
-      return { stdout: '{"type":"text","part":{"text":"Y"}}\n', stderr: "" }
+      return { stdout: completeTrace("Y"), stderr: "" }
     },
   })
   const request = {

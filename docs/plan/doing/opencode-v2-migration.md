@@ -57,4 +57,6 @@ Runtime snapshot application validation still uses the V1-only `--pure db` comma
 
 The tasker E2E evaluator examines both V1 `bash` and V2 `shell` event records and rejects incomplete or unrecognized evidence, including delegated tools whose nested execution it cannot see. This is a post-run check, not a sandbox. Both tasker harness entrypoints reject V2 and unidentifiable selected executables before fixture creation. This executable-version probe does not verify a separate service or protect against replacement after the probe. The live harness still uses V1 invocation and plugin configuration and is not qualified for V2; event parsing is not a harness port.
 
+The opt-in LLM decision helper now rejects incomplete, ambiguous, errored or tool-bearing event streams, as well as synthetic or ignored text, before accepting or caching a decision. This checks output after execution, not tool prevention or event completeness. Its `allowStandaloneOpencode` setting does not add V2 `--standalone`; a child environment does not prove what a separate service receives. The V2 decision helper and gateway remain unqualified.
+
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.

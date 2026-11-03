@@ -2,6 +2,8 @@
 
 `my_opencode` can point its gateway LLM decision runtime at a KVForge-served local model through native OpenCode provider/model config while keeping the child `opencode run` selector aligned.
 
+This describes the V1 gateway. The V2 gateway and its decision helper are not qualified or enabled by this example.
+
 ## Example gateway config
 
 In `.opencode/gateway-core.config.json`:
@@ -47,6 +49,8 @@ To expose KVForge as a native custom provider, configure OpenCode root config wi
 
 ## Notes
 
+- `allowStandaloneOpencode` permits the helper process; it does not add the V2 `--standalone` flag or prove that a separate service received the child environment.
+- A decision is accepted only from a complete, single-session, tool-free JSON event sequence with one non-synthetic, non-ignored text part and a successful stop. Error events or fields, unrecognized events, duplicate keys and incomplete output are rejected rather than cached. This is a post-run check: it cannot prevent tool execution or prove that the stream contains every action. Its 64 KiB limit applies after output collection, not to subprocess memory use.
 - Use a native custom-provider model id for the child runtime, for example `kvforge/gpt-5.4-mini`.
 - On the KVForge side, set `server.served_model_name` to the same alias, for example `gpt-5.4-mini`.
 - KVForge serves an OpenAI-compatible API at `/v1`.
