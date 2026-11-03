@@ -14341,11 +14341,22 @@ exit 0
         )
 
         result = run_bg("cleanup", "--max-terminal", "1", "--json")
-        expect(result.returncode == 0, f"bg cleanup failed: {result.stderr}")
+        expect(result.returncode == 1, "bg cleanup should signal deferred retention")
         cleanup_report = parse_json_output(result.stdout)
         expect(
-            int(cleanup_report.get("pruned", 0)) >= 1,
-            "bg cleanup should prune terminal jobs when max-terminal is low",
+            cleanup_report.get("terminal_retention_mode") == "deferred"
+            and int(cleanup_report.get("terminal_retention_deferred", 0)) >= 1
+            and cleanup_report.get("pruned") == 0
+            and cleanup_report.get("deleted_files") == 0,
+            "bg cleanup should report deferred retention without pruning records or files",
+        )
+        result = run_bg("read", bg_job_id, "--json")
+        expect(result.returncode == 0, f"bg read after cleanup failed: {result.stderr}")
+        preserved_report = parse_json_output(result.stdout)
+        expect(
+            preserved_report.get("job", {}).get("status") == "completed"
+            and "bg-ok" in preserved_report.get("log_tail", ""),
+            "bg cleanup should preserve the terminal record and its log",
         )
 
         result = run_bg("status")

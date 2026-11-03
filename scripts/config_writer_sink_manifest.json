@@ -263,15 +263,6 @@
   {
     "language": "python",
     "file": "background_task_manager.py",
-    "function": "cleanup_jobs",
-    "kind": "path.unlink",
-    "destination": "path",
-    "count": 1,
-    "classification": "runtime_or_artifact_exemption"
-  },
-  {
-    "language": "python",
-    "file": "background_task_manager.py",
     "function": "ensure_store",
     "kind": "path.mkdir",
     "destination": "BG_ROOT",
