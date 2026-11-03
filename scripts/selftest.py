@@ -305,6 +305,21 @@ def _isolated_git_environment(environment: dict[str, str]) -> dict[str, str]:
     return sanitized
 
 
+def _selftest_runtime_paths(tmp: Path) -> dict[str, str]:
+    runtime = tmp / "selftest-runtime"
+    return {
+        "MY_OPENCODE_CLAIMS_PATH": str(runtime / "claims.json"),
+        "MY_OPENCODE_AGENT_POOL_PATH": str(runtime / "agent_pool.json"),
+        "MY_OPENCODE_AUDIT_PATH": str(runtime / "audit_log.json"),
+        "MY_OPENCODE_WORKFLOW_STATE_PATH": str(runtime / "workflow_state.json"),
+        "MY_OPENCODE_DAEMON_STATE_PATH": str(runtime / "daemon_state.json"),
+        "MY_OPENCODE_DELIVERY_STATE_PATH": str(runtime / "delivery_runs.json"),
+        "MY_OPENCODE_TASK_GRAPH_PATH": str(runtime / "task_graph.json"),
+        "MY_OPENCODE_TASK_GRAPH_LOCK_PATH": str(runtime / "task_graph.lock"),
+        "MY_OPENCODE_BG_DIR": str(runtime / "bg"),
+    }
+
+
 def initialize_validation_git_fixture(
     directory: Path, *, env: dict[str, str] | None = None
 ) -> None:
@@ -464,6 +479,8 @@ def main() -> int:
         tmp = Path(tmpdir)
         home = tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
+        # These fixture writes must not follow caller paths or the later checkout symlink.
+        os.environ.update(_selftest_runtime_paths(tmp))
         test_env = os.environ.copy()
         test_env["HOME"] = str(home)
         test_bin_dir = home / "bin"
@@ -3990,19 +4007,10 @@ exit 0
             "claims handoff should reject non-active claims",
         )
 
-        claims_state_path = (
-            home / ".config" / "opencode" / "my_opencode" / "runtime" / "claims.json"
-        )
+        claims_state_path = Path(productivity_env["MY_OPENCODE_CLAIMS_PATH"])
         claims_state = load_json_file(claims_state_path)
         claims_state_claims = claims_state.get("claims")
-        agent_pool_path = (
-            home
-            / ".config"
-            / "opencode"
-            / "my_opencode"
-            / "runtime"
-            / "agent_pool.json"
-        )
+        agent_pool_path = Path(productivity_env["MY_OPENCODE_AGENT_POOL_PATH"])
         previous_agent_pool_text = None
         if agent_pool_path.exists():
             previous_agent_pool_text = agent_pool_path.read_text(encoding="utf-8")
@@ -5257,14 +5265,7 @@ exit 0
             "reservation-aware ready view should explain conflict and uncovered writer lanes",
         )
 
-        workflow_state_path = (
-            home
-            / ".config"
-            / "opencode"
-            / "my_opencode"
-            / "runtime"
-            / "workflow_state.json"
-        )
+        workflow_state_path = Path(productivity_env["MY_OPENCODE_WORKFLOW_STATE_PATH"])
         workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_state_path.write_text(
             json.dumps(
@@ -5530,14 +5531,7 @@ exit 0
             "workflow resume should report a deterministic missing-step reason code",
         )
 
-        workflow_state_path = (
-            home
-            / ".config"
-            / "opencode"
-            / "my_opencode"
-            / "runtime"
-            / "workflow_state.json"
-        )
+        workflow_state_path = Path(productivity_env["MY_OPENCODE_WORKFLOW_STATE_PATH"])
         workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
         workflow_state_path.write_text(
             json.dumps(
@@ -14081,10 +14075,8 @@ exit 0
             "profile: quiet-ci" in result.stdout, "stack status should report quiet-ci"
         )
 
-        bg_dir = home / ".config" / "opencode" / "my_opencode" / "bg"
         bg_env = os.environ.copy()
         bg_env["HOME"] = str(home)
-        bg_env["MY_OPENCODE_BG_DIR"] = str(bg_dir)
         bg_env["OPENCODE_NOTIFICATIONS_PATH"] = str(tmp / "bg-notify.json")
 
         (tmp / "bg-notify.json").write_text(
@@ -15999,14 +15991,7 @@ jobs:
             "ship create-pr preview should include reviewer policy diagnostics",
         )
 
-        delivery_state_path = (
-            home
-            / ".config"
-            / "opencode"
-            / "my_opencode"
-            / "runtime"
-            / "delivery_runs.json"
-        )
+        delivery_state_path = Path(refactor_env["MY_OPENCODE_DELIVERY_STATE_PATH"])
         delivery_state_path.parent.mkdir(parents=True, exist_ok=True)
         delivery_state_path.write_text(
             json.dumps(
