@@ -22,6 +22,11 @@ from pathlib import Path
 from typing import Any
 
 UTC = getattr(datetime, "UTC", timezone.utc)
+RECOVERY_IDENTITY_UNVERIFIED = "recovery_process_identity_unverified"
+RECOVERY_DISABLED_MESSAGE = (
+    "Automatic memory recovery is disabled: process roles and stable identities "
+    "are not verified. No process was signaled."
+)
 DEFAULT_LONG_TURN_WATCHDOG = {
     "enabled": True,
     "warningThresholdMs": 60000,
@@ -721,6 +726,19 @@ def run_local_plugin_runtime_smoke(
     }
 
 
+def reject_unverified_recovery(as_json: bool, action: str) -> int:
+    emit(
+        {
+            "result": "FAIL",
+            "action": action,
+            "reason_code": RECOVERY_IDENTITY_UNVERIFIED,
+            "error": RECOVERY_DISABLED_MESSAGE,
+        },
+        as_json=as_json,
+    )
+    return 1
+
+
 def print_gateway_recover_human(payload: dict[str, Any]) -> None:
     policy_any = payload.get("policy")
     policy = policy_any if isinstance(policy_any, dict) else {}
@@ -731,8 +749,7 @@ def print_gateway_recover_human(payload: dict[str, Any]) -> None:
     print(
         "policy_thresholds: "
         + f"footprint>={float(policy.get('candidate_min_footprint_mb') or 0):.0f}MB "
-        + f"rss>={float(policy.get('candidate_min_rss_mb') or 0):.0f}MB "
-        + f"force_kill>={float(policy.get('force_kill_min_pressure_mb') or 0):.0f}MB"
+        + f"rss>={float(policy.get('candidate_min_rss_mb') or 0):.0f}MB"
     )
 
     aggregate_reason = str(payload.get("aggregate_reason") or "").strip()
@@ -746,9 +763,7 @@ def print_gateway_recover_human(payload: dict[str, Any]) -> None:
     actions = actions_any if isinstance(actions_any, list) else []
     if not actions:
         print("actions: none")
-        print(
-            "hint: no candidates matched current thresholds; use /gateway recover memory --apply --force-kill only when pressure is critical"
-        )
+        print("hint: no candidates matched current thresholds; automatic termination is disabled")
     else:
         print(f"actions: {len(actions)}")
         for item in actions[:8]:
@@ -3335,6 +3350,10 @@ def command_recover_memory(
     continue_prompt: bool = False,
     force_kill: bool = False,
 ) -> int:
+    # PID selection is not bound to a stable process identity or service role.
+    if apply:
+        return reject_unverified_recovery(as_json, "recover_memory_apply")
+
     def normalize_tty(value: str) -> str:
         text = str(value or "").strip()
         if text.startswith("/dev/"):
@@ -3887,25 +3906,26 @@ def command_recover_memory(
             if cached_session:
                 session_id = cached_session
                 session_id_source = "pane_cache"
-        if not session_id:
+        if not session_id and apply:
             session_id = latest_session_for_cwd(cwd)
             session_id_source = "cwd_latest" if session_id else ""
-        if pane_id and session_id and session_id_source == "pane_title":
+        if apply and pane_id and session_id and session_id_source == "pane_title":
             pane_session_cache[pane_id] = session_id
             save_pane_session_cache(pane_session_cache)
         if not apply:
             actions.append(
                 {
                     "pid": pid,
-                    "action": "terminate",
-                    "result": "planned",
+                    "action": "candidate",
+                    "result": "unqualified",
+                    "process_identity_verified": False,
                     "tty": tty or None,
                     "cwd": cwd or None,
                     "session_id": session_id or None,
                     "session_id_source": session_id_source or None,
                     "pane": pane or None,
-                    "resume_planned": bool(resume and pane_id),
-                    "compress_planned": bool(resume and compress and pane_id),
+                    "resume_planned": False,
+                    "compress_planned": False,
                 }
             )
             continue
@@ -4042,10 +4062,10 @@ def command_recover_memory(
                     action["result"] = "terminated"
                 except PermissionError:
                     action["result"] = "alive_after_timeout"
-                    action["next_step"] = f"kill -9 {pid}"
+                    action["next_step"] = "automatic process signaling is disabled"
             else:
                 action["result"] = "alive_after_timeout"
-                action["next_step"] = f"kill -9 {pid}"
+                action["next_step"] = "automatic process signaling is disabled"
                 if force_kill and not allow_force_kill:
                     action["force_kill_skipped_reason"] = (
                         f"max_pressure_mb={max_pressure_now_mb:.1f} below forceKillMinPressureMb={force_kill_min_pressure_mb:.1f}"
@@ -4150,6 +4170,8 @@ def command_recover_memory(
     payload = {
         "result": "PASS",
         "mode": "apply" if apply else "dry_run",
+        "automatic_recovery_available": False,
+        "automatic_recovery_reason": RECOVERY_IDENTITY_UNVERIFIED,
         "options": {
             "resume": resume,
             "compress": compress,
@@ -4198,12 +4220,10 @@ def command_recover_memory(
         "recommended_commands": [
             "/gateway status --json",
             "/gateway doctor --json",
-            "/gateway recover memory --apply --force-kill",
         ],
         "next_steps": [
-            "run /gateway recover memory --apply when pressure remains critical",
-            "resume in impacted pane with opencode --continue",
-            "run /gateway recover memory --apply --resume --compress for pane-aware recovery",
+            "automatic process recovery is disabled until process roles and identities can be verified",
+            "inspect the relevant service and sessions before taking any manual action",
         ],
     }
     if after_status is not None:
@@ -4230,6 +4250,16 @@ def command_recover_memory_watch(
     interval_seconds: int,
     max_cycles: int,
 ) -> int:
+    requested_apply = apply
+    if requested_apply:
+        # Preserve the configured watch cadence for existing KeepAlive agents,
+        # but never forward mutation or pane-control flags to the diagnostic child.
+        print(
+            f"warning: {RECOVERY_DISABLED_MESSAGE} Watch continues in diagnostic-only mode.",
+            file=sys.stderr,
+            flush=True,
+        )
+        apply = resume = compress = continue_prompt = force_kill = False
     config, _ = load_config()
     recovery_any = config.get("memoryRecovery") if isinstance(config, dict) else {}
     recovery = recovery_any if isinstance(recovery_any, dict) else {}
@@ -4386,6 +4416,11 @@ def command_recover_memory_watch(
             "aggregate_trigger": aggregate_triggered,
             "emergency_trigger": emergency_triggered,
         }
+        if requested_apply:
+            row["apply_blocked"] = True
+            row["reason_code"] = RECOVERY_IDENTITY_UNVERIFIED
+            if proc.returncode == 0:
+                row["result"] = "BLOCKED"
         if isinstance(payload, dict):
             row["mode"] = payload.get("mode")
             actions_any = payload.get("actions")
@@ -4417,12 +4452,15 @@ def command_recover_memory_watch(
 
     report = {
         "result": "PASS"
-        if cycles and all(item.get("result") == "PASS" for item in cycles)
+        if not requested_apply and cycles and all(item.get("result") == "PASS" for item in cycles)
         else "FAIL",
         "mode": "watch",
+        "automatic_recovery_available": False,
+        "automatic_recovery_reason": RECOVERY_IDENTITY_UNVERIFIED,
         "state_path": str(state_path),
         "options": {
             "apply": apply,
+            "apply_requested": requested_apply,
             "resume": resume,
             "compress": compress,
             "continue_prompt": continue_prompt,
@@ -4502,6 +4540,8 @@ def command_protection(
     limit: int,
     clear_cache: bool,
 ) -> int:
+    if action == "enable":
+        return reject_unverified_recovery(as_json, "protection_enable")
     home = Path(os.environ.get("HOME") or str(Path.home())).expanduser()
     label = "com.my_opencode.gateway-protection"
     launch_dir = home / "Library" / "LaunchAgents"
@@ -4575,6 +4615,8 @@ def command_protection(
             "plist_path": str(plist_path),
             "plist_exists": plist_path.exists(),
             "loaded": is_loaded(),
+            "local_code_automatic_recovery_available": False,
+            "loaded_agent_code_verified": False,
             "stdout_log": str(stdout_log),
             "stderr_log": str(stderr_log),
             "state_path": str(runtime_state),
@@ -4619,6 +4661,8 @@ def command_protection(
             "label": label,
             "action": "report",
             "loaded": is_loaded(),
+            "local_code_automatic_recovery_available": False,
+            "loaded_agent_code_verified": False,
             "state_path": str(runtime_state),
             "state_exists": runtime_state.exists(),
             "total_rows": len(rows),
