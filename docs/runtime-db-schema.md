@@ -198,7 +198,19 @@ When a local store is malformed, preserve it before any recovery write: remove g
 
 Session-index writers classify invalid UTF-8, malformed JSON, invalid v1 containers, and invalid v1 session records as corruption. Every existing index is opened without following the final path component and must be a stable, current-user-owned regular single-link file before parsing. While holding the cooperative index lock, a corrupt source that passes those checks is copied byte-for-byte and published as one `0600` hash-addressed artifact in a `0700` quarantine directory. The default directory is `${XDG_STATE_HOME:-~/.local/state}/my_opencode/quarantine/session-index`; set `MY_OPENCODE_SESSION_INDEX_QUARANTINE_DIR` to use another private path outside active configuration. Existing byte-identical artifacts are reused; collisions, unsafe paths, and unsupported security primitives fail closed without claiming preservation. The active corrupt file is never moved, deleted, reset, or rebuilt automatically. Unsupported versions and ordinary I/O failures are reported without quarantine. Reader commands stay read-only and never create quarantine artifacts.
 
-Successful preservation still returns `FAIL`: stop session-index writers, inspect the reported quarantine path and checksum locally, repair or replace the active index from a verified source, run `/digest run --reason manual`, and finish with `/session doctor --json`. `/digest show` remains observational, while `/digest run`, `/digest doctor`, session readers, and the consolidated doctor return nonzero for an unavailable corrupt index. Redacted search and handoff expose only the fixed `session_index_unavailable` code.
+Before updating or applying retention, the index writer rejects any exact
+duplicate session IDs in its parsed snapshot with `session_index_duplicate_id`,
+even if the current event targets a different ID. It does not publish, prune,
+quarantine, or automatically deduplicate that index. Stop index writers and
+preserve the original for private inspection and authorized, verified recovery.
+The check does not detect duplicate JSON keys or fence noncooperating writers.
+This is not a whole-digest rollback: `/digest run` can publish a digest and
+create locks before the index failure, and a failed run may have other configured
+hook effects. `/digest doctor` reports preservation guidance rather than
+recommending a blind retry for this failure. Inspect the reported state before
+retrying.
+
+Successful corruption quarantine still returns `FAIL`: stop session-index writers, inspect the reported quarantine path and checksum locally, repair or replace the active index from a verified source, run `/digest run --reason manual`, and finish with `/session doctor --json`. `/digest show` remains observational, while `/digest run`, `/digest doctor`, session readers, and the consolidated doctor return nonzero for an unavailable corrupt index. Redacted search and handoff expose only the fixed `session_index_unavailable` code.
 
 ## Shared-memory retention profiles
 

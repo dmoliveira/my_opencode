@@ -25,6 +25,7 @@ from recovery_engine import (  # type: ignore
 )
 from session_metadata_index import (  # type: ignore
     DEFAULT_INDEX_PATH,
+    DUPLICATE_ID_RECOVERY_STEPS,
     update_session_index,
 )
 from session_sidecar_security import (  # type: ignore
@@ -741,6 +742,13 @@ def collect_doctor(path: Path) -> dict:
         reason_code = str(session_index.get("reason_code") or "session_index_unknown_failure")
         problems.append(f"session index update failed: {reason_code}")
 
+    quick_fixes = ["run /digest run --reason manual"] if warnings or problems else []
+    if (
+        session_index.get("result") != "PASS"
+        and session_index.get("reason_code") == "session_index_duplicate_id"
+    ):
+        quick_fixes = list(DUPLICATE_ID_RECOVERY_STEPS)
+
     return {
         "result": "PASS" if not problems else "FAIL",
         "path": str(path),
@@ -749,9 +757,7 @@ def collect_doctor(path: Path) -> dict:
         "problems": problems,
         "session_index": session_index,
         "sidecar": inspection.to_payload(),
-        "quick_fixes": ["run /digest run --reason manual"]
-        if warnings or problems
-        else [],
+        "quick_fixes": quick_fixes,
     }
 
 

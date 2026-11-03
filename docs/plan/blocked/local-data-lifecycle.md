@@ -74,3 +74,6 @@ it does not verify identity, uniqueness, affected artifacts, or authorization.
 The owner `show`, `current`, and `handoff` commands reject duplicate selected
 IDs in their parsed snapshot; this does not bind future changes or establish a
 cross-artifact inventory.
+The owner index writer also refuses any duplicate parsed IDs before pruning or
+publishing the index. A surrounding digest run may already have changed other
+artifacts, so this is not a cross-sidecar transaction.
