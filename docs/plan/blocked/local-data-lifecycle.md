@@ -36,10 +36,29 @@ private path-expansion error handling and reader-guarantee documentation; final
 review found no blockers in this offline slice. Isolated actual CLI tests assert
 no new files or changed store/sidecar bytes and no privacy canaries on stdout/stderr.
 
-## Next Slice / Blocker
+## Slice 2: Shared-Memory Candidate Observation
+
+- An explicit read-only command observes one scoped shared-memory cleanup
+  candidate set at a frozen cutoff and reports its count and local-sensitive
+  fingerprint. It uses the owner's existing snapshot reader and exact cleanup
+  predicate; it does not archive, delete, redact or create a source store.
+- A disposable interleaving test found that `BEGIN` alone did not pin a WAL
+  snapshot before validation. The owner reader now performs a read first; the
+  regression proves a later commit cannot enter that snapshot.
+- The inventory is not a source identity, mutation authorization, verified
+  recovery, exclusive lock, cross-store inventory or compare-and-apply token.
+  Existing cleanup archives records rather than erasing them.
+- Resource limits and the Darwin address-space limitation are described in
+  `docs/local-data-lifecycle.md`; testing uses disposable sources only.
+
+## Remaining Blocker
 
 Define owner-specific atomic preview/inventory and quiescence guarantees before
 source removal/redaction. Runtime deletion cascades descendants without a discovered
 revision-bound preview; sidecar per-session artifact ownership is not enumerable
 from the index alone. Cross-store partial-failure/retry semantics remain unresolved.
 Do not write direct SQLite mutations or broad directory removal to work around this.
+The installed OpenCode 2.2.5 API was checked in a disposable standalone instance:
+parent-filtered pagination is available, but delete takes only a session ID and
+the activity list covers only foreground drains in that process. These do not bind
+a descendant set to deletion or exclude all writers.
