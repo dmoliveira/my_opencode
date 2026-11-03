@@ -48,6 +48,14 @@ If terminal/session state is the blocker and `tmux` is available:
 
 Use the strongest realistic isolated environment available without turning a normal task into a heavyweight lab exercise.
 
+`make selftest` ignores inherited `GIT_*` overrides and system/global Git
+configuration in its own process. Its `--since` tag coverage uses a temporary
+Git repository rather than changing refs in the checkout, and its image
+preference fixtures use temporary paths. These safeguards do not isolate all
+checkout-relative state: run the full self-test in a disposable standalone
+checkout with isolated home, runtime, and temporary paths when preserving local
+data matters.
+
 Examples:
 
 - disposable temp workspace

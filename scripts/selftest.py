@@ -293,19 +293,66 @@ def expect(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def initialize_validation_git_fixture(directory: Path) -> None:
-    subprocess.run(["git", "init", "-q"], cwd=directory, check=True)
+def _isolated_git_environment(environment: dict[str, str]) -> dict[str, str]:
+    sanitized = {key: value for key, value in environment.items() if not key.startswith("GIT_")}
+    sanitized.update({
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_EDITOR": "true",
+        "GIT_PAGER": "cat",
+    })
+    return sanitized
+
+
+def initialize_validation_git_fixture(
+    directory: Path, *, env: dict[str, str] | None = None
+) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=directory, env=env, check=True)
     subprocess.run(
         ["git", "config", "user.email", "selftest@example.invalid"],
         cwd=directory,
+        env=env,
         check=True,
     )
     subprocess.run(
-        ["git", "config", "user.name", "Selftest"], cwd=directory, check=True
+        ["git", "config", "user.name", "Selftest"], cwd=directory, env=env, check=True
     )
     (directory / ".gitignore").write_text(".opencode/*\n", encoding="utf-8")
-    subprocess.run(["git", "add", "."], cwd=directory, check=True)
-    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=directory, check=True)
+    subprocess.run(["git", "add", "."], cwd=directory, env=env, check=True)
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=directory, env=env, check=True)
+
+
+def check_changes_since_fixture(tmp: Path, environment: dict[str, str]) -> None:
+    """Exercise a real tag without creating or deleting refs in the checkout."""
+    fixture_env = _isolated_git_environment(environment)
+    with tempfile.TemporaryDirectory(prefix="changes-since-", dir=tmp) as raw:
+        fixture = Path(raw)
+        initialize_validation_git_fixture(fixture, env=fixture_env)
+        tag = "selftest-since-tag"
+        created = subprocess.run(
+            ["git", "tag", tag, "HEAD"],
+            capture_output=True,
+            text=True,
+            env=fixture_env,
+            check=False,
+            cwd=fixture,
+        )
+        expect(created.returncode == 0, "selftest should create a fixture tag for --since")
+        report = subprocess.run(
+            [sys.executable, str(CHANGES_COMMAND_SCRIPT), "explain", "--since", tag, "--json"],
+            capture_output=True,
+            text=True,
+            env=fixture_env,
+            check=False,
+            cwd=fixture,
+        )
+        expect(report.returncode == 0, "changes explain should support release-window diff via --since")
+        payload = parse_json_output(report.stdout)
+        expect(
+            payload.get("result") == "PASS" and payload.get("base") == tag,
+            "changes explain --since should report selected tag as base",
+        )
 
 
 def write_test_validation_evidence(
@@ -405,6 +452,14 @@ class LocalTcpProbeServer:
 
 
 def main() -> int:
+    # Inherited Git overrides can redirect fixture mutations into a real repo.
+    safe_environment = _isolated_git_environment(dict(os.environ))
+    for name in tuple(os.environ):
+        if name.startswith("GIT_"):
+            del os.environ[name]
+    os.environ.update({
+        name: value for name, value in safe_environment.items() if name.startswith("GIT_")
+    })
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         home = tmp / "home"
@@ -14584,53 +14639,7 @@ index 3333333..4444444 100644
             "changes explain should emit why/risk/verify narrative sections",
         )
 
-        changes_explain_since_tag = "selftest-since-tag"
-        create_since_tag = subprocess.run(
-            ["git", "tag", "-f", changes_explain_since_tag, "HEAD"],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            create_since_tag.returncode == 0,
-            "selftest should create a temporary tag for changes explain --since coverage",
-        )
-
-        changes_explain_since = subprocess.run(
-            [
-                sys.executable,
-                str(CHANGES_COMMAND_SCRIPT),
-                "explain",
-                "--since",
-                changes_explain_since_tag,
-                "--json",
-            ],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
-        expect(
-            changes_explain_since.returncode == 0,
-            "changes explain should support release-window diff via --since",
-        )
-        changes_explain_since_payload = parse_json_output(changes_explain_since.stdout)
-        expect(
-            changes_explain_since_payload.get("result") == "PASS"
-            and changes_explain_since_payload.get("base") == changes_explain_since_tag,
-            "changes explain --since should report selected tag as base",
-        )
-        subprocess.run(
-            ["git", "tag", "-d", changes_explain_since_tag],
-            capture_output=True,
-            text=True,
-            env=refactor_env,
-            check=False,
-            cwd=REPO_ROOT,
-        )
+        check_changes_since_fixture(tmp, refactor_env)
 
         analyzer_docs_only_diff = tmp / "pr_review_docs_only.diff"
         analyzer_docs_only_diff.write_text(
@@ -22938,12 +22947,8 @@ version: 1
             "ox review should preserve the requested scope",
         )
 
-        image_pref_path = REPO_ROOT / ".tmp-selftest-image-provider.txt"
-        if image_pref_path.exists():
-            image_pref_path.unlink()
-        image_location_pref_path = REPO_ROOT / ".tmp-selftest-image-output-location.txt"
-        if image_location_pref_path.exists():
-            image_location_pref_path.unlink()
+        image_pref_path = tmp / "image-provider.txt"
+        image_location_pref_path = tmp / "image-output-location.txt"
         image_env = refactor_env.copy()
         image_env["OPENAI_IMAGE_PROVIDER_CONFIG_PATH"] = str(image_pref_path)
         image_env["OPENAI_IMAGE_PROVIDER_PREFERENCE"] = ""

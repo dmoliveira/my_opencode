@@ -92,10 +92,15 @@ DIRECT_CALL_DISPOSITIONS: dict[DirectCallKey, DirectCallDisposition] = {
         "deterministic selftest Git fixture setup is not production guard execution",
         5,
     ),
+    DirectCallKey("selftest.py", "check_changes_since_fixture", "git", False): DirectCallDisposition(
+        "excluded_test_fixture",
+        "the since-tag fixture creates a tag only in a disposable Git repository",
+        1,
+    ),
     DirectCallKey("selftest.py", "main", "git", False): DirectCallDisposition(
         "excluded_test_fixture",
         "selftest Git fixture and command assertions are not production guard execution",
-        40,
+        38,
     ),
 }
 
