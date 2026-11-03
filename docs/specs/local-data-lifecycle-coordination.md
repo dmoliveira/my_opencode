@@ -15,6 +15,12 @@ without inventing atomicity, silently retrying, or discarding recovery evidence.
 Here, an **effect** means a change to an in-scope source; a journal or backup can
 still be created even when no source effect occurs.
 
+Inspection is not automatically side-effect-free. SQLite readers can update
+transient WAL-index coordination bytes, and owner tools can write caches or
+diagnostics. A future implementation must identify and report those effects and
+honor any separate no-write boundary; it must not equate unchanged logical rows
+with byte-for-byte preservation of every source artifact.
+
 The following requirements concern source removal or source redaction. A
 sanitized export, reversible archive, counts-only summary, or snapshot hash is
 not the same effect. Backups, WAL files, indexes, quarantine, exports, and
@@ -167,13 +173,15 @@ owner has a tested contract covering concurrent and lost-response cases, retains
 complete idempotency history for the relevant period, and accepts the **same**
 request ID and unchanged payload against the same backend. A replay is not
 necessarily a read: if the original dispatch never reached the owner, replay may
-perform the first effect. The owner must atomically return the established result,
-or, when it can prove the request was never applied, revalidate the original
-authorization, binding, recovery and fencing conditions before applying it at
-most once. A missing or expired idempotency record alone does not prove no effect.
-If these conditions cannot be established, do not replay. Never infer that a
-different request ID or a repeated unconditional cascading delete is safe. A new
-attempt after a proven rollback is distinct from replay and requires fresh
+perform the first effect. Before allowing such a replay, the coordinator must
+re-establish still-applicable admission for all remaining in-scope owners, not
+only the owner being retried. The owner must atomically return the established
+result, or, when it can prove the request was never applied, revalidate the
+original authorization, binding, recovery and fencing conditions before applying
+it at most once. A missing or expired idempotency record alone does not prove no
+effect. If these conditions cannot be established, do not replay. Never infer
+that a different request ID or a repeated unconditional cascading delete is safe.
+A new attempt after a proven rollback is distinct from replay and requires fresh
 preconditions.
 
 Aggregate reporting must distinguish: no source effects; all requested effects
@@ -216,8 +224,9 @@ only against synthetic stores, processes, identities, backups, and destinations.
 - Test exact replay with the same request ID and payload only for a qualifying
   owner, including concurrent submissions, lost responses, expired idempotency
   history, changed payloads, and backend swaps. When the original dispatch never
-  reached the owner, verify that replay checks the original preconditions before
-  its first effect. Non-idempotent owners must not be retried automatically.
+  reached the owner, verify that replay checks the original preconditions and
+  still-applicable admission of other in-scope owners before its first effect.
+  Non-idempotent owners must not be retried automatically.
 - Exercise committed/rolled-back/unknown combinations across owners. Verify
   partial and uncertain aggregate results, no automatic compensation, no later
   dispatch after failure, preserved recovery material, and no false erasure
