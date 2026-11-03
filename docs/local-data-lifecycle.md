@@ -52,16 +52,30 @@ accepted. Unknown and missing fields fail closed. Example:
 | Store | Exact selector fields | Meaning / limits |
 | --- | --- | --- |
 | `runtime_history` | `session_id`, `cli_family` | One token ID; only caller-asserted `opencode-v2` is supported. Inspect installed owner help before using suggested commands. |
-| `session_sidecars` | `session_id` | One token ID. Indexed session inspection does not prove complete digest, handoff or transcript inventory. |
+| `session_sidecars` | `session_id` | One token ID or a safely representable owner-generated fallback ID. Indexed session inspection does not prove complete digest, handoff or transcript inventory. |
 | `shared_memory` | `scope`, `namespace`, `older_days` | Scope `session`, `repo`, or `shared`, exact namespace, integer age 1–36500 days. Age is a moving predicate; pinned entries are excluded by the owner. |
 | `codememory` | `scope`, `artifact_kind`, `record_id`, `config` | Kind `memory` with `memory_<positive integer>`, or `document` with `doc_<positive integer>`; explicit absolute config path with no traversal. Verify the native record's scope matches the expected scope. |
 
-All selector text is nonempty, trimmed, at most 256 characters and excludes
-controls and leading option markers. Token IDs permit ASCII letters/digits,
-underscores and hyphens. Identifiers and provenance are caller assertions; the
-planner does not discover a project, select a backend, read a source store, or
-authenticate identity. Cmdline values are represented as separate argv elements,
-not shell strings. Do not paste a JSON-rendered argv array into a shell.
+Selector text is nonempty, trimmed, at most 256 characters and excludes controls
+and leading option markers, except for the bounded sidecar fallback below. Token
+IDs permit ASCII letters/digits, underscores and hyphens. Identifiers and
+provenance are caller assertions; the planner does not discover a project, select
+a backend, read a source store, or authenticate identity. Cmdline values are
+represented as separate argv elements, not shell strings. Do not paste a
+JSON-rendered argv array into a shell.
+
+For `session_sidecars` only, the planner also accepts the index owner's fallback
+form `<absolute-POSIX-cwd>::<canonical-aware-ISO-datetime>::<lowercase-UUID4>`,
+up to 8192 printable characters. It parses from the right because the cwd can
+itself contain `::`; the cwd is opaque selector text and is never opened or
+verified as a path. A syntactic match does not prove that the owner generated
+the ID or that an entry exists. The fallback is a local index ID, not a native
+runtime session ID, and does not prove correspondence to one. Its contents can
+include spaces, punctuation, and private directory names, so both the request
+and successful plan remain local-sensitive. Fallback IDs with nonprintable
+characters, unsafe or noncanonical components, or more than 8192 characters
+remain unsupported; custom IDs outside the token or fallback forms are not
+accepted. This exception does not broaden the `runtime_history` session-ID schema.
 
 ## Counts-Only Export Summary
 
@@ -182,8 +196,10 @@ so this demonstrates a post-observation race, not complete pagination.
 
 Use `python3 scripts/session_command.py show <sessionID> --json` and `doctor --json`
 for inspection. An index entry is not a complete list of filesystem artifacts or
-references in other stores. Preserve corrupt originals via the existing quarantine
-workflow. No per-session sidecar delete/redaction contract is implemented here.
+references in other stores. `show` returns one matching entry and does not prove
+that duplicate IDs are absent. Preserve corrupt originals via the existing
+quarantine workflow. No per-session sidecar delete/redaction contract is
+implemented here.
 
 ### Shared Memory
 
