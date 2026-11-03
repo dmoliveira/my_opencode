@@ -10,14 +10,20 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigTransactionError,
     edit_layered_config,
     load_layered_config,
     resolve_write_path,
 )
 from gateway_plugin_bridge import plugin_entry_spec  # type: ignore
 
-
 CONFIG_PATH = resolve_write_path()
+NATIVE_LAYOUT_REASON = "plugin_native_layout_unsupported"
+NATIVE_LAYOUT_MESSAGE = (
+    "plugins is a native V2 or ambiguous plugin layout; "
+    "the legacy /plugin helper cannot manage or report it"
+)
+CONFIG_SCOPE_NOTICE = "note: helper configuration only; runtime state not verified"
 RETIRED_PLUGINS = {
     "notifier": "@mohak34/opencode-notifier@latest",
     "morph": "github:JRedeker/opencode-morph-fast-apply",
@@ -40,6 +46,17 @@ def edit_config(mutator) -> None:
     global CONFIG_PATH
     result = edit_layered_config(mutator)
     CONFIG_PATH = result.files[0].path
+
+
+def has_native_or_ambiguous_layout(data: dict) -> bool:
+    return "plugins" in data
+
+
+def require_legacy_layout(data: dict) -> None:
+    if has_native_or_ambiguous_layout(data):
+        raise ConfigTransactionError(
+            NATIVE_LAYOUT_REASON, NATIVE_LAYOUT_MESSAGE, phase="mutate"
+        )
 
 
 def get_plugin_entries(data: dict) -> list[Any]:
@@ -122,11 +139,25 @@ def print_status(plugins: list[str]) -> None:
     print("curated external plugins: none")
     for alias, state in retired_states(plugins).items():
         print(f"{alias}: {state['status']} [retired] ({state['package']})")
-    print("maintained capabilities: gateway notifications, native edits, governed worktrees")
     print(f"config: {CONFIG_PATH}")
+    print(CONFIG_SCOPE_NOTICE)
 
 
-def collect_doctor(plugins: list[str]) -> dict:
+def collect_doctor(plugins: list[str], *, native_layout: bool = False) -> dict:
+    if native_layout:
+        return {
+            "result": "FAIL",
+            "reason_code": NATIVE_LAYOUT_REASON,
+            "config": str(CONFIG_PATH),
+            "configuration_scope": "helper_resolved_layers",
+            "runtime_state_verified": False,
+            "plugins": {},
+            "warnings": [],
+            "problems": [NATIVE_LAYOUT_MESSAGE],
+            "quick_fixes": [
+                "manage native plugins with OpenCode V2 and verify the intended service"
+            ],
+        }
     problems: list[str] = []
     quick_fixes: list[str] = []
     states = retired_states(plugins)
@@ -146,6 +177,8 @@ def collect_doctor(plugins: list[str]) -> dict:
     return {
         "result": "PASS" if not problems else "FAIL",
         "config": str(CONFIG_PATH),
+        "configuration_scope": "helper_resolved_layers",
+        "runtime_state_verified": False,
         "python": sys.executable,
         "policy": "external-free",
         "plugins": states,
@@ -155,8 +188,10 @@ def collect_doctor(plugins: list[str]) -> dict:
     }
 
 
-def print_doctor(plugins: list[str], json_output: bool = False) -> int:
-    report = collect_doctor(plugins)
+def print_doctor(
+    plugins: list[str], json_output: bool = False, *, native_layout: bool = False
+) -> int:
+    report = collect_doctor(plugins, native_layout=native_layout)
     if json_output:
         print(json.dumps(report, indent=2))
         return 0 if report["result"] == "PASS" else 1
@@ -164,6 +199,11 @@ def print_doctor(plugins: list[str], json_output: bool = False) -> int:
     print("plugin doctor")
     print("-------------")
     print(f"config: {report['config']}")
+    print(CONFIG_SCOPE_NOTICE)
+    if report.get("reason_code") == NATIVE_LAYOUT_REASON:
+        print(f"error: {NATIVE_LAYOUT_MESSAGE}")
+        print("result: FAIL")
+        return 1
     print(f"python: {report['python']}")
     print("policy: external-free")
     for alias in RETIRED_PLUGIN_ORDER:
@@ -187,7 +227,11 @@ def print_doctor(plugins: list[str], json_output: bool = False) -> int:
 def print_setup_keys() -> int:
     print("setup keys")
     print("----------")
-    print("no curated third-party plugins are enabled; no plugin API keys are required")
+    print(
+        "managed legacy profiles enable no curated plugins; "
+        "no plugin API keys are required by those profiles"
+    )
+    print(CONFIG_SCOPE_NOTICE)
     return 0
 
 
@@ -195,6 +239,7 @@ def apply_profile(profile: str) -> int:
     if profile not in PROFILE_MAP:
         return usage()
     def mutate(data: dict) -> None:
+        require_legacy_layout(data)
         current_entries = get_plugin_entries(data)
         set_plugins(data, compose_plugin_entries(current_entries, []))
 
@@ -205,15 +250,19 @@ def apply_profile(profile: str) -> int:
         print(f"requested profile '{profile}' is retired; applied external-free lean policy")
     print("enabled curated aliases: none")
     print(f"config: {CONFIG_PATH}")
+    print(CONFIG_SCOPE_NOTICE)
     return 0
 
 
 def main(argv: list[str]) -> int:
     data = load_config()
-    plugin_entries = get_plugin_entries(data)
     plugins = get_plugins(data)
 
     if not argv or argv[0] == "status":
+        if has_native_or_ambiguous_layout(data):
+            print(f"error: {NATIVE_LAYOUT_MESSAGE}")
+            print(CONFIG_SCOPE_NOTICE)
+            return 1
         print_status(plugins)
         print_next_steps()
         return 0
@@ -225,8 +274,16 @@ def main(argv: list[str]) -> int:
         json_output = len(argv) > 1 and argv[1] == "--json"
         if len(argv) > 1 and not json_output:
             return usage()
-        return print_doctor(plugins, json_output=json_output)
+        return print_doctor(
+            plugins,
+            json_output=json_output,
+            native_layout=has_native_or_ambiguous_layout(data),
+        )
     if argv[0] == "setup-keys":
+        if has_native_or_ambiguous_layout(data):
+            print(f"error: {NATIVE_LAYOUT_MESSAGE}")
+            print(CONFIG_SCOPE_NOTICE)
+            return 1
         return print_setup_keys()
     if argv[0] == "profile":
         if len(argv) != 2:
@@ -247,14 +304,17 @@ def main(argv: list[str]) -> int:
         return usage()
 
     if target == "all":
-        edit_config(
-            lambda current: set_plugins(
+        def mutate_all(current: dict) -> None:
+            require_legacy_layout(current)
+            set_plugins(
                 current,
                 compose_plugin_entries(get_plugin_entries(current), []),
             )
-        )
+
+        edit_config(mutate_all)
     else:
         def mutate(current: dict) -> None:
+            require_legacy_layout(current)
             current_entries = get_plugin_entries(current)
             updated_entries = remove_retired_plugin_entries(current_entries, targets)
             if updated_entries != current_entries:
@@ -266,6 +326,7 @@ def main(argv: list[str]) -> int:
     if target == "all":
         print("applied profile: lean")
     print(f"config: {CONFIG_PATH}")
+    print(CONFIG_SCOPE_NOTICE)
     return 0
 
 
