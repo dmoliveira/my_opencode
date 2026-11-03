@@ -147,6 +147,211 @@ class DataLifecycleTests(unittest.TestCase):
         candidate["selector"].update(artifact_kind="document", record_id="doc_2")
         self.assertEqual("doc_2", lifecycle.preview(candidate)["selector"]["record_id"])
 
+    def test_owner_generated_sidecar_fallback_ids_are_inert_and_store_specific(self):
+        import session_metadata_index as owner
+
+        examples = (
+            ("/synthetic/project", "2025-01-01T00:00:00Z"),
+            ("/synthetic/path with spaces", "2025-01-01T12:30:00.123456+05:30"),
+            (
+                "/synthetic/embedded::colon;'$(not-a-command)'",
+                "2025-01-01T12:30:00-07:00",
+            ),
+            ("/synthetic/" + "a" * 500, "2025-01-01T00:00:00+00:00"),
+            ("/", "not-an-iso-date"),
+            ("/synthetic/\u00e9", "2025-01-01T00:00:00+00:00"),
+        )
+        for cwd, timestamp in examples:
+            with (
+                self.subTest(cwd=cwd),
+                patch.dict(os.environ, {"OPENCODE_SESSION_ID": ""}),
+            ):
+                identifier = owner._session_id(timestamp, cwd)
+                candidate = request("session_sidecars")
+                candidate["selector"]["session_id"] = identifier
+                with (
+                    patch("builtins.open", side_effect=AssertionError("file opened")),
+                    patch("os.stat", side_effect=AssertionError("file inspected")),
+                    patch(
+                        "subprocess.run", side_effect=AssertionError("owner invoked")
+                    ),
+                    patch(
+                        "socket.socket", side_effect=AssertionError("network invoked")
+                    ),
+                ):
+                    plan = lifecycle.preview(candidate)
+                self.assertEqual("blocked", plan["status"])
+                self.assertFalse(plan["source_inspected"])
+                self.assertFalse(plan["apply_supported"])
+                self.assertEqual(identifier, plan["selector"]["session_id"])
+                self.assertEqual(
+                    [
+                        "python3",
+                        "scripts/session_command.py",
+                        "show",
+                        identifier,
+                        "--json",
+                    ],
+                    plan["suggested_owner_steps"][0]["argv"],
+                )
+                self.assertFalse(plan["suggested_owner_steps"][0]["executed"])
+                self.assertTrue(
+                    any("duplicate" in item.lower() for item in plan["limitations"])
+                )
+                runtime = request("runtime_history")
+                runtime["selector"]["session_id"] = identifier
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.preview(runtime)
+
+    def test_sidecar_fallback_rejects_malformed_or_unsafe_identifiers(self):
+        token = "aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa"
+        stamp = "2025-01-01T00:00:00+00:00"
+        good = f"/synthetic/a::{stamp}::{token}"
+        bad = (
+            "",
+            None,
+            True,
+            [],
+            "a" * 257,
+            f"relative::{stamp}::{token}",
+            f"--help::{stamp}::{token}",
+            f"::{stamp}::{token}",
+            f"/synthetic/a::{stamp}::{'1' * 32}",
+            f"/synthetic/a::{stamp}::aaaaaaaaaaaa4aaa0aaaaaaaaaaaaaaa",
+            f"/synthetic/a::{stamp}::{token.upper()}",
+            f"/synthetic/a::{stamp}::{token[:-1]}",
+            f"/synthetic/a::2025-01-01T00:00:00::{token}",
+            f"/synthetic/a::2025-01-01T00:00:00Z::{token}",
+            f"/synthetic/a::2025-02-30T00:00:00+00:00::{token}",
+            f"/synthetic/a::2025-01-01T00:00:00+24:00::{token}",
+            f"/synthetic/a\nPRIVATE-CANARY::{stamp}::{token}",
+            f"/synthetic/a\0PRIVATE-CANARY::{stamp}::{token}",
+            f"/synthetic/a\u202ePRIVATE-CANARY::{stamp}::{token}",
+            "/" + "a" * 8192 + f"::{stamp}::{token}",
+        )
+        candidate = request("session_sidecars")
+        candidate["selector"]["session_id"] = good
+        self.assertEqual(good, lifecycle.preview(candidate)["selector"]["session_id"])
+        for identifier in bad:
+            with self.subTest(identifier=repr(identifier)[:100]):
+                candidate["selector"]["session_id"] = identifier
+                with self.assertRaises(lifecycle.LifecycleError):
+                    lifecycle.preview(candidate)
+
+        suffix = f"::{stamp}::{token}"
+        exact_limit = "/" + "a" * (8192 - len(suffix) - 1) + suffix
+        candidate["selector"]["session_id"] = exact_limit
+        self.assertEqual(
+            exact_limit, lifecycle.preview(candidate)["selector"]["session_id"]
+        )
+        candidate["selector"]["session_id"] = "/" + exact_limit
+        with self.assertRaises(lifecycle.LifecycleError):
+            lifecycle.preview(candidate)
+
+    def test_invalid_fallback_cli_does_not_echo_private_values(self):
+        candidate = request("session_sidecars")
+        candidate["selector"]["session_id"] = (
+            "/synthetic/PRIVATE-CANARY\n::2025-01-01T00:00:00+00:00::"
+            "aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa"
+        )
+        source = self.private_file("invalid-private-request.json", candidate)
+        before = {p.name: p.read_bytes() for p in self.root.iterdir()}
+        with (
+            redirect_stdout(io.StringIO()) as output,
+            redirect_stderr(io.StringIO()) as error,
+        ):
+            self.assertEqual(1, lifecycle.main(["preview", "--file", str(source)]))
+        self.assertEqual("", error.getvalue())
+        self.assertEqual("FAIL", json.loads(output.getvalue())["result"])
+        self.assertNotIn("PRIVATE-CANARY", output.getvalue())
+        self.assertNotIn(str(source), output.getvalue())
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
+
+    def test_owner_fallback_cli_is_nonexecuting_and_preserves_disposable_files(self):
+        import session_metadata_index as owner
+
+        with patch.dict(os.environ, {"OPENCODE_SESSION_ID": ""}):
+            identifier = owner._session_id(
+                "2025-01-01T00:00:00Z", "/synthetic/cwd::name;$(touch SHOULD_NOT_EXIST)"
+            )
+        index = self.private_file(
+            "synthetic-index.json",
+            {"version": 1, "sessions": [{"session_id": identifier}]},
+        )
+        candidate = request("session_sidecars")
+        candidate["selector"]["session_id"] = identifier
+        source = self.private_file("fallback-request.json", candidate)
+
+        def snapshot():
+            files = {}
+            for path in self.root.iterdir():
+                info = path.stat()
+                files[path.name] = (
+                    path.read_bytes(),
+                    info.st_mode,
+                    info.st_ino,
+                    info.st_nlink,
+                    info.st_size,
+                    info.st_mtime_ns,
+                    info.st_ctime_ns,
+                )
+            return files
+
+        before = snapshot()
+        env = {
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "HOME": str(self.root),
+            "XDG_CONFIG_HOME": str(self.root / "config"),
+            "XDG_DATA_HOME": str(self.root / "data"),
+            "XDG_CACHE_HOME": str(self.root / "cache"),
+            "XDG_STATE_HOME": str(self.root / "state"),
+            "MY_OPENCODE_SESSION_INDEX_PATH": str(index),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+        planned = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                str(ROOT / "scripts/data_lifecycle_command.py"),
+                "preview",
+                "--file",
+                str(source),
+            ],
+            cwd=self.root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(0, planned.returncode, planned.stderr)
+        self.assertEqual("", planned.stderr)
+        plan = json.loads(planned.stdout)
+        self.assertEqual(identifier, plan["selector"]["session_id"])
+        self.assertEqual("blocked", plan["status"])
+        self.assertEqual(before, snapshot())
+        self.assertFalse((self.root / "SHOULD_NOT_EXIST").exists())
+        shown = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                str(ROOT / "scripts/session_command.py"),
+                "show",
+                identifier,
+                "--json",
+            ],
+            cwd=self.root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(0, shown.returncode, shown.stderr)
+        self.assertEqual(identifier, json.loads(shown.stdout)["session"]["session_id"])
+        self.assertEqual(before, snapshot())
+        self.assertFalse((self.root / "SHOULD_NOT_EXIST").exists())
+
     def test_counts_only_summary_drops_all_keys_scalars_and_topology(self):
         canary = "sk-PRIVATE-PROMPT-AND-PATH"
         value = {

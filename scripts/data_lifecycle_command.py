@@ -12,8 +12,10 @@ import json
 import math
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 # Set before local imports, including when invoked through the slash wrapper.
 sys.dont_write_bytecode = True
@@ -26,6 +28,8 @@ MAX_DEPTH = 32
 MAX_NODES = 50_000
 MAX_NUMBER_CHARS = 128
 ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}\Z")
+MAX_SIDECAR_FALLBACK_ID_CHARS = 8192
+UUID4_HEX_PATTERN = re.compile(r"[0-9a-f]{32}\Z")
 
 
 class LifecycleError(RuntimeError):
@@ -193,6 +197,37 @@ def text(value: Any, *, identifier: bool = False) -> str:
     return value
 
 
+def sidecar_session_id(value: Any) -> str:
+    """Recognize safe selector syntax without asserting provenance or existence."""
+    if isinstance(value, str) and ID_PATTERN.fullmatch(value):
+        return text(value, identifier=True)
+    if (
+        not isinstance(value, str)
+        or len(value) > MAX_SIDECAR_FALLBACK_ID_CHARS
+        or not value.startswith("/")
+        or not value.isprintable()
+    ):
+        reject()
+    parts = value.rsplit("::", 2)
+    if len(parts) != 3:
+        reject()
+    cwd, timestamp, token = parts
+    if not cwd.startswith("/") or not UUID4_HEX_PATTERN.fullmatch(token):
+        reject()
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+        valid = (
+            parsed.utcoffset() is not None
+            and parsed.isoformat() == timestamp
+            and UUID(hex=token).version == 4
+        )
+    except (ValueError, OverflowError):
+        reject()
+    if not valid:
+        reject()
+    return value
+
+
 def command(purpose: str, argv: list[str]) -> dict:
     return {
         "purpose": purpose,
@@ -239,7 +274,7 @@ def preview(value: Any) -> dict:
         ]
     elif store == "session_sidecars":
         selector = exact(selector, {"session_id"})
-        session = text(selector["session_id"], identifier=True)
+        session = sidecar_session_id(selector["session_id"])
         suggestions.append(
             command(
                 "inspect_indexed_session",
@@ -254,6 +289,7 @@ def preview(value: Any) -> dict:
         )
         boundaries += [
             "Index inspection does not inventory every digest, handoff, transcript or shared-memory reference.",
+            "Owner show selects one match and does not establish that duplicate IDs are absent.",
             "Malformed sidecars must be preserved, not silently rebuilt or removed.",
         ]
     elif store == "shared_memory":
