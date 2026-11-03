@@ -236,6 +236,15 @@
   {
     "language": "python",
     "file": "background_task_manager.py",
+    "function": "_read_job_index",
+    "kind": "os.open",
+    "destination": "'jobs.json'",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "background_task_manager.py",
     "function": "_run_single_job",
     "kind": "path.mkdir",
     "destination": "log_path.parent",
@@ -264,8 +273,8 @@
     "language": "python",
     "file": "background_task_manager.py",
     "function": "ensure_store",
-    "kind": "path.mkdir",
-    "destination": "BG_ROOT",
+    "kind": "os.mkdir",
+    "destination": "'runs'",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
@@ -273,17 +282,17 @@
     "language": "python",
     "file": "background_task_manager.py",
     "function": "ensure_store",
-    "kind": "path.mkdir",
-    "destination": "RUNS_DIR",
+    "kind": "os.open",
+    "destination": "'jobs.json'",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },
   {
     "language": "python",
     "file": "background_task_manager.py",
-    "function": "locked_jobs",
-    "kind": "path.open",
-    "destination": "LOCK_PATH",
+    "function": "ensure_store",
+    "kind": "os.open",
+    "destination": "'runs'",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },

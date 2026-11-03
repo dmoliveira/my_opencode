@@ -136,6 +136,7 @@ class BackgroundArtifactRetentionTest(unittest.TestCase):
             }
             jobs = store / "jobs.json"
             jobs.write_text(json.dumps({"version": 1, "jobs": [terminal]}), encoding="utf-8")
+            jobs.chmod(0o600)
             env = {
                 "HOME": str(home), "TMPDIR": str(tmp), "MY_OPENCODE_BG_DIR": str(store),
                 "PATH": "/opt/homebrew/bin:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", "LC_ALL": "C",

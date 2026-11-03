@@ -69,8 +69,9 @@ Run `/session handoff --json` after you have at least one indexed digest. If you
 **Background safety hold:** Do not run live `/bg` mutations or use `/bg read`
 or `/bg status <id>` on untrusted job records. Stored paths can cause file
 truncation or disclosure, and process signals remain racy. Avoid `/bg`
-diagnostics and listing commands on live state that must be preserved: their
-lock access can change another file's permissions through a symlink.
+diagnostics and listing commands on live state that must be preserved: store
+access and noncooperating-writer races remain unsafe even though observed unsafe
+locks are refused.
 `/doctor`, `/doctor status`, and `/doctor run` include a background check, and
 `/agent-pool health` invokes background status, so they share this risk.
 Health refreshes and some swarm operations can also read background records;

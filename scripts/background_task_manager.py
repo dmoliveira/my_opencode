@@ -15,9 +15,9 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import session_sidecar_security as sidecar_security  # type: ignore
 from config_layering import load_layered_config  # type: ignore
 from task_lease_command import (  # type: ignore
     DEFAULT_OC_BIN,
@@ -43,12 +44,6 @@ from task_lease_command import (  # type: ignore
 from task_lease_command import (  # type: ignore
     DEFAULT_STATE_PATH as DEFAULT_LEASE_STATE_PATH,
 )
-
-try:
-    import fcntl
-except ImportError as exc:  # pragma: no cover
-    raise SystemExit(f"error: unsupported platform for file locking: {exc}")
-
 
 BG_ROOT = Path(
     os.environ.get("MY_OPENCODE_BG_DIR", "~/.config/opencode/my_opencode/bg")
@@ -68,6 +63,7 @@ DEFAULT_LEASE_TTL_SECONDS = 300
 DEFAULT_MAX_ATTEMPTS = 1
 DEFAULT_MAX_LOG_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_BYTES = 256 * 1024
+MAX_JOB_STORE_BYTES = 16 * 1024 * 1024
 DEFAULT_TIMEOUT_SECONDS = 1800
 DEFAULT_STALE_AFTER_SECONDS = 3600
 DEFAULT_RETENTION_DAYS = 14
@@ -147,12 +143,68 @@ def parse_iso(value: str | None) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def ensure_store() -> None:
-    BG_ROOT.mkdir(parents=True, exist_ok=True)
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    if not JOBS_PATH.exists():
-        initial = {"version": 1, "updated_at": to_iso(now_utc()), "jobs": []}
-        _atomic_write_json(JOBS_PATH, initial)
+def ensure_store(*, root_fd: int | None = None) -> None:
+    if root_fd is None:
+        with _background_store_lock() as locked_fd:
+            ensure_store(root_fd=locked_fd)
+        return
+
+    try:
+        os.mkdir("runs", 0o700, dir_fd=root_fd)
+    except FileExistsError:
+        pass
+    except OSError as exc:
+        raise BackgroundStoreError("bg_store_unsafe", "background runs directory refused") from exc
+    try:
+        runs_fd = os.open(
+            "runs",
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+            dir_fd=root_fd,
+        )
+    except OSError as exc:
+        raise BackgroundStoreError("bg_store_unsafe", "background runs directory refused") from exc
+    try:
+        metadata = os.fstat(runs_fd)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(metadata.st_mode) & 0o022
+        ):
+            raise BackgroundStoreError("bg_store_unsafe", "background runs directory refused")
+    finally:
+        os.close(runs_fd)
+
+    try:
+        descriptor = os.open(
+            "jobs.json",
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o600,
+            dir_fd=root_fd,
+        )
+    except FileExistsError:
+        return
+    except OSError as exc:
+        raise BackgroundStoreError("bg_store_index_unsafe", "background job index refused") from exc
+
+    try:
+        try:
+            initial = {"version": 1, "updated_at": to_iso(now_utc()), "jobs": []}
+            encoded = (json.dumps(initial, indent=2) + "\n").encode("utf-8")
+            os.fchmod(descriptor, 0o600)
+            remaining = memoryview(encoded)
+            while remaining:
+                written = os.write(descriptor, remaining)
+                if written <= 0:
+                    raise OSError("short background store initialization write")
+                remaining = remaining[written:]
+            os.fsync(descriptor)
+            os.fsync(root_fd)
+        finally:
+            os.close(descriptor)
+    except OSError as exc:
+        raise BackgroundStoreError(
+            "bg_store_init_indeterminate", "background job index initialization is indeterminate"
+        ) from exc
 
 
 def default_notify_state() -> dict:
@@ -307,13 +359,122 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 
 
 @contextmanager
+def _background_store_lock() -> Iterator[int]:
+    with ExitStack() as stack:
+        try:
+            parent_fd = stack.enter_context(
+                sidecar_security.secure_sidecar_lock(
+                    LOCK_PATH,
+                    repair_existing=False,
+                    reject_parent_symlink=True,
+                    borrow_parent_fd=True,
+                )
+            )
+        except sidecar_security.SidecarSecurityError as exc:
+            reason_code = (
+                "bg_store_lock_timeout"
+                if exc.reason_code == "session_sidecar_lock_timeout"
+                else "bg_store_lock_unsafe"
+            )
+            raise BackgroundStoreError(reason_code, "background store lock refused") from exc
+        if not isinstance(parent_fd, int) or isinstance(parent_fd, bool):
+            raise BackgroundStoreError("bg_store_lock_unsafe", "background store lock refused")
+        yield parent_fd
+
+
+def _job_index_signature(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        int(metadata.st_dev),
+        int(metadata.st_ino),
+        int(metadata.st_mode),
+        int(metadata.st_uid),
+        int(metadata.st_nlink),
+        int(metadata.st_size),
+        int(metadata.st_mtime_ns),
+        int(metadata.st_ctime_ns),
+    )
+
+
+def _job_index_path_matches(root_fd: int, metadata: os.stat_result) -> bool:
+    try:
+        current = os.stat("jobs.json", dir_fd=root_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return _job_index_signature(current) == _job_index_signature(metadata)
+
+
+def _read_job_index(root_fd: int) -> dict:
+    try:
+        descriptor = os.open(
+            "jobs.json",
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+            dir_fd=root_fd,
+        )
+    except OSError as exc:
+        raise BackgroundStoreError("bg_store_index_unsafe", "background job index refused") from exc
+    try:
+        try:
+            opened = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or opened.st_uid != os.geteuid()
+                or opened.st_nlink != 1
+                or stat.S_IMODE(opened.st_mode) != 0o600
+            ):
+                raise BackgroundStoreError("bg_store_index_unsafe", "background job index refused")
+            if not _job_index_path_matches(root_fd, opened):
+                raise BackgroundStoreError("bg_store_index_changed", "background job index changed during read")
+            if opened.st_size > MAX_JOB_STORE_BYTES:
+                raise BackgroundStoreError("bg_store_index_too_large", "background job index is too large")
+            chunks: list[bytes] = []
+            remaining = MAX_JOB_STORE_BYTES + 1
+            while remaining:
+                chunk = os.read(descriptor, min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            data = b"".join(chunks)
+            if len(data) > MAX_JOB_STORE_BYTES:
+                raise BackgroundStoreError("bg_store_index_too_large", "background job index is too large")
+            completed = os.fstat(descriptor)
+            path_matches = _job_index_path_matches(root_fd, completed)
+        except OSError as exc:
+            raise BackgroundStoreError("bg_store_read_error", "background job index could not be read") from exc
+        if (
+            _job_index_signature(opened) != _job_index_signature(completed)
+            or len(data) != completed.st_size
+            or not path_matches
+        ):
+            raise BackgroundStoreError("bg_store_index_changed", "background job index changed during read")
+        try:
+            payload = json.loads(data)
+        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+            raise BackgroundStoreError("bg_store_index_invalid", "background job index is invalid") from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("jobs", []), list):
+            raise BackgroundStoreError("bg_store_index_invalid", "background job index is invalid")
+        return payload
+    finally:
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            raise BackgroundStoreError("bg_store_read_error", "background job index could not be read") from exc
+
+
+def _check_job_index_size(data: dict) -> None:
+    # json.dump's default ensure_ascii makes character count equal to byte count.
+    size = 1  # trailing newline
+    for chunk in json.JSONEncoder(indent=2).iterencode(data):
+        size += len(chunk)
+        if size > MAX_JOB_STORE_BYTES:
+            raise BackgroundStoreError("bg_store_index_too_large", "background job index is too large")
+
+
+@contextmanager
 def locked_jobs(writeback: bool = True):
-    ensure_store()
-    with LOCK_PATH.open("a+", encoding="utf-8") as lock_file:
-        if hasattr(os, "fchmod"):
-            os.fchmod(lock_file.fileno(), 0o600)
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        data = json.loads(JOBS_PATH.read_text(encoding="utf-8"))
+    with _background_store_lock() as parent_fd:
+        ensure_store(root_fd=parent_fd)
+        data = _read_job_index(parent_fd)
         data.setdefault("version", 1)
         data.setdefault("jobs", [])
         completed = False
@@ -323,6 +484,7 @@ def locked_jobs(writeback: bool = True):
         finally:
             if writeback and completed:
                 data["updated_at"] = to_iso(now_utc())
+                _check_job_index_size(data)
                 _atomic_write_json(JOBS_PATH, data)
 
 
