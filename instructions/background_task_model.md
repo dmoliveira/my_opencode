@@ -126,8 +126,8 @@ unknown command:
   known pre-start failure, and releases the exact lease.
 - `starting` is known pre-effect because the gate cannot open before `running`
   is durably committed.
-- `running` plus `gate_aborted` is known pre-effect and may follow the configured
-  retry policy.
+- `running` plus `gate_aborted` is known pre-effect only after process-group
+  containment is established; then it may follow the configured retry policy.
 - A terminal receipt is adopted only while the exact lease still guards the
   attempt. Adoption validates the command and cwd hashes, attempt number,
   process identity, gate marker, log digest, terminal semantics, and complete
@@ -135,10 +135,14 @@ unknown command:
 - `effect_possible`, missing gate evidence, stale fencing, or an unadoptable
   terminal receipt moves the job to `reconciling`.
 
-Recovery verifies and stops the recorded process group before clearing its
-execution slot, even when the task lease has already expired. A process-group
-identity mismatch or incomplete bounded log drain also leaves the job in
-`reconciling` rather than publishing success.
+Recovery attempts to contain the recorded process group before clearing its
+execution slot, even when the task lease has already expired. A missing or
+malformed persisted fingerprint, observed identity mismatch, or incomplete
+bounded log drain leaves the job in `reconciling` rather than publishing success.
+Fingerprint checks are not atomic with signals; the leaderless-group fallback
+cannot authenticate a group's origin, and the `ps`-based fingerprint has only
+one-second start-time resolution. These checks do not guarantee that unrelated
+processes cannot be signalled. See `docs/specs/intent-control-plane.md`.
 
 `/bg run` performs a bounded reconciliation pass before reserving new jobs.
 `/bg cleanup` reconciles before applying retention.
@@ -163,7 +167,9 @@ back.
 Terminal jobs are retained for `14` days by default, with at most `200`
 terminal entries. Pruning removes the job's logs, metadata, gate markers, and
 attempt receipts. `reconciling` jobs are nonterminal and are never pruned by
-terminal retention.
+terminal retention. Cleanup currently trusts artifact paths in stored records
+without proving ownership; avoid it when those paths may be unsafe. Enqueue,
+start, run, and cancel can also trigger cleanup implicitly.
 
 ## Enqueue Example
 

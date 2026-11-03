@@ -453,13 +453,24 @@ def process_identity_matches(pid: int, expected_fingerprint: str | None) -> bool
     )
 
 
+def _recorded_process_fingerprint(value: Any) -> str | None:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        return None
+    return value
+
+
 def process_group_identity_matches(
     pgid: int, expected_leader_fingerprint: str | None
 ) -> bool:
     if not is_process_group_alive(pgid):
         return False
     if not is_pid_alive(pgid):
-        # A group with no leader still belongs to the original descendants.
+        # Existing containment behavior assumes a leaderless group is still owned;
+        # the stored leader fingerprint cannot actually verify that assumption.
         return True
     return process_identity_matches(pgid, expected_leader_fingerprint)
 
@@ -500,6 +511,16 @@ def terminate_process(
         if not alive():
             return "terminated"
         time.sleep(0.05)
+    if not alive():
+        return "terminated"
+    if expected_start_fingerprint:
+        identity_matches = (
+            process_group_identity_matches(target, expected_start_fingerprint)
+            if pgid and hasattr(os, "killpg")
+            else process_identity_matches(pid, expected_start_fingerprint)
+        )
+        if not identity_matches:
+            return "identity-mismatch"
     try:
         if pgid and hasattr(os, "killpg"):
             os.killpg(target, signal.SIGKILL)
@@ -655,18 +676,15 @@ def cleanup_jobs(
             continue
         pid = int(job.get("pid") or 0)
         pgid = int(job.get("pgid") or 0)
-        action = (
-            terminate_process(
-                pid,
-                pgid or None,
-                expected_start_fingerprint=str(
-                    job.get("process_start_fingerprint") or ""
-                )
-                or None,
+        fingerprint = _recorded_process_fingerprint(job.get("process_start_fingerprint"))
+        if not pid:
+            action = "none"
+        elif fingerprint is None:
+            action = "identity-unverified"
+        else:
+            action = terminate_process(
+                pid, pgid or None, expected_start_fingerprint=fingerprint
             )
-            if pid
-            else "none"
-        )
         containment_failed = (
             not pid
             or not termination_proves_containment(action)
@@ -1928,7 +1946,7 @@ def _settle_unadmitted_lease_gate(
             reason="lease gate admission could not prove the command was aborted",
             failure_class=failure_class,
         )
-    return _finish_prestart_attempt(
+    result = _finish_prestart_attempt(
         job_id,
         attempt_id,
         failure_class=failure_class,
@@ -1936,6 +1954,9 @@ def _settle_unadmitted_lease_gate(
         identity=identity,
         state_path=state_path,
     )
+    if result in {"failed", "queued", "cancelled"}:
+        _best_effort_release(identity, state_path)
+    return result
 
 
 def _settle_spawned_lease_exception(
@@ -2292,7 +2313,6 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
             state_path=state_path,
             failure_class=str(failure_class),
         )
-        _best_effort_release(identity, state_path)
         return result, None
     except GateAdmissionError as exc:
         if not exc.grant_delivered:
@@ -2312,7 +2332,6 @@ def _run_lease_job(job: dict) -> tuple[str, int | None]:
                 state_path=state_path,
                 failure_class=failure_class,
             )
-            _best_effort_release(identity, state_path)
             return result, None
         # A delivered byte is the irreversible effect boundary. Never replace
         # its later gate evidence with a parent-authored aborted marker.
@@ -2762,14 +2781,13 @@ def _worker_attempt_is_live(
 def _contain_attempt_process(attempt: dict) -> bool:
     pid = int(attempt.get("pid") or 0)
     pgid = int(attempt.get("pgid") or 0)
-    if not pid or not pgid:
+    fingerprint = _recorded_process_fingerprint(attempt.get("process_start_fingerprint"))
+    if not pid or not pgid or fingerprint is None:
         return False
     action = terminate_process(
         pid,
         pgid,
-        expected_start_fingerprint=str(
-            attempt.get("process_start_fingerprint") or ""
-        ),
+        expected_start_fingerprint=fingerprint,
     )
     return termination_proves_containment(action)
 
@@ -2865,7 +2883,7 @@ def reconcile_lease_jobs() -> dict[str, int]:
                         reason="terminal receipt could not be adopted under the exact lease",
                         failure_class="receipt_adoption_fenced",
                     )
-            elif _gate_state(job_id, attempt) == "gate_aborted":
+            elif contained and _gate_state(job_id, attempt) == "gate_aborted":
                 status = _finish_prestart_attempt(
                     job_id,
                     attempt_id,
@@ -2941,7 +2959,9 @@ def _handle_lease_worker_exception(
             state_path = None
         pid = int(attempt.get("pid") or 0)
         pgid = int(attempt.get("pgid") or 0)
-        process_start = str(attempt.get("process_start_fingerprint") or "") or None
+        process_start = _recorded_process_fingerprint(
+            attempt.get("process_start_fingerprint")
+        )
         ended_at = to_iso(now_utc())
         attempt["status"] = "unknown"
         attempt["ended_at"] = ended_at
@@ -2953,7 +2973,7 @@ def _handle_lease_worker_exception(
         )
         current["summary"] = current["reconcile_reason"]
 
-    action = "process-unpublished"
+    action = "identity-unverified" if pid and not process_start else "process-unpublished"
     if pid and process_start:
         action = terminate_process(
             pid,
@@ -3147,7 +3167,7 @@ def command_cancel(args: argparse.Namespace) -> int:
 
         pid = int(job.get("pid") or 0)
         pgid = int(job.get("pgid") or 0)
-        process_start = str(job.get("process_start_fingerprint") or "") or None
+        process_start = _recorded_process_fingerprint(job.get("process_start_fingerprint"))
         requested_at = to_iso(now_utc())
         job["cancel_requested_at"] = requested_at
         job["summary"] = "cancellation requested (pid_action=pending)"
@@ -3163,13 +3183,13 @@ def command_cancel(args: argparse.Namespace) -> int:
                     lease_identity is not None
                     and attempt.get("status") in {"starting", "running", "cancelling"}
                 )
-                process_start = str(
-                    attempt.get("process_start_fingerprint") or ""
-                ) or None
+                process_start = _recorded_process_fingerprint(
+                    attempt.get("process_start_fingerprint")
+                )
                 if worker_owns_release:
                     attempt["status"] = "cancelling"
                     attempt["failure_class"] = "user_cancel_requested"
-                elif attempt.get("status") not in LEASE_TERMINAL_ATTEMPT_STATUSES:
+                elif not pid and attempt.get("status") not in LEASE_TERMINAL_ATTEMPT_STATUSES:
                     attempt["status"] = "cancelled"
                     attempt["ended_at"] = requested_at
                     attempt["failure_class"] = "user_cancelled"
@@ -3208,10 +3228,10 @@ def command_cancel(args: argparse.Namespace) -> int:
         print("status: reconciling")
         return 1
 
-    action = terminate_process(
-        pid,
-        pgid or None,
-        expected_start_fingerprint=process_start,
+    action = (
+        terminate_process(pid, pgid or None, expected_start_fingerprint=process_start)
+        if process_start is not None
+        else "identity-unverified"
     )
     containment_failed = not termination_proves_containment(action)
     final_status = (
