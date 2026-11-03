@@ -840,6 +840,15 @@ def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
     return connection
 
 
+def _has_v2_session_schema(conn: sqlite3.Connection) -> bool:
+    """Conservatively detect a V2 table or view using SQLite identifier rules."""
+    return conn.execute(
+        "SELECT 1 FROM main.sqlite_master "
+        "WHERE type IN ('table', 'view') AND name = ? COLLATE NOCASE LIMIT 1",
+        ("session_v2",),
+    ).fetchone() is not None
+
+
 class _RuntimeScanBudget:
     def __init__(self, timeout_ms: int) -> None:
         self.deadline = time.monotonic() + (max(1, timeout_ms) / 1000.0)
@@ -1785,7 +1794,7 @@ def _scan_runtime_stuck_sessions(
         }
         # A migrated V2 database can retain V1 tables. Never diagnose or repair
         # those stale tables as if they were the active V2 session store.
-        runtime_db_v2_detected = "session_v2" in tables
+        runtime_db_v2_detected = _has_v2_session_schema(conn)
         journal_row = conn.execute("PRAGMA journal_mode").fetchone()
         runtime_db_journal_mode = str(journal_row[0]) if journal_row else None
         version_row = conn.execute("SELECT sqlite_version()").fetchone()
@@ -2479,11 +2488,14 @@ def _repair_runtime_stuck_sessions(
             deduplicated.setdefault(key, finding)
         return list(deduplicated.values())
 
-    candidate_findings = collect_candidates(scan)
+    # An incomplete scan cannot authorize writes, even if it contains findings.
+    candidate_findings = (
+        collect_candidates(scan) if scan.get("runtime_db_scan_complete") is True else []
+    )
     # Scoping can suppress findings outside the target, not a failed scan.
     base_problems = (
         scan["problems"]
-        if not scope_session_id or not scan.get("runtime_db_scan_complete")
+        if not scope_session_id or scan.get("runtime_db_scan_complete") is not True
         else []
     )
     if not apply_changes or not candidate_findings or not db_path.exists():
@@ -2519,9 +2531,7 @@ def _repair_runtime_stuck_sessions(
             progress_this_round = 0
             round_repairs: list[dict] = []
             conn.execute("BEGIN IMMEDIATE")
-            if conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'"
-            ).fetchone():
+            if _has_v2_session_schema(conn):
                 raise sqlite3.OperationalError(
                     "OpenCode V2 session schema detected; legacy repair refused"
                 )
@@ -2688,6 +2698,8 @@ def _repair_runtime_stuck_sessions(
             if progress_this_round <= 0:
                 break
             scan = _scan_runtime_stuck_sessions(db_path, stale_seconds)
+            if scan.get("runtime_db_scan_complete") is not True:
+                break
             remaining_candidates = collect_candidates(scan)
     except sqlite3.DatabaseError as exc:
         conn.rollback()
@@ -2706,7 +2718,13 @@ def _repair_runtime_stuck_sessions(
     finally:
         conn.close()
 
-    problems = []
+    # A post-commit rescan can encounter a migrated schema or other failure.
+    # Preserve that evidence instead of reporting the earlier repair as fully verified.
+    problems = (
+        list(scan.get("problems") or ["runtime session database rescan did not complete"])
+        if scan.get("runtime_db_scan_complete") is not True
+        else []
+    )
     if len(repairs) != len(candidate_findings):
         problems.append(
             f"repaired {len(repairs)} of {len(candidate_findings)} stale finding(s); rerun doctor before trusting the result"
