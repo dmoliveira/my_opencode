@@ -159,12 +159,16 @@ class SelftestRuntimeSafetyTest(unittest.TestCase):
             "'log_path': str(log)}]}))\n"
             "cleanup = subprocess.run([sys.executable, str(selftest.BG_MANAGER_SCRIPT), 'cleanup', "
             "'--max-terminal', '0', '--json'], env=env, capture_output=True, text=True, timeout=30, check=False)\n"
+            "listing = subprocess.run([sys.executable, str(selftest.BG_MANAGER_SCRIPT), 'list', "
+            "'--json'], env=env, capture_output=True, text=True, timeout=30, check=False)\n"
             "print(json.dumps({'bindings': bindings, 'exit': result.returncode, 'stderr': result.stderr, "
             "'workflow_exit': workflow.returncode, 'workflow_stderr': workflow.stderr, "
             "'daemon_exit': daemon.returncode, 'daemon_stderr': daemon.stderr, "
             "'delivery_exit': delivery.returncode, 'delivery_stderr': delivery.stderr, "
             "'cleanup_exit': cleanup.returncode, 'cleanup_stdout': cleanup.stdout, "
-            "'cleanup_stderr': cleanup.stderr, 'owned_log_exists': log.exists()}))\n"
+            "'cleanup_stderr': cleanup.stderr, 'owned_log_exists': log.exists(), "
+            "'listing_exit': listing.returncode, 'listing_stdout': listing.stdout, "
+            "'listing_stderr': listing.stderr}))\n"
         )
         result = self.run_python(program, str(owned), str(plan))
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -173,9 +177,15 @@ class SelftestRuntimeSafetyTest(unittest.TestCase):
         self.assertEqual(report["workflow_exit"], 0, report["workflow_stderr"])
         self.assertEqual(report["daemon_exit"], 0, report["daemon_stderr"])
         self.assertEqual(report["delivery_exit"], 0, report["delivery_stderr"])
-        self.assertEqual(report["cleanup_exit"], 0, report["cleanup_stderr"])
-        self.assertEqual(json.loads(report["cleanup_stdout"])["pruned"], 1)
-        self.assertFalse(report["owned_log_exists"])
+        self.assertEqual(report["cleanup_exit"], 1, report["cleanup_stderr"])
+        cleanup = json.loads(report["cleanup_stdout"])
+        self.assertEqual("deferred", cleanup["terminal_retention_mode"])
+        self.assertEqual(1, cleanup["terminal_retention_deferred"])
+        self.assertEqual(0, cleanup["pruned"])
+        self.assertEqual(0, cleanup["deleted_files"])
+        self.assertTrue(report["owned_log_exists"])
+        self.assertEqual(report["listing_exit"], 0, report["listing_stderr"])
+        self.assertEqual(["owned-terminal"], [job["id"] for job in json.loads(report["listing_stdout"])["jobs"]])
         self.assertEqual(set(report["bindings"]), {*STATE_VARS, BG_VAR, GRAPH_LOCK_VAR})
         for name in (*STATE_VARS, GRAPH_LOCK_VAR):
             path = Path(report["bindings"][name])

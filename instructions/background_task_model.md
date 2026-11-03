@@ -145,7 +145,7 @@ one-second start-time resolution. These checks do not guarantee that unrelated
 processes cannot be signalled. See `docs/specs/intent-control-plane.md`.
 
 `/bg run` performs a bounded reconciliation pass before reserving new jobs.
-`/bg cleanup` reconciles before applying retention.
+`/bg cleanup` reconciles before reporting deferred terminal retention.
 
 ## Persistence And Retention
 
@@ -164,12 +164,17 @@ and parent-directory sync. Failed in-memory mutations are not written. A
 post-replace durability error is reported as indeterminate instead of rolled
 back.
 
-Terminal jobs are retained for `14` days by default, with at most `200`
-terminal entries. Pruning removes the job's logs, metadata, gate markers, and
-attempt receipts. `reconciling` jobs are nonterminal and are never pruned by
-terminal retention. Cleanup currently trusts artifact paths in stored records
-without proving ownership; avoid it when those paths may be unsafe. Enqueue,
-start, run, and cancel can also trigger cleanup implicitly.
+Terminal record pruning and artifact deletion are deferred: stored paths do not
+prove ownership, and pathname checks alone cannot prevent replacement races.
+Cleanup reports `terminal_retention_mode: deferred` and counts records that
+would exceed the selected retention thresholds (`14` days and `200` terminal
+entries by default). It preserves those records and their artifacts, so storage
+can grow until a safe reclamation workflow is established. Explicit cleanup
+exits nonzero when candidates are deferred; this does not imply that its earlier
+reconciliation or stale-job processing was rolled back. Enqueue, start, run,
+and cancel can trigger stale-job cleanup implicitly; the signal risks above
+still apply. Stored artifact paths are also used by other read/write paths whose
+ownership and pathname safety have not yet been established.
 
 ## Enqueue Example
 

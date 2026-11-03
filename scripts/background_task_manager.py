@@ -660,8 +660,6 @@ def cleanup_jobs(
     now = now_utc()
     stale_cancelled = 0
     stale_reconciling = 0
-    pruned = 0
-    deleted_files = 0
 
     for job in data.get("jobs", []):
         if job.get("status") != "running":
@@ -706,60 +704,29 @@ def cleanup_jobs(
             stale_cancelled += 1
 
     cutoff = now - timedelta(days=max(retention_days, 0))
-    terminal_jobs: list[dict] = []
-    keep: list[dict] = []
+    terminal_retention_deferred = 0
+    retained_terminal = 0
     for job in data.get("jobs", []):
-        if job.get("status") in TERMINAL_STATUSES:
-            terminal_jobs.append(job)
-        else:
-            keep.append(job)
-
-    keep_terminal: list[dict] = []
-    prune_terminal: list[dict] = []
-    for job in terminal_jobs:
+        if job.get("status") not in TERMINAL_STATUSES:
+            continue
         ended = parse_iso(job.get("ended_at")) or parse_iso(job.get("created_at"))
         if ended is not None and ended < cutoff:
-            prune_terminal.append(job)
+            terminal_retention_deferred += 1
         else:
-            keep_terminal.append(job)
+            retained_terminal += 1
+    if max_terminal >= 0:
+        terminal_retention_deferred += max(0, retained_terminal - max_terminal)
 
-    if max_terminal >= 0 and len(keep_terminal) > max_terminal:
-        ordered = sorted(keep_terminal, key=job_sort_key)
-        extra = len(keep_terminal) - max_terminal
-        prune_terminal.extend(ordered[:extra])
-        keep_terminal = ordered[extra:]
-
-    for job in prune_terminal:
-        artifact_paths = {
-            str(job.get(key) or "")
-            for key in ("log_path", "meta_path", "gate_path")
-        }
-        for attempt in job.get("attempts", []):
-            if not isinstance(attempt, dict):
-                continue
-            artifact_paths.update(
-                str(attempt.get(key) or "")
-                for key in ("log_path", "receipt_path", "gate_path")
-            )
-        for path_text in artifact_paths:
-            if not isinstance(path_text, str) or not path_text:
-                continue
-            path = Path(path_text)
-            if path.exists():
-                try:
-                    path.unlink()
-                    deleted_files += 1
-                except OSError:
-                    pass
-
-    pruned = len(prune_terminal)
-    data["jobs"] = keep + keep_terminal
-    data["jobs"].sort(key=job_sort_key)
+    # Stored artifact paths do not establish ownership, and pathname checks
+    # alone cannot make deletion safe against replacement races. Retain both
+    # records and files until a recoverable, ownership-bound cleanup exists.
     return {
         "stale_cancelled": stale_cancelled,
         "stale_reconciling": stale_reconciling,
-        "pruned": pruned,
-        "deleted_files": deleted_files,
+        "pruned": 0,
+        "deleted_files": 0,
+        "terminal_retention_mode": "deferred",
+        "terminal_retention_deferred": terminal_retention_deferred,
         "remaining": len(data.get("jobs", [])),
     }
 
@@ -3315,18 +3282,21 @@ def command_cleanup(args: argparse.Namespace) -> int:
             max_terminal=int(args.max_terminal),
         )
     result["reconciliation"] = reconciliation
+    exit_code = 1 if result["terminal_retention_deferred"] else 0
 
     if args.json:
         print(json.dumps(result, indent=2))
-        return 0
+        return exit_code
 
     print(f"stale_cancelled: {result['stale_cancelled']}")
     if result["stale_reconciling"]:
         print(f"stale_reconciling: {result['stale_reconciling']}")
     print(f"pruned: {result['pruned']}")
     print(f"deleted_files: {result['deleted_files']}")
+    print(f"terminal_retention_mode: {result['terminal_retention_mode']}")
+    print(f"terminal_retention_deferred: {result['terminal_retention_deferred']}")
     print(f"remaining: {result['remaining']}")
-    return 0
+    return exit_code
 
 
 def command_status(args: argparse.Namespace) -> int:
@@ -3676,9 +3646,23 @@ def build_parser() -> argparse.ArgumentParser:
     cancel = sub.add_parser("cancel", help="cancel queued/running job")
     cancel.add_argument("id")
 
-    cleanup = sub.add_parser("cleanup", help="cleanup stale/retained jobs")
-    cleanup.add_argument("--retention-days", type=int, default=DEFAULT_RETENTION_DAYS)
-    cleanup.add_argument("--max-terminal", type=int, default=DEFAULT_MAX_TERMINAL)
+    cleanup = sub.add_parser(
+        "cleanup",
+        help="reconcile stale jobs and report deferred terminal retention",
+        description=(
+            "Reconcile stale jobs; terminal records and artifacts are preserved. "
+            "Retention options affect only the deferred-candidate count; "
+            "cleanup exits nonzero when terminal retention is deferred."
+        ),
+    )
+    cleanup.add_argument(
+        "--retention-days", type=int, default=DEFAULT_RETENTION_DAYS,
+        help="age threshold for deferred terminal retention",
+    )
+    cleanup.add_argument(
+        "--max-terminal", type=int, default=DEFAULT_MAX_TERMINAL,
+        help="terminal count threshold for deferred retention (-1 disables the count cap)",
+    )
     cleanup.add_argument("--json", action="store_true")
 
     status = sub.add_parser("status", help="show background task summary")
