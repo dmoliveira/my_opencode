@@ -630,14 +630,12 @@ def cmd_migrate(argv: list[str]) -> int:
     return emit(migrate_schema(runtime_path(), dry_run=dry_run), as_json)
 
 
-def _cleanup_candidates(
-    conn: sqlite3.Connection,
+def _cleanup_where(
     *,
     cutoff: str,
     scope: str | None,
     namespace: str | None,
-    all_rows: bool,
-) -> tuple[int, list[dict[str, Any]]]:
+) -> tuple[str, list[Any]]:
     filter_sql, filter_parameters = _filter_sql(
         scope=scope, namespace=namespace
     )
@@ -646,7 +644,20 @@ def _cleanup_candidates(
         "AND julianday(COALESCE(NULLIF(updated_at, ''), created_at)) < julianday(?)"
         + filter_sql
     )
-    parameters: list[Any] = [cutoff, *filter_parameters]
+    return where_sql, [cutoff, *filter_parameters]
+
+
+def _cleanup_candidates(
+    conn: sqlite3.Connection,
+    *,
+    cutoff: str,
+    scope: str | None,
+    namespace: str | None,
+    all_rows: bool,
+) -> tuple[int, list[dict[str, Any]]]:
+    where_sql, parameters = _cleanup_where(
+        cutoff=cutoff, scope=scope, namespace=namespace
+    )
     candidate_count = int(
         conn.execute(
             f"SELECT COUNT(*) FROM memories WHERE {where_sql}", parameters

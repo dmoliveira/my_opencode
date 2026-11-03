@@ -1,7 +1,8 @@
-"""Offline local-data workflow planning and counts-only export summaries.
+"""Local-data workflow planning, summaries and bounded snapshot inventory.
 
-No source mutation, discovery, owner command execution or filesystem output is
-implemented here. Plans are instructions to investigate, never deletion proofs.
+The offline preview and summary do not inspect sources, execute owner commands,
+or write files. The separate inventory reads one explicitly selected source;
+no subcommand implements source mutation or authorizes deletion.
 """
 
 from __future__ import annotations
@@ -389,6 +390,10 @@ def summarize(value: Any, store: str) -> dict:
 
 
 def main(argv: list[str]) -> int:
+    if argv and argv[0] == "inventory-shared-memory":
+        from shared_memory_inventory import main as inventory_main
+
+        return inventory_main(argv[1:])
     try:
         parser = PrivateParser(description=__doc__, allow_abbrev=False)
         commands = parser.add_subparsers(
@@ -399,6 +404,9 @@ def main(argv: list[str]) -> int:
             sub.add_argument("--file", type=Path, required=True)
             if name == "summarize-export":
                 sub.add_argument("--store", required=True)
+        commands.add_parser(
+            "inventory-shared-memory", help="read-only scoped candidate snapshot"
+        )
         args = parser.parse_args(argv)
         value = load_json(args.file)
         report = (
