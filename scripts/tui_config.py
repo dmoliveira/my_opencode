@@ -18,6 +18,8 @@ from config_layering import (
     ConfigTransactionResult,
     edit_config_batch,
 )
+from opencode_version_probe import OpenCodeVersionProbeError, probe_opencode_version
+from setup_safety import VERSION_PATTERN
 
 
 TUI_SCHEMA = "https://opencode.ai/tui.json"
@@ -119,6 +121,16 @@ def _result_payload(
     }
 
 
+def _require_v1_cli() -> None:
+    try:
+        version = probe_opencode_version()
+    except OpenCodeVersionProbeError:
+        raise ValueError("unable to verify the OpenCode V1 executable") from None
+    match = VERSION_PATTERN.fullmatch(version)
+    if match is None or match.group(1) != "1":
+        raise ValueError("legacy execution sidebar requires a verified OpenCode V1 executable")
+
+
 def _main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(prog="tui_config.py")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -131,6 +143,7 @@ def _main(argv: Sequence[str]) -> int:
     config_path = Path(args.config)
     plugin_path = Path(args.plugin_path)
     try:
+        _require_v1_cli()
         result = ensure_execution_sidebar(config_path, plugin_path)
     except (ConfigTransactionError, OSError, ValueError) as error:
         print(f"error: unable to configure OpenCode TUI plugin: {error}", file=sys.stderr)
