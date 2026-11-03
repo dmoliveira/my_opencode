@@ -245,24 +245,111 @@ async function defaultRunner(args, timeoutMs, cwd, env) {
         });
     });
 }
-function extractTextFromJsonLines(stdout) {
-    const chunks = [];
-    for (const rawLine of stdout.split("\n")) {
-        const line = rawLine.trim();
-        if (!line || !line.startsWith("{")) {
-            continue;
-        }
-        try {
-            const parsed = JSON.parse(line);
-            if (parsed.type === "text" && typeof parsed.part?.text === "string") {
-                chunks.push(parsed.part.text);
+const MAX_DECISION_EVENT_BYTES = 64 * 1024;
+function isRecord(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function parseUniqueEvent(line) {
+    let parsed;
+    try {
+        parsed = JSON.parse(line);
+    }
+    catch {
+        return undefined;
+    }
+    if (!isRecord(parsed))
+        return undefined;
+    // JSON.parse has already checked syntax. Scan its source to detect duplicate
+    // keys before JSON.parse's last-key-wins behavior can hide an event field.
+    const containers = [];
+    for (let index = 0; index < line.length; index++) {
+        const char = line[index];
+        if (char === '"') {
+            const start = index++;
+            while (index < line.length && line[index] !== '"') {
+                index += line[index] === "\\" ? 2 : 1;
+            }
+            if (index >= line.length)
+                return undefined;
+            const parent = containers.at(-1);
+            if (parent?.kind === "object" && parent.expectingKey) {
+                let key;
+                try {
+                    key = JSON.parse(line.slice(start, index + 1));
+                }
+                catch {
+                    return undefined;
+                }
+                if (parent.keys.has(key))
+                    return undefined;
+                parent.keys.add(key);
+                parent.expectingKey = false;
             }
         }
-        catch {
-            continue;
+        else if (char === "{") {
+            containers.push({ kind: "object", keys: new Set(), expectingKey: true });
+        }
+        else if (char === "[") {
+            containers.push({ kind: "array" });
+        }
+        else if (char === "}" || char === "]") {
+            containers.pop();
+        }
+        else if (char === ",") {
+            const parent = containers.at(-1);
+            if (parent?.kind === "object")
+                parent.expectingKey = true;
         }
     }
-    return chunks.join("\n").trim();
+    return parsed;
+}
+function extractTextFromJsonLines(stdout) {
+    if (Buffer.byteLength(stdout, "utf8") > MAX_DECISION_EVENT_BYTES)
+        return "";
+    let state = "start";
+    let sessionID = "";
+    let messageID = "";
+    let decision = "";
+    for (const rawLine of stdout.split("\n")) {
+        const line = rawLine.trim();
+        if (!line)
+            continue;
+        const event = parseUniqueEvent(line);
+        if (!event || Object.hasOwn(event, "error") || !Object.hasOwn(event, "type") || !Object.hasOwn(event, "sessionID") ||
+            !Object.hasOwn(event, "part") || !isRecord(event.part))
+            return "";
+        const part = event.part;
+        if (Object.hasOwn(part, "error") || !Object.hasOwn(part, "type") || !Object.hasOwn(part, "sessionID") ||
+            !Object.hasOwn(part, "messageID"))
+            return "";
+        if (state === "start") {
+            if (event.type !== "step_start" || part.type !== "step-start" ||
+                typeof event.sessionID !== "string" || !event.sessionID.trim() ||
+                part.sessionID !== event.sessionID || typeof part.messageID !== "string" || !part.messageID.trim())
+                return "";
+            sessionID = event.sessionID;
+            messageID = part.messageID;
+            state = "text";
+            continue;
+        }
+        if (event.sessionID !== sessionID || part.sessionID !== sessionID || part.messageID !== messageID)
+            return "";
+        if (state === "text" && event.type === "text" && part.type === "text" &&
+            Object.hasOwn(part, "text") && typeof part.text === "string" &&
+            (!Object.hasOwn(part, "synthetic") || part.synthetic === false) &&
+            (!Object.hasOwn(part, "ignored") || part.ignored === false)) {
+            decision = part.text;
+            state = "finish";
+        }
+        else if (state === "finish" && event.type === "step_finish" && part.type === "step-finish" &&
+            Object.hasOwn(part, "reason") && part.reason === "stop") {
+            state = "done";
+        }
+        else {
+            return "";
+        }
+    }
+    return state === "done" ? decision.trim() : "";
 }
 export function createLlmDecisionRuntime(options) {
     const runner = options.runner ?? defaultRunner;
