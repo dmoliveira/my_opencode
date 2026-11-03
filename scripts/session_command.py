@@ -2723,6 +2723,29 @@ def _repair_runtime_stuck_sessions(
     }
 
 
+def _find_unique_indexed_session(
+    rows: list[dict], target_id: str
+) -> tuple[dict | None, bool]:
+    match = None
+    for row in rows:
+        if row.get("session_id") != target_id:
+            continue
+        if match is not None:
+            return None, True
+        match = row
+    return match, False
+
+
+def _duplicate_index_id_failure(command: str, index_path: Path) -> dict:
+    return {
+        "result": "FAIL",
+        "command": command,
+        "reason_code": "session_index_duplicate_id",
+        "error": "multiple session-index entries match the selected ID",
+        "index_path": str(index_path),
+    }
+
+
 def _resolve_current_session(rows: list[dict]) -> tuple[dict | None, str]:
     explicit = os.environ.get("OPENCODE_SESSION_ID", "").strip()
     cwd = str(Path.cwd())
@@ -2781,6 +2804,13 @@ def _command_current(argv: list[str], index_path: Path) -> int:
             json_output,
         )
 
+    selected_id = selected.get("session_id")
+    if (
+        isinstance(selected_id, str)
+        and _find_unique_indexed_session(rows, selected_id)[1]
+    ):
+        return _emit(_duplicate_index_id_failure("current", index_path), json_output)
+
     return _emit(
         {
             "result": "PASS",
@@ -2838,22 +2868,9 @@ def _command_show(argv: list[str], index_path: Path) -> int:
             },
             json_output,
         )
-    match = None
-    for row in rows:
-        if row.get("session_id") != target_id:
-            continue
-        if match is not None:
-            return _emit(
-                {
-                    "result": "FAIL",
-                    "command": "show",
-                    "reason_code": "session_index_duplicate_id",
-                    "error": "multiple session-index entries match the requested ID",
-                    "index_path": str(index_path),
-                },
-                json_output,
-            )
-        match = row
+    match, duplicate = _find_unique_indexed_session(rows, target_id)
+    if duplicate:
+        return _emit(_duplicate_index_id_failure("show", index_path), json_output)
     if not isinstance(match, dict):
         return _emit(
             {
@@ -3264,6 +3281,17 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
             )
         if not isinstance(selected, dict):
             selected = rows[0] if rows else {}
+
+    selected_id = selected.get("session_id")
+    if (
+        isinstance(selected_id, str)
+        and _find_unique_indexed_session(rows, selected_id)[1]
+    ):
+        if redact:
+            return _emit(
+                _redacted_failure("handoff", "session_index_unavailable"), json_output
+            )
+        return _emit(_duplicate_index_id_failure("handoff", index_path), json_output)
 
     if redact:
         projected = _redact_session_record(selected)
