@@ -115,7 +115,7 @@ Google Drive is enabled in the project config by default. Use `/mcp disable goog
 
 ## Plugin control inside OpenCode 🎛️
 
-Managed profiles now enforce an external-free baseline around the maintained local `gateway-core` plugin:
+Managed profiles remove exact retired curated entries from the helper's legacy configuration:
 
 ```text
 /plugin status
@@ -132,9 +132,11 @@ Managed profiles now enforce an external-free baseline around the maintained loc
 
 `notifier`, `morph`, and `worktree` are retired, disable-only aliases. Plugin enable requests reject them instead of introducing an unpinned or privileged in-process dependency. Legacy `stable` and `experimental` profile arguments remain accepted but normalize to `lean`.
 
-Applying a managed profile removes exact retired string or tuple entries while preserving gateway entries, manually managed unknown plugins, malformed entries, tuple options, and relative order. `/plugin doctor` fails while an exact retired entry remains and reports normalized package names only; option objects are never printed. `/plugin setup-keys` therefore requires no external plugin credentials.
+Applying a managed profile removes exact retired string or tuple entries while preserving gateway entries, manually managed unknown plugins, malformed entries, tuple options, and relative order. `/plugin doctor` fails while an exact retired entry remains and reports normalized package names only; option objects are never printed. `/plugin setup-keys` reports that managed profiles require no external plugin credentials.
 
-Gateway-core already handles workflow notifications, native edits remain the governed write path, and repository worktree commands own branch and PR lifecycle. Add a third-party plugin only after reviewing and pinning an immutable release, its permissions, and any code or data egress.
+The helper reports and edits its own resolved legacy `plugin` layers, not every OpenCode configuration source or a running service. It refuses status, doctor, setup-keys, profile, and disable when those layers contain a native or ambiguous `plugins` key; manage native V2 entries in the intended configuration and verify the intended service separately. A successful legacy edit does not prove a plugin unloaded. The V1 gateway plugin is incompatible with V2, so these controls do not establish that gateway hooks are active.
+
+Repository worktree commands own branch and PR lifecycle. Add a third-party plugin only after reviewing and pinning an immutable release, its permissions, and any code or data egress.
 
 ## Concise / caveman mode
 

@@ -61,4 +61,6 @@ The opt-in LLM decision helper now rejects incomplete, ambiguous, errored or too
 
 The legacy `/mcp` helper refuses an observed native or ambiguous `mcp.servers` layout, including during the locked mutation, rather than claiming a V1 toggle changed the V2 entry. Its resolved layers do not cover every OpenCode configuration source or prove a running service's state; this guard is not a V2 MCP management port.
 
+The legacy `/plugin` helper similarly refuses an observed native or ambiguous `plugins` key, including during locked mutations. Its results describe only helper-resolved legacy configuration, not loaded plugins or active gateway hooks; it does not port V2 plugin management.
+
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.
