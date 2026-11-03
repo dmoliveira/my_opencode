@@ -16,6 +16,10 @@ Run `./install.sh`, then restart OpenCode. The installer builds both local plugi
 
 For a V1 live checkout, run `./scripts/setup_local_dev_symlinks.sh`. It builds the sidebar before adding the same TUI entry and refuses to replace existing instruction or agent paths that are not matching links. The setup refuses V2 or an unverified runtime before making changes.
 
+The standalone `tui_config.py ensure-execution-sidebar` CLI also requires a
+verified V1 executable before writing configuration. Its version check uses a
+disposable home and does not establish the version of a separate running service.
+
 The feature requires exactly OpenCode `1.18.18`. The sidebar disables itself with a visible warning on another version.
 
 ## Status semantics
