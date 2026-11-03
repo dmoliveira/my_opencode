@@ -59,4 +59,6 @@ The tasker E2E evaluator examines both V1 `bash` and V2 `shell` event records an
 
 The opt-in LLM decision helper now rejects incomplete, ambiguous, errored or tool-bearing event streams, as well as synthetic or ignored text, before accepting or caching a decision. This checks output after execution, not tool prevention or event completeness. Its `allowStandaloneOpencode` setting does not add V2 `--standalone`; a child environment does not prove what a separate service receives. The V2 decision helper and gateway remain unqualified.
 
+The legacy `/mcp` helper refuses an observed native or ambiguous `mcp.servers` layout, including during the locked mutation, rather than claiming a V1 toggle changed the V2 entry. Its resolved layers do not cover every OpenCode configuration source or prove a running service's state; this guard is not a V2 MCP management port.
+
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.

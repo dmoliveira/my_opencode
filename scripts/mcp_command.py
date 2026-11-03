@@ -9,6 +9,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from config_layering import (  # type: ignore
+    ConfigTransactionError,
     edit_layered_config,
     load_layered_config,
     resolve_write_path,
@@ -39,6 +40,12 @@ TARGET_ALIASES = {
     "ghgrep": "gh_grep",
     "exa": "exa_search",
 }
+NATIVE_LAYOUT_REASON = "mcp_native_layout_unsupported"
+NATIVE_LAYOUT_MESSAGE = (
+    "mcp.servers is a native V2 or ambiguous MCP layout; "
+    "the legacy /mcp helper cannot manage or report it"
+)
+CONFIG_SCOPE_NOTICE = "note: helper configuration only; runtime state not verified"
 SERVER_DEFAULTS = {
     "context7": {"type": "remote", "url": "https://mcp.context7.com/mcp"},
     "gh_grep": {"type": "remote", "url": "https://mcp.grep.app"},
@@ -71,6 +78,24 @@ PROFILE_MAP = {
 
 def normalized_target(target: str) -> str:
     return TARGET_ALIASES.get(target, target)
+
+
+def has_native_or_ambiguous_layout(mcp: object) -> bool:
+    # A V1 server can also be named "servers"; its meaning is ambiguous here.
+    return isinstance(mcp, dict) and "servers" in mcp
+
+
+def legacy_mcp_for_mutation(data: dict) -> dict:
+    mcp = data.get("mcp", {})
+    if not isinstance(mcp, dict):
+        raise ConfigTransactionError(
+            "mcp_invalid_layout", "mcp configuration must be an object", phase="mutate"
+        )
+    if has_native_or_ambiguous_layout(mcp):
+        raise ConfigTransactionError(
+            NATIVE_LAYOUT_REASON, NATIVE_LAYOUT_MESSAGE, phase="mutate"
+        )
+    return mcp
 
 
 def profile_names_text() -> str:
@@ -185,9 +210,22 @@ def print_status(mcp: dict) -> None:
         state = status_line(entry) if configured else "absent"
         print(f"{name}: {state} [retired: {reason}]")
     print(f"config: {CONFIG_PATH}")
+    print(CONFIG_SCOPE_NOTICE)
 
 
 def collect_doctor(mcp: dict) -> dict:
+    if has_native_or_ambiguous_layout(mcp):
+        return {
+            "result": "FAIL",
+            "reason_code": NATIVE_LAYOUT_REASON,
+            "config": str(CONFIG_PATH),
+            "servers": {},
+            "warnings": [],
+            "problems": [NATIVE_LAYOUT_MESSAGE],
+            "quick_fixes": ["manage native MCP settings with OpenCode V2 and verify the intended service"],
+            "configuration_scope": "helper_resolved_layers",
+            "runtime_state_verified": False,
+        }
     problems: list[str] = []
     warnings: list[str] = []
     servers: dict[str, dict[str, object]] = {}
@@ -271,6 +309,8 @@ def collect_doctor(mcp: dict) -> dict:
     return {
         "result": "PASS" if not problems else "FAIL",
         "config": str(CONFIG_PATH),
+        "configuration_scope": "helper_resolved_layers",
+        "runtime_state_verified": False,
         "servers": servers,
         "warnings": warnings,
         "problems": problems,
@@ -294,6 +334,11 @@ def print_doctor(mcp: dict, json_output: bool = False) -> int:
     print("mcp doctor")
     print("----------")
     print(f"config: {report['config']}")
+    print(CONFIG_SCOPE_NOTICE)
+    if report.get("reason_code") == NATIVE_LAYOUT_REASON:
+        print(f"error: {NATIVE_LAYOUT_MESSAGE}")
+        print("result: FAIL")
+        return 1
     for name in REPORT_SERVERS:
         item = report["servers"][name]
         if name in RETIRED_SERVERS:
@@ -333,7 +378,7 @@ def apply_profile(profile: str) -> int:
     enable_set = set(PROFILE_MAP[profile])
 
     def mutate(data: dict) -> None:
-        mcp = data.setdefault("mcp", {})
+        mcp = legacy_mcp_for_mutation(data)
         for name in ACTIVE_SERVERS:
             entry = ensure_server_entry(mcp, name)
             entry["enabled"] = name in enable_set
@@ -352,6 +397,7 @@ def apply_profile(profile: str) -> int:
     else:
         print("- none")
     print(f"config: {CONFIG_PATH}")
+    print(CONFIG_SCOPE_NOTICE)
     return 0
 
 
@@ -365,7 +411,7 @@ def set_enabled(action: str, target: str) -> int:
 
         def mutate(data: dict) -> None:
             nonlocal changed
-            mcp = data.setdefault("mcp", {})
+            mcp = legacy_mcp_for_mutation(data)
             changed = disable_retired_entry(mcp, normalized)
             data["mcp"] = mcp
 
@@ -375,6 +421,7 @@ def set_enabled(action: str, target: str) -> int:
             print(f"config: {CONFIG_PATH}")
         else:
             print(f"{normalized}: absent or already disabled (no change)")
+        print(CONFIG_SCOPE_NOTICE)
         return 0
 
     targets = ACTIVE_SERVERS if normalized == "all" else (normalized,)
@@ -385,7 +432,7 @@ def set_enabled(action: str, target: str) -> int:
     retired_disabled: list[str] = []
 
     def mutate(data: dict) -> None:
-        mcp = data.setdefault("mcp", {})
+        mcp = legacy_mcp_for_mutation(data)
         for name in targets:
             entry = ensure_server_entry(mcp, name)
             entry["enabled"] = value
@@ -402,6 +449,7 @@ def set_enabled(action: str, target: str) -> int:
     for name in retired_disabled:
         print(f"{name}: disabled (retired)")
     print(f"config: {CONFIG_PATH}")
+    print(CONFIG_SCOPE_NOTICE)
     return 0
 
 
@@ -410,6 +458,9 @@ def main(argv: list[str]) -> int:
     mcp = data.setdefault("mcp", {})
 
     if not argv or argv[0] == "status":
+        if has_native_or_ambiguous_layout(mcp):
+            print(f"error: {NATIVE_LAYOUT_MESSAGE}")
+            return 1
         print_status(mcp)
         print_next_steps()
         return 0
