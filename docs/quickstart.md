@@ -17,7 +17,6 @@ These commands affect the helper's legacy config only; they do not verify live s
 Required first-run checks: [h:bf437ec9]
  [h:92b53b41]
 ```text [h:be7b1450]
-/devtools status [h:edbb473e]
 /plugin status [h:014e2cdb]
 /mcp status [h:5435d065]
 /notify status [h:2890edfb]
@@ -41,10 +40,17 @@ For browser UX work, use the verified CLI path first:
 - Use `/browser ensure --json` plus `/mcp profile playwright` when integrated MCP network, storage, assertion, or vision tools are the better fit.
 - See `docs/playwright-ux-scenarios.md` for both paths. Do not install external CLI skill bundles.
 
-**Safety hold:** Do not run live ast-grep installation or version probes,
-including `/devtools install ast-grep` and `/devtools install all`, until
-process-group teardown is safe. See `docs/command-handbook.md`. Playwright CLI
-remains a separate explicit install.
+**Safety hold:** Do not run live ast-grep installation, retries, recovery, or
+version probes, including `/devtools install ast-grep` and
+`/devtools install all`, until process containment, bounded draining, and
+recovery ownership and cleanup are qualified. Preserve existing ast-grep
+journals and staged files.
+`/devtools status` and `/devtools doctor` inspect managed state and may still
+recommend installation; avoid them on live state that must be preserved or
+remain unaccessed, and disregard that recommendation. Auto-slash can also route
+an unspecified devtools install request to `install all`; do not execute it while
+the hold applies. See `docs/command-handbook.md`. Playwright CLI remains a separate
+explicit install.
 
 Exploratory examples after startup is healthy: [h:9e27aaf8]
  [h:e0a80255]

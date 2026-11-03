@@ -63,8 +63,9 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 ## Features and benefits 🌟
 
 **Safety hold:** Avoid live background job mutations, untrusted background job
-reads, and ast-grep installation or version probes. Some diagnostics can also
-access or initialize the background store. See `docs/command-handbook.md` for
+reads, and ast-grep installation, retries, recovery, or version probes. Preserve
+existing ast-grep stage and journal files. Some diagnostics also access the
+background store or managed ast-grep state. See `docs/command-handbook.md` for
 affected commands and remaining risks.
 
 - 🧠 Built-in `/mcp` command for `status`, `help`, `doctor`, `profile`, `enable`, and `disable`.

@@ -29,9 +29,16 @@ If any gate fails, detector returns `NOOP` with explicit reason (`low_confidence
 ## Execution model
 
 - preview-first by default (`preview_first=true`)
-- `/auto-slash execute` without `--force` returns `PREVIEW_ONLY`
-- forced execution dispatches backend command and records an audit event
+- for a match, `preview_first=true` makes `/auto-slash execute` without `--force` return `PREVIEW_ONLY`; when it is false, execution can proceed without `--force`
+- a matched execution dispatches the backend and records an audit event if preview is bypassed or disabled
 - audit entries are appended to `~/.config/opencode/my_opencode/runtime/auto_slash_audit.jsonl`
+
+**Safety hold:** Do not execute prompts that route to held background diagnostics
+or ast-grep installation. A devtools install intent without a recognized target
+can resolve to `install all`, which includes ast-grep. `/doctor` accesses the
+background store. `/auto-slash doctor --json` may suggest executing `/doctor`;
+disregard that suggestion when background state must be preserved. See
+`docs/command-handbook.md` for current restrictions.
 
 ## Config shape (`auto_slash_detector`)
 

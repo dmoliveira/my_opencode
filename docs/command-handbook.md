@@ -50,12 +50,31 @@ npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
 
 The devtools command verifies the exact package version, license, integrity, Node requirement, and lifecycle-script posture before it executes package code. It uses an isolated npm config and owner-only cache; `install all` never includes this optional target.
 
-**Safety hold:** Do not run live ast-grep installation or version probes,
-including `/devtools install ast-grep` and `/devtools install all`, until
-process-group teardown is made safe. A version process whose leader has exited
-can leave a group that the current teardown cannot authenticate; permission
-errors are also not handled reliably. A mock-only test demonstrated the signal
-path, not that an unrelated process was actually signalled.
+**Safety hold:** Do not run live ast-grep installation, retries, recovery, or
+version probes, including `/devtools install ast-grep` and
+`/devtools install all`, until process containment, bounded draining, and
+recovery ownership and cleanup are qualified.
+Preserve existing ast-grep journals, staged files, and managed artifacts; do not
+manually remove them as a recovery shortcut.
+
+A version process whose leader has exited can leave a group that the current
+teardown cannot authenticate, and permission errors are not handled reliably.
+Downloader cleanup can also wait without a deadline after a timeout.
+A mock-only test demonstrated the signal path, not that an unrelated process
+was actually signalled. Separately, a synthetic same-UID test with a valid
+journal showed that recovery can unlink a file moved from outside the cache
+under an expected stage name. No live file was involved. A journal, pathname,
+or metadata check does not prove stage ownership or make a later unlink atomic.
+
+`/devtools status` and `/devtools doctor` inspect managed ast-grep state; avoid
+them on live state that must be preserved or remain unaccessed. They may still
+recommend running the installer: disregard that recommendation while this hold
+applies.
+`/auto-slash execute` can route a devtools install request with no target to
+`install all`. Do not execute such requests while the hold applies; preview-first
+can be disabled, so execution without `--force` is not always a preview.
+`/auto-slash doctor --json` may also suggest executing `/doctor`; disregard that
+suggestion when the background state must be preserved.
 
 The managed installer targets only pinned Darwin arm64 `ast-grep 0.45.0`;
 other host tools remain observation/manual-only. Git hooks use the resolved

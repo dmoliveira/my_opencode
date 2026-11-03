@@ -5,7 +5,8 @@ This document contains detailed historical implementation notes moved out of the
 Note: this archive includes historical implementation notes and may mention legacy or compatibility command forms alongside canonical ones. Use `docs/quickstart.md` and `docs/command-handbook.md` for the current operator-facing command surface.
 
 **Safety hold:** Background mutations, untrusted background-record reads, and
-live ast-grep installation or version probes are not safe to run as examples.
+live ast-grep installation, retries, recovery, or version probes are not safe
+to run as examples. Preserve ast-grep journals and staged files.
 `/doctor`, `/doctor status`, and `/doctor run` also access the background store
 and its lock; avoid them on live state that must be preserved. Some health and
 swarm operations read background records. See `docs/command-handbook.md`.
@@ -608,14 +609,14 @@ Optional/manual add-ons:
 - `browser-use` when you need a higher-level browser agent beyond the built-in Playwright-first path; install it manually and keep `BROWSER_USE_API_KEY` scoped to workflows that actually need it.
 - Context7 only when you have a local CLI workflow you trust; keep the remote MCP path disabled by default when token cost matters.
 
-Use these directly in OpenCode:
+`/devtools status` and `/devtools doctor` inspect managed ast-grep state and may
+still recommend installation. Avoid them on live state that must be preserved or
+remain unaccessed, and disregard that recommendation while the safety hold applies.
+Other commands:
 
 ```text
-/devtools status
 /devtools help
 /devtools install playwright-cli
-/devtools doctor
-/devtools doctor --json
 /devtools hooks-install
 /tmux status --json
 /tmux doctor --json
@@ -637,7 +638,7 @@ direnv allow
 ```
 
 Notes:
-- Do not run live ast-grep installation or version probes, including `/devtools install ast-grep` and `/devtools install all`, until process-group teardown is safe. The installer targets pinned Darwin arm64 `ast-grep 0.45.0`; see `docs/command-handbook.md` for the safety hold.
+- Do not run live ast-grep installation, retries, recovery, or version probes, including `/devtools install ast-grep` and `/devtools install all`, until process containment, bounded draining, and recovery ownership and cleanup are qualified. Preserve existing journals and staged files. The installer targets pinned Darwin arm64 `ast-grep 0.45.0`; see `docs/command-handbook.md` for the safety hold.
 - `/devtools` observes all other host-managed tools and gives manual guidance without invoking a host package manager.
 - `playwright-cli` remains an exact explicit install and is never included in `install all`.
 - `.pre-commit-config.yaml` is the canonical local hook configuration; `/devtools hooks-install` invokes the resolved local `pre-commit` executable with a finite deadline.
@@ -987,12 +988,18 @@ Epic 10 introduces an intent-mapping detector for common command families:
 - command wrapper: `scripts/auto_slash_command.py`
 - contract guide: `instructions/auto_slash_detector.md`
 
+**Safety hold:** `/auto-slash execute` can dispatch `/doctor` or a devtools
+install request. The former accesses the background store; an install intent
+without a recognized devtools target can resolve to `install all`, which includes
+ast-grep. Do not execute prompts that route to held commands. Preview-first can be
+disabled, so execution without `--force` is not always a preview.
+`/auto-slash doctor --json` may suggest executing `/doctor`; disregard that
+suggestion when background state must be preserved.
+
 Use:
 ```text
 /auto-slash status --json
 /auto-slash preview --prompt "run doctor diagnostics" --json
-/auto-slash execute --prompt "run doctor diagnostics" --json
-/auto-slash execute --prompt "run doctor diagnostics" --force --json
 /auto-slash disable-command devtools
 /auto-slash audit --limit 10 --json
 /auto-slash doctor --json
@@ -1001,14 +1008,14 @@ Use:
 Detector behavior:
 - maps natural-language prompts to `/doctor`, `/stack`, `/nvim`, or `/devtools`
 - enforces confidence + ambiguity thresholds before selecting a command
-- defaults to preview-first execution (`execute` requires `--force`)
+- defaults to preview-first execution; `--force` is required only when that setting is enabled
 - keeps per-command enable/disable controls in layered config
-- appends forced execution events to runtime audit log for traceability
+- appends execution events to the runtime audit log
 
 Examples:
 - basic: `/auto-slash preview --prompt "please run doctor diagnostics" --json`
 - intermediate: `/auto-slash preview --prompt "switch to focus mode" --json`
-- safety path: `/auto-slash execute --prompt "run doctor diagnostics" --json` then rerun with `--force`
+- do not execute a preview that routes to a command under a safety hold
 
 Limitations:
 - intentionally limited command set to reduce misfire risk
