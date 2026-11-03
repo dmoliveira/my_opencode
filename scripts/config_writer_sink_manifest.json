@@ -1,6 +1,24 @@
 [
   {
     "language": "python",
+    "file": "gateway_v2_dependency_profile_probe.py",
+    "function": "rewrite_config",
+    "kind": "os.replace",
+    "destination": "target",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_dependency_profile_probe.py",
+    "function": "set_foreign",
+    "kind": "path.write_text",
+    "destination": "path",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
     "file": "gateway_v2_dependency_contract_probe.py",
     "function": "write_fixture",
     "kind": "path.chmod",

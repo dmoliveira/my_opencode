@@ -2,6 +2,10 @@
 
 Status: in progress. This inventory identifies surfaces to investigate; it is not evidence of compatibility.
 
+The [isolated dependency-profile qualification](../../specs/opencode-v2-dependency-profile.md)
+tests owned dispatch and generation fencing with synthetic child runtimes only.
+It neither ports the backend guard nor grants parent-session authority.
+
 ## Confirmed incompatibilities
 
 | Surface | Evidence | Required work |

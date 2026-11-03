@@ -1193,9 +1193,12 @@ def runtime_session_health_summary(
     if stuck_findings or generic_stale_findings or int(runtime.get("generic_stale_count") or 0) > 0:
         repair_commands = [
             f"/session doctor --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --generic-stale-problem-threshold {generic_stale_problem_threshold} --json",
-            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --apply --json",
-            f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --apply --json",
         ]
+        if runtime.get("runtime_db_scan_complete") is True:
+            repair_commands.extend([
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --json",
+                f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds} --include-generic --json",
+            ])
     for command in runtime.get("runtime_permission_quick_fixes") or []:
         if command not in repair_commands:
             repair_commands.append(command)
