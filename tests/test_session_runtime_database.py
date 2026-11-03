@@ -56,6 +56,15 @@ class _CommitFaultConnection:
 
 
 class RuntimeDatabaseConnectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # Runtime directory checks require a private parent, even when the
+        # platform's default temporary directory is a sticky shared directory.
+        private_root = tempfile.TemporaryDirectory(prefix="runtime-db-tests-")
+        self.addCleanup(private_root.cleanup)
+        temporary_parent = patch.object(tempfile, "tempdir", private_root.name)
+        temporary_parent.start()
+        self.addCleanup(temporary_parent.stop)
+
     def _module(self):
         if str(SCRIPTS_DIR) not in sys.path:
             sys.path.insert(0, str(SCRIPTS_DIR))
@@ -645,7 +654,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             finally:
                 writer.close()
 
-    def test_backup_destination_open_failure_closes_source_and_cleans_partial(
+    def test_backup_destination_open_failure_closes_source_and_retains_private_partial(
         self,
     ) -> None:
         module = self._module()
@@ -657,8 +666,9 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             sentinel.write_bytes(b"preserve-me")
             source = MagicMock()
 
-            def fail_destination_open(path: str):
-                self.assertEqual(partial_path, Path(path))
+            def fail_destination_open(path: str, *, uri: bool, timeout: float):
+                self.assertTrue(path.startswith("file:///dev/fd/"))
+                self.assertTrue(uri)
                 partial_path.write_bytes(b"partial")
                 raise sqlite3.OperationalError("injected destination open failure")
 
@@ -680,15 +690,20 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                 ),
             ):
                 with self.assertRaisesRegex(
-                    sqlite3.OperationalError, "destination open failure"
-                ):
+                    sqlite3.OperationalError, "runtime snapshot online backup failed"
+                ) as caught:
                     module._backup_runtime_database(db_path)
 
+            self.assertIsInstance(caught.exception.__cause__, module.RuntimeSnapshotError)
+            self.assertEqual(
+                str(caught.exception.__cause__.__cause__), "injected destination open failure"
+            )
             source.close.assert_called_once_with()
-            self.assertFalse(partial_path.exists())
+            self.assertEqual(b"partial", partial_path.read_bytes())
+            self.assertEqual(0o600, partial_path.stat().st_mode & 0o777)
             self.assertEqual(b"preserve-me", sentinel.read_bytes())
 
-    def test_backup_interruption_closes_connections_and_cleans_partial(self) -> None:
+    def test_backup_interruption_closes_connections_and_retains_private_partial(self) -> None:
         module = self._module()
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "runtime.db"
@@ -698,12 +713,14 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             sentinel.write_bytes(b"preserve-me")
             source = MagicMock()
             destination = MagicMock()
+            destination.execute.return_value.fetchone.return_value = ("off",)
             source.backup.side_effect = sqlite3.OperationalError(
                 "injected backup interruption"
             )
 
-            def open_destination(path: str):
-                self.assertEqual(partial_path, Path(path))
+            def open_destination(path: str, *, uri: bool, timeout: float):
+                self.assertTrue(path.startswith("file:///dev/fd/"))
+                self.assertTrue(uri)
                 partial_path.write_bytes(b"partial")
                 return destination
 
@@ -721,14 +738,20 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
                 patch.object(module.sqlite3, "connect", side_effect=open_destination),
             ):
                 with self.assertRaisesRegex(
-                    sqlite3.OperationalError, "backup interruption"
-                ):
+                    sqlite3.OperationalError, "runtime snapshot online backup failed"
+                ) as caught:
                     module._backup_runtime_database(db_path)
 
-            source.backup.assert_called_once_with(destination)
+            self.assertIsInstance(caught.exception.__cause__, module.RuntimeSnapshotError)
+            self.assertEqual(
+                str(caught.exception.__cause__.__cause__), "injected backup interruption"
+            )
+            source.backup.assert_called_once()
+            self.assertIs(source.backup.call_args.args[0], destination)
             source.close.assert_called_once_with()
             destination.close.assert_called_once_with()
-            self.assertFalse(partial_path.exists())
+            self.assertEqual(b"partial", partial_path.read_bytes())
+            self.assertEqual(0o600, partial_path.stat().st_mode & 0o777)
             self.assertEqual(b"preserve-me", sentinel.read_bytes())
 
 
@@ -2177,7 +2200,7 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             report = json.loads(output.getvalue())
             self.assertEqual(1, code)
             self.assertEqual("FAIL", report["result"])
-            self.assertTrue(any("failed to open runtime session database for repair" in p for p in report["problems"]))
+            self.assertTrue(any("runtime source identity changed after backup" in p for p in report["problems"]))
             self.assertEqual(1, report["candidate_count"])
             self.assertEqual(0, report["repaired_count"])
             self.assertFalse(db_path.exists())

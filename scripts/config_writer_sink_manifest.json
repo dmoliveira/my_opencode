@@ -2847,8 +2847,17 @@
     "language": "python",
     "file": "session_command.py",
     "function": "_backup_runtime_database",
-    "kind": "path.unlink",
-    "destination": "backup_path",
+    "kind": "os.open",
+    "destination": "backup_path.name",
+    "count": 1,
+    "classification": "runtime_or_artifact_exemption"
+  },
+  {
+    "language": "python",
+    "file": "session_command.py",
+    "function": "_backup_runtime_database",
+    "kind": "os.open",
+    "destination": "db_path.parent",
     "count": 1,
     "classification": "runtime_or_artifact_exemption"
   },

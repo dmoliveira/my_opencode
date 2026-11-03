@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
 import sqlite3
+import stat
 import sys
 import time
 import uuid
@@ -15,6 +17,8 @@ from typing import Any
 
 from runtime_history_snapshot import (  # type: ignore
     RuntimeSnapshotError,
+    _run_online_backup,
+    _validate_snapshot_database,
     create_runtime_history_snapshot,
     default_runtime_snapshot_output_dir,
 )
@@ -2413,24 +2417,101 @@ def _child_session_still_stale_incomplete(
 
 
 def _backup_runtime_database(db_path: Path) -> Path:
-    """Create a transactionally consistent SQLite backup before runtime repair."""
+    """Create a private, no-clobber SQLite backup before runtime repair."""
     backup_path = db_path.with_name(f"{db_path.name}.pre-repair-{uuid.uuid4().hex}.sqlite3")
-    source: sqlite3.Connection | None = None
-    destination: sqlite3.Connection | None = None
+    required_flags = ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC")
+    if os.name != "posix" or not all(hasattr(os, flag) for flag in required_flags):
+        raise sqlite3.OperationalError("private descriptor-bound runtime backup is unavailable")
+    created = False
     try:
-        source = _connect_runtime_database_readonly(db_path)
-        destination = sqlite3.connect(str(backup_path))
-        source.backup(destination)
-    except Exception:
-        backup_path.unlink(missing_ok=True)
-        raise
-    else:
-        return backup_path
-    finally:
-        if destination is not None:
-            destination.close()
-        if source is not None:
-            source.close()
+        with contextlib.ExitStack() as resources:
+            source_inspection = inspect_sidecar(db_path, target="runtime_db")
+            if source_inspection.state not in {"private", "repairable"}:
+                raise sqlite3.OperationalError("pre-repair backup source is unsafe or unverified")
+            source = _connect_runtime_database_readonly(db_path)
+            resources.callback(source.close)
+            parent_fd = os.open(
+                db_path.parent,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+            )
+            resources.callback(os.close, parent_fd)
+            parent = os.fstat(parent_fd)
+            if (
+                not stat.S_ISDIR(parent.st_mode)
+                or parent.st_uid != os.geteuid()
+                or stat.S_IMODE(parent.st_mode) & 0o022
+            ):
+                raise sqlite3.OperationalError("pre-repair backup parent is unsafe")
+            descriptor = os.open(
+                backup_path.name,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                0o600,
+                dir_fd=parent_fd,
+            )
+            created = True
+            resources.callback(os.close, descriptor)
+            os.fchmod(descriptor, 0o600)
+            original = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(original.st_mode)
+                or original.st_uid != os.geteuid()
+                or original.st_nlink != 1
+                or stat.S_IMODE(original.st_mode) != 0o600
+            ):
+                raise sqlite3.OperationalError("pre-repair backup file is unsafe")
+            _run_online_backup(source, descriptor)
+            _validate_snapshot_database(descriptor, "quick_check")
+            os.fsync(descriptor)
+            current = os.stat(backup_path.name, dir_fd=parent_fd, follow_symlinks=False)
+            current_parent = os.stat(db_path.parent, follow_symlinks=False)
+            opened_parent = os.fstat(parent_fd)
+            opened = os.fstat(descriptor)
+            if (
+                (current_parent.st_dev, current_parent.st_ino) != (parent.st_dev, parent.st_ino)
+                or (opened_parent.st_dev, opened_parent.st_ino) != (parent.st_dev, parent.st_ino)
+                or not stat.S_ISDIR(current_parent.st_mode)
+                or current_parent.st_uid != os.geteuid()
+                or stat.S_IMODE(current_parent.st_mode) & 0o022
+                or stat.S_IMODE(opened_parent.st_mode) & 0o022
+                or (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino)
+                or (opened.st_dev, opened.st_ino) != (original.st_dev, original.st_ino)
+                or not stat.S_ISREG(current.st_mode)
+                or not stat.S_ISREG(opened.st_mode)
+                or current.st_uid != os.geteuid()
+                or opened.st_uid != os.geteuid()
+                or current.st_nlink != 1
+                or opened.st_nlink != 1
+                or stat.S_IMODE(current.st_mode) != 0o600
+                or stat.S_IMODE(opened.st_mode) != 0o600
+            ):
+                raise sqlite3.OperationalError("pre-repair backup identity changed")
+            os.fsync(parent_fd)
+            return backup_path
+    except Exception as exc:
+        if created:
+            raise sqlite3.OperationalError(
+                f"pre-repair backup failed; an unverified artifact may remain at {backup_path}: {exc}"
+            ) from exc
+        if isinstance(exc, sqlite3.Error):
+            raise
+        raise sqlite3.OperationalError("private pre-repair backup could not be created") from exc
+
+
+def _runtime_repair_source_identity(db_path: Path) -> tuple[int, int, int, int, int] | None:
+    """Observe source identity and permissions without claiming an atomic binding."""
+    try:
+        summary = _runtime_permission_summary(db_path)
+        source = inspect_sidecar(db_path, target="runtime_db")
+        snapshot = source.snapshot
+        if (
+            summary.get("runtime_permission_status") not in {"private", "repair_required"}
+            or source.state not in {"private", "repairable"}
+            or snapshot is None
+        ):
+            return None
+        return snapshot.dev, snapshot.ino, snapshot.uid, snapshot.nlink, snapshot.mode
+    except (SidecarSecurityError, OSError, ValueError):
+        return None
 
 
 def _repair_runtime_stuck_sessions(
@@ -2447,6 +2528,9 @@ def _repair_runtime_stuck_sessions(
         "stale_delegated_child_runtime_recovery_missed",
         "stale_running_tool",
     }
+    initial_source_identity = (
+        _runtime_repair_source_identity(db_path) if apply_changes else None
+    )
     scan = _scan_runtime_stuck_sessions(db_path, stale_seconds)
 
     def collect_candidates(current_scan: dict) -> list[dict]:
@@ -2504,10 +2588,19 @@ def _repair_runtime_stuck_sessions(
         )
     else:
         base_problems = scan["problems"] if not scope_session_id else []
+    unsafe_runtime = apply_changes and (
+        initial_source_identity is None
+        or scan.get("runtime_permission_status") not in {"private", "repair_required"}
+    )
+    if unsafe_runtime:
+        base_problems = [
+            *base_problems,
+            "stale repair refused: runtime filesystem safety is blocked or unverified",
+        ]
     missing_after_scan = apply_changes and bool(candidate_findings) and not db_path.exists()
     if missing_after_scan:
         base_problems = [*base_problems, "runtime session database disappeared after scan"]
-    if not apply_changes or not candidate_findings or missing_after_scan:
+    if not apply_changes or not candidate_findings or missing_after_scan or unsafe_runtime:
         return {
             "warnings": scan["warnings"],
             "problems": base_problems,
@@ -2516,8 +2609,20 @@ def _repair_runtime_stuck_sessions(
             "repairs": repairs,
             "preview": candidate_findings,
             "backup_path": None,
+            "runtime_permission_status": scan.get("runtime_permission_status"),
         }
 
+    source_identity = _runtime_repair_source_identity(db_path)
+    if source_identity is None or source_identity != initial_source_identity:
+        return {
+            "warnings": scan["warnings"],
+            "problems": [*base_problems, "stale repair refused: runtime source identity is unverified"],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": 0,
+            "repairs": repairs,
+            "preview": candidate_findings,
+            "backup_path": None,
+        }
     try:
         backup_path = _backup_runtime_database(db_path)
     except sqlite3.DatabaseError as exc:
@@ -2529,6 +2634,16 @@ def _repair_runtime_stuck_sessions(
             "repairs": repairs,
             "preview": candidate_findings,
             "backup_path": None,
+        }
+    if _runtime_repair_source_identity(db_path) != source_identity:
+        return {
+            "warnings": scan["warnings"],
+            "problems": [*base_problems, "stale repair refused: runtime source identity changed after backup"],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": 0,
+            "repairs": repairs,
+            "preview": candidate_findings,
+            "backup_path": str(backup_path),
         }
     try:
         conn = _connect_runtime_database_writable(db_path)
@@ -2542,8 +2657,18 @@ def _repair_runtime_stuck_sessions(
             "preview": candidate_findings,
             "backup_path": str(backup_path),
         }
-    conn.row_factory = sqlite3.Row
     try:
+        if _runtime_repair_source_identity(db_path) != source_identity:
+            return {
+                "warnings": scan["warnings"],
+                "problems": [*base_problems, "stale repair refused: runtime source identity changed while opening writer"],
+                "candidate_count": len(candidate_findings),
+                "repaired_count": 0,
+                "repairs": repairs,
+                "preview": candidate_findings,
+                "backup_path": str(backup_path),
+            }
+        conn.row_factory = sqlite3.Row
         remaining_candidates = candidate_findings
         for _round in range(20):
             if not remaining_candidates:
@@ -4065,7 +4190,11 @@ def _command_repair_stale(argv: list[str], index_path: Path) -> int:
         "preview": repair["preview"],
         "backup_path": repair["backup_path"],
         "quick_fixes": []
-        if apply_changes or not repair["candidate_count"]
+        if (
+            apply_changes
+            or not repair["candidate_count"]
+            or repair.get("runtime_permission_status") not in {"private", "repair_required"}
+        )
         else [
             f"/session repair-stale --db-path {shlex.quote(str(db_path))} --stale-seconds {stale_seconds}{f' --session-id {shlex.quote(session_id)}' if session_id else ''}{' --include-generic --confirm-generic' if include_generic else ''} --apply --json"
         ],
