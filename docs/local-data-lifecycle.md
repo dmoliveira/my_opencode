@@ -195,11 +195,14 @@ so this demonstrates a post-observation race, not complete pagination.
 ### Session Sidecars
 
 Use `python3 scripts/session_command.py show <sessionID> --json` and `doctor --json`
-for inspection. An index entry is not a complete list of filesystem artifacts or
-references in other stores. `show` returns one matching entry and does not prove
-that duplicate IDs are absent. Preserve corrupt originals via the existing
-quarantine workflow. No per-session sidecar delete/redaction contract is
-implemented here.
+for inspection. In this version, `show` rejects multiple parsed index rows with
+the requested ID using `session_index_duplicate_id` rather than choosing one.
+That check covers only the read snapshot: it does not validate duplicate JSON
+keys, prevent later writes, establish source identity, or cover `current`,
+`handoff`, other files, or references in other stores. An index entry is not a
+complete list of filesystem artifacts. Preserve corrupt originals via the
+existing quarantine workflow. No per-session sidecar delete/redaction contract
+is implemented here.
 
 ### Shared Memory
 

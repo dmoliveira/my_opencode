@@ -289,7 +289,7 @@ def preview(value: Any) -> dict:
         )
         boundaries += [
             "Index inspection does not inventory every digest, handoff, transcript or shared-memory reference.",
-            "Owner show selects one match and does not establish that duplicate IDs are absent.",
+            "Verify owner version; duplicate-ID rejection covers only the parsed index snapshot, not other artifacts or later changes.",
             "Malformed sidecars must be preserved, not silently rebuilt or removed.",
         ]
     elif store == "shared_memory":

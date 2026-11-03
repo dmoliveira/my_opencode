@@ -2838,7 +2838,22 @@ def _command_show(argv: list[str], index_path: Path) -> int:
             },
             json_output,
         )
-    match = next((row for row in rows if row.get("session_id") == target_id), None)
+    match = None
+    for row in rows:
+        if row.get("session_id") != target_id:
+            continue
+        if match is not None:
+            return _emit(
+                {
+                    "result": "FAIL",
+                    "command": "show",
+                    "reason_code": "session_index_duplicate_id",
+                    "error": "multiple session-index entries match the requested ID",
+                    "index_path": str(index_path),
+                },
+                json_output,
+            )
+        match = row
     if not isinstance(match, dict):
         return _emit(
             {
