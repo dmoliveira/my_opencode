@@ -51,10 +51,12 @@ Use the strongest realistic isolated environment available without turning a nor
 `make selftest` ignores inherited `GIT_*` overrides and system/global Git
 configuration in its own process. Its `--since` tag coverage uses a temporary
 Git repository rather than changing refs in the checkout, and its image
-preference fixtures use temporary paths. These safeguards do not isolate all
-checkout-relative state: run the full self-test in a disposable standalone
-checkout with isolated home, runtime, and temporary paths when preserving local
-data matters.
+preference fixtures use temporary paths. Known claims, agent-pool, audit,
+workflow, task-graph, daemon, delivery, and background-job paths are rebound to
+an owned temporary runtime. These safeguards do not isolate all
+checkout-relative or inherited state: run the full self-test in a disposable
+standalone checkout with isolated home, runtime, and temporary paths when
+preserving local data matters.
 
 Examples:
 
