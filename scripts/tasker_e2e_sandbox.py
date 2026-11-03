@@ -21,6 +21,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ID_RE = re.compile(r"\b(?P<kind>task|epic|memory|doc|link)_\d+\b")
 TASKER_MODEL = "opencode/deepseek-v4.1-flash-free"
 SHELL_OPERATOR_CHARS = frozenset(";&|<>()")
+TASKER_EVENT_SHELL_TOOLS = frozenset({"bash", "shell"})
+TASKER_EVENT_READ_TOOLS = frozenset({"read", "list", "glob", "grep"})
 TASKER_READ_ONLY_SUBCOMMANDS = frozenset(
     {"config", "current", "find", "get", "help", "history", "list", "next", "queue"}
 )
@@ -568,13 +570,37 @@ def oc_json(*args: str) -> dict[str, Any]:
     return json.loads(result.stdout)
 
 
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"invalid JSON constant: {value}")
+
+
 def parse_events(stdout: str) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    for line in stdout.splitlines():
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
+    for line_number, line in enumerate(stdout.splitlines(), start=1):
+        if not line.strip():
             continue
+        try:
+            event = json.loads(
+                line,
+                object_pairs_hook=_unique_json_object,
+                parse_constant=_reject_json_constant,
+            )
+        except ValueError as exc:
+            raise AssertionError(f"invalid JSON event on line {line_number}") from exc
+        if not isinstance(event, dict):
+            raise AssertionError(f"event on line {line_number} is not an object")  # noqa: TRY004
+        events.append(event)
+    if not events:
+        raise AssertionError("no tasker event evidence")
     return events
 
 
@@ -591,15 +617,102 @@ def extract_commands(events: list[dict[str, Any]]) -> list[str]:
     for event in events:
         if event.get("type") != "tool_use":
             continue
-        part = event.get("part") or {}
-        if part.get("tool") != "bash":
-            continue
-        state = part.get("state") or {}
-        input_payload = state.get("input") or {}
-        command = input_payload.get("command")
-        if isinstance(command, str):
+        part = event.get("part")
+        if not isinstance(part, dict):
+            raise AssertionError("tool event has no valid part")  # noqa: TRY004
+        tool = part.get("tool")
+        if (
+            not isinstance(tool, str)
+            or tool not in TASKER_EVENT_SHELL_TOOLS | TASKER_EVENT_READ_TOOLS
+        ):
+            raise AssertionError(f"unsupported tasker tool evidence: {tool!r}")
+        state = part.get("state")
+        if not isinstance(state, dict) or state.get("status") != "completed":
+            raise AssertionError(f"incomplete tasker tool state: {tool}")
+        input_payload = state.get("input")
+        if not isinstance(input_payload, dict) or not isinstance(
+            state.get("output"), str
+        ):
+            raise AssertionError(f"incomplete tasker tool input or output: {tool}")  # noqa: TRY004
+        if tool in TASKER_EVENT_SHELL_TOOLS:
+            command = input_payload.get("command")
+            if not isinstance(command, str) or not command.strip():
+                raise AssertionError(f"missing tasker shell command: {tool}")
             commands.append(command)
     return commands
+
+
+def validate_event_stream(events: list[dict[str, Any]]) -> str:
+    """Check the observed parent trace, not the runtime's enforcement or completeness."""
+    expected_parts = {
+        "step_start": "step-start",
+        "step_finish": "step-finish",
+        "text": "text",
+        "tool_use": "tool",
+    }
+    session: str | None = None
+    step_message: str | None = None
+    step_open = False
+    finished = False
+    step_tools = 0
+    step_text: list[str] = []
+    final_text = ""
+    for event in events:
+        if not isinstance(event, dict):
+            raise AssertionError("tasker event is not an object")  # noqa: TRY004
+        kind = event.get("type")
+        if not isinstance(kind, str) or kind not in expected_parts:
+            raise AssertionError(f"unsupported tasker event: {kind!r}")
+        event_session = event.get("sessionID")
+        if not isinstance(event_session, str) or not event_session:
+            raise AssertionError("tasker event has no session identity")
+        if session is None:
+            session = event_session
+        if event_session != session:
+            raise AssertionError("tasker event session changed")
+        part = event.get("part")
+        if not isinstance(part, dict) or part.get("type") != expected_parts[kind]:
+            raise AssertionError(f"invalid tasker event part: {kind}")
+        if part.get("sessionID") != session:
+            raise AssertionError("tasker event part session is missing or changed")
+        message = part.get("messageID")
+        if not isinstance(message, str) or not message:
+            raise AssertionError("tasker event part has no message identity")
+        if finished:
+            raise AssertionError("tasker events follow the final step")
+        if kind == "step_start":
+            if step_open:
+                raise AssertionError("overlapping tasker steps")
+            step_open = True
+            step_message = message
+            step_tools = 0
+            step_text = []
+        elif not step_open:
+            raise AssertionError("tasker event outside a step")
+        elif message != step_message:
+            raise AssertionError("tasker event message changed within a step")
+        elif kind == "tool_use":
+            step_tools += 1
+        elif kind == "text":
+            text = part.get("text")
+            if not isinstance(text, str):
+                raise AssertionError("invalid tasker text event")
+            step_text.append(text)
+        else:
+            reason = part.get("reason")
+            if reason == "tool-calls" and step_tools:
+                step_open = False
+            elif reason == "stop" and not step_tools:
+                final_text = "".join(step_text).strip()
+                if not final_text:
+                    raise AssertionError("missing final tasker response")
+                step_open = False
+                finished = True
+            else:
+                raise AssertionError("incomplete or inconsistent tasker step")
+    if not finished or step_open:
+        raise AssertionError("incomplete tasker event stream")
+    return final_text
 
 
 def extract_ids(events: list[dict[str, Any]]) -> dict[str, set[str]]:
@@ -881,22 +994,31 @@ def validate_commands(scenario: Scenario, commands: list[str]) -> None:
 def validate_scenario(
     scenario: Scenario, events: list[dict[str, Any]]
 ) -> dict[str, Any]:
+    final_text = validate_event_stream(events)
     commands = extract_commands(events)
     validate_commands(scenario, commands)
     ids = extract_ids(events)
-    final_text = extract_text(events).strip()
     warnings: list[str] = []
     if scenario.mode == "refusal":
         normalized = final_text.lower()
-        if (
-            "planning-only" not in normalized
-            and "did not execute" not in normalized
-            and "not done" not in normalized
-            and "out of scope" not in normalized
-        ):
-            warnings.append(
-                "refusal response phrasing was implicit rather than explicit"
-            )
+        refusal_phrases = (
+            "did not execute",
+            "didn't execute",
+            "will not execute",
+            "won't execute",
+            "cannot execute",
+            "can't execute",
+            "did not run",
+            "didn't run",
+            "will not run",
+            "won't run",
+            "cannot run",
+            "can't run",
+            "not done",
+            "out of scope",
+        )
+        if not any(phrase in normalized for phrase in refusal_phrases):
+            raise AssertionError("refusal response lacks an explicit planning boundary")
         return {"name": scenario.name, "resolved_ids": {}, "warnings": warnings}
     if not ID_RE.search(final_text):
         warnings.append("final assistant text omitted explicit artifact ids")
@@ -988,9 +1110,9 @@ def run_scenario(
                 timeout_ms=timeout_ms,
                 env_overrides=runtime_env,
             )
-            events = parse_events(result.stdout)
             if result.returncode != 0:
                 raise AssertionError(result.stderr or result.stdout)
+            events = parse_events(result.stdout)
             validated_runs.append(validate_scenario(scenario, events))
         outcome = validated_runs[-1]
         outcome["validated_runs"] = len(validated_runs)
