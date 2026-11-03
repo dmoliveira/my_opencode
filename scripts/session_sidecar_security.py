@@ -1617,7 +1617,7 @@ def _secure_sidecar_file_lock(
     timeout_seconds: float = 5.0,
     repair_existing: bool = True,
     reject_parent_symlink: bool = False,
-) -> Iterator[None]:
+) -> Iterator[int]:
     _require_supported_platform()
     try:
         import fcntl
@@ -1772,7 +1772,7 @@ def _secure_sidecar_file_lock(
                         )
                     time.sleep(min(0.05, max(0.001, deadline - time.monotonic())))
             try:
-                yield
+                yield authority.parent_fd
             finally:
                 fcntl.flock(descriptor, fcntl.LOCK_UN)
         finally:
@@ -1786,7 +1786,9 @@ def secure_sidecar_lock(
     timeout_seconds: float = 5.0,
     repair_existing: bool = True,
     reject_parent_symlink: bool = False,
-) -> Iterator[None]:
+    borrow_parent_fd: bool = False,
+) -> Iterator[int | None]:
+    """Hold the lock; an optional parent descriptor is borrowed only inside the context."""
     _require_supported_platform()
     if timeout_seconds < 0:
         raise ValueError("timeout_seconds must be non-negative")
@@ -1810,7 +1812,7 @@ def secure_sidecar_lock(
             timeout_seconds=remaining,
             repair_existing=repair_existing,
             reject_parent_symlink=reject_parent_symlink,
-        ):
-            yield
+        ) as parent_fd:
+            yield parent_fd if borrow_parent_fd else None
     finally:
         process_lock.release()

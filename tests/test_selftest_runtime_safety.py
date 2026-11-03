@@ -157,6 +157,7 @@ class SelftestRuntimeSafetyTest(unittest.TestCase):
             "(bg / 'jobs.json').write_text(json.dumps({'version': 1, 'jobs': ["
             "{'id': 'owned-terminal', 'status': 'completed', 'created_at': '2000-01-01T00:00:00Z', "
             "'log_path': str(log)}]}))\n"
+            "(bg / 'jobs.json').chmod(0o600)\n"
             "cleanup = subprocess.run([sys.executable, str(selftest.BG_MANAGER_SCRIPT), 'cleanup', "
             "'--max-terminal', '0', '--json'], env=env, capture_output=True, text=True, timeout=30, check=False)\n"
             "listing = subprocess.run([sys.executable, str(selftest.BG_MANAGER_SCRIPT), 'list', "

@@ -510,7 +510,9 @@ These issues were confirmed with synthetic fixtures, not live jobs.
 Other `/bg` diagnostics and listing commands read or initialize the store even
 without job writeback. The lock now refuses observed symlinks, hardlinks,
 nonregular files, unsafe parent paths, and non-private existing locks without
-repairing them. This does not make subsequent pathname-based store access or
+repairing them. Index access also rejects unsafe or non-`0600` existing files
+and indexes larger than 16 MiB, without repairing or deleting them. These
+checks do not make subsequent pathname-based store access or
 noncooperating writers safe. Avoid these commands on live state that must be
 preserved. `/doctor`, `/doctor status`, and `/doctor run` include a background
 doctor check, and `/agent-pool health` invokes background status, so they have
