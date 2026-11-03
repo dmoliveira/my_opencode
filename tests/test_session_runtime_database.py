@@ -2057,34 +2057,61 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertEqual(before, self._quiescent_snapshot(db_path))
             backup.assert_not_called()
 
-    def test_incomplete_preview_without_problems_cannot_report_success(self) -> None:
+    def test_incomplete_preview_reports_failure_with_or_without_scan_problems(self) -> None:
         module = self._module()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db_path = root / "missing.db"
             index_path = root / "unused-index.json"
-            for apply in (False, True):
-                for scoped in (False, True):
-                    with self.subTest(apply=apply, scoped=scoped):
-                        args = ["--db-path", str(db_path), "--json"]
-                        if apply:
-                            args.append("--apply")
-                        if scoped:
-                            args.extend(["--session-id", "synthetic-session"])
-                        with contextlib.redirect_stdout(io.StringIO()) as output:
-                            code = module._command_repair_stale(args, index_path)
-                        report = json.loads(output.getvalue())
-                        self.assertEqual(1, code)
-                        self.assertEqual("FAIL", report["result"])
-                        self.assertIn(
-                            "runtime session database scan did not complete",
-                            report["problems"],
-                        )
-                        self.assertEqual(0, report["candidate_count"])
-                        self.assertEqual(0, report["repaired_count"])
-                        self.assertIsNone(report["backup_path"])
-                        self.assertFalse(db_path.exists())
-                        self.assertFalse(index_path.exists())
+            for permission_status, expected_problem in (
+                ("missing", "runtime session database scan did not complete"),
+                ("blocked", "runtime database permission safety check failed"),
+            ):
+                permission_summary = {
+                    "runtime_permission_status": permission_status,
+                    "runtime_permission_reason_code": "synthetic_test",
+                    "runtime_permission_repair_required": False,
+                    "runtime_permission_apply_allowed": False,
+                    "runtime_permission_findings": [],
+                }
+                for apply in (False, True):
+                    for scoped in (False, True):
+                        with self.subTest(permission_status=permission_status, apply=apply, scoped=scoped):
+                            args = ["--db-path", str(db_path), "--json"]
+                            if apply:
+                                args.append("--apply")
+                            if scoped:
+                                args.extend(["--session-id", "synthetic-session"])
+                            with (
+                                patch.object(module, "_runtime_permission_summary", return_value=permission_summary),
+                                contextlib.redirect_stdout(io.StringIO()) as output,
+                            ):
+                                code = module._command_repair_stale(args, index_path)
+                            report = json.loads(output.getvalue())
+                            self.assertEqual(1, code)
+                            self.assertEqual("FAIL", report["result"])
+                            self.assertIn(expected_problem, report["problems"])
+                            self.assertEqual(0, report["candidate_count"])
+                            self.assertEqual(0, report["repaired_count"])
+                            self.assertIsNone(report["backup_path"])
+                            self.assertFalse(db_path.exists())
+                            self.assertFalse(index_path.exists())
+
+    def test_missing_database_refuses_repair_with_real_permission_check(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "missing.db"
+            args = ["--db-path", str(db_path), "--apply", "--json"]
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                code = module._command_repair_stale(args, root / "unused-index.json")
+            report = json.loads(output.getvalue())
+            self.assertEqual(1, code)
+            self.assertEqual("FAIL", report["result"])
+            self.assertTrue(report["problems"])
+            self.assertEqual(0, report["repaired_count"])
+            self.assertIsNone(report["backup_path"])
+            self.assertFalse(db_path.exists())
 
     def test_database_missing_after_preview_cannot_report_repair_success(self) -> None:
         module = self._module()
