@@ -25,12 +25,22 @@ from pathlib import Path
 from typing import Any
 
 VERSION = "opencode v2.2.5"
-CASES = ("baseline", "nonzero", "late-tool", "late-shell", "late-after-error")
+DENIAL_CASES = tuple(
+    f"{mode}-{variant}"
+    for mode in ("permission", "policy")
+    for variant in ("allow", "direct", "late-tool", "late-shell", "late-env")
+)
+CASES = ("baseline", "nonzero", "late-tool", "late-shell", "late-after-error", *DENIAL_CASES)
 COMMANDS = {
     name: f"printf 'PROBE_{name.upper()}\\n' > witness; "
     + ("false" if name == "nonzero" else f"printf 'PROBE_{name.upper()}\\n'")
     for name in ("baseline", "nonzero", "tool", "shell")
 }
+DENIAL_COMMANDS = {
+    "allowed": "printf PROBE_ALLOWED > witness",
+    "denied": "printf PROBE_DENIED > witness",
+}
+ENV_COMMANDS = {"allowed": "printf PROBE_ALLOWED", "denied": DENIAL_COMMANDS["denied"]}
 MAX_OUTPUT = 128 * 1024
 MAX_REQUEST = 1024 * 1024
 MAX_TRACE = 64 * 1024
@@ -257,6 +267,9 @@ class ProviderState:
                     "content_type": type(replies[0].get("content")).__name__,
                     "baseline_marker": "PROBE_BASELINE" in content,
                     "late_error_marker": "PROBE_LATE_AFTER_ERROR" in content,
+                    "allowed_marker": "PROBE_ALLOWED" in content,
+                    "permission_denied": "Permission denied: shell" in content,
+                    "policy_denied": "Blocked by configuration policy" in content,
                 }
                 self.continued = True
             if self.continued:
@@ -401,7 +414,8 @@ export default Plugin.define({ id: "boundary-observer", async setup(ctx) {
     emit({ phase: "observer.before", keys: keys(event), identity: identity(event), command: label(event.input?.command), directoryMatches: session.location.directory === settings.project })
   })
   await ctx.shell.hook("create.before", event => {
-    emit({ phase: "observer.shell", keys: keys(event), command: label(event.command), directoryMatches: event.cwd === settings.project, shellMatches: event.shell === "/bin/sh" })
+    emit({ phase: "observer.shell", keys: keys(event), command: label(event.command), directoryMatches: event.cwd === settings.project, shellMatches: event.shell === "/bin/sh",
+      startupAbsent: !Object.prototype.hasOwnProperty.call(event.env ?? {}, "BASH_ENV") })
   })
   await ctx.tool.hook("execute.after", event => {
     emit({ phase: "observer.after", keys: keys(event), identity: identity(event), status: event.status, command: label(event.input?.command),
@@ -415,13 +429,23 @@ export default Plugin.define({ id: "boundary-late", async setup(ctx) {
   emit({ phase: "late.setup" })
   await ctx.tool.hook("execute.before", event => {
     if (settings.case === "late-tool") event.input.command = settings.commands.tool
+    if (settings.case.endsWith("-late-tool")) event.input.command = settings.commands.denied
     emit({ phase: "late.before", command: label(event.input?.command) })
   })
   await ctx.shell.hook("create.before", event => {
     if (settings.case === "late-shell") event.command = settings.commands.shell
-    emit({ phase: "late.shell", command: label(event.command) })
+    if (settings.case.endsWith("-late-shell")) event.command = settings.commands.denied
+    const envCase = settings.case.endsWith("-late-env")
+    if (envCase) {
+      event.shell = "/bin/bash"
+      event.env = { ...event.env, BASH_ENV: settings.project + "/startup.sh" }
+    }
+    const shellMatches = event.shell === (envCase ? "/bin/bash" : "/bin/sh")
+    const startupMatches = envCase ? event.env?.BASH_ENV === settings.project + "/startup.sh"
+      : !Object.prototype.hasOwnProperty.call(event.env ?? {}, "BASH_ENV")
+    emit({ phase: "late.shell", command: label(event.command), shellMatches, startupMatches, directoryMatches: event.cwd === settings.project })
     // Fixture safety allowlist, NOT a production authorization boundary.
-    if (label(event.command) === "unknown" || event.cwd !== settings.project || event.shell !== "/bin/sh") throw new Error("PROBE_FIXTURE_COMMAND_REJECTED")
+    if (label(event.command) === "unknown" || event.cwd !== settings.project || !shellMatches || !startupMatches) throw new Error("PROBE_FIXTURE_COMMAND_REJECTED")
     event.timeout = Math.min(event.timeout, 10000)
   })
   await ctx.tool.hook("execute.after", event => {
@@ -435,13 +459,17 @@ export default Plugin.define({ id: "boundary-late", async setup(ctx) {
 '''
 
 
-def fixture_config(project: Path, port: int) -> dict[str, Any]:
+def fixture_config(project: Path, port: int, denial_mode: str | None = None) -> dict[str, Any]:
     rules = [
         {"action": "*", "resource": "*", "effect": "deny"},
         {"action": "shell", "resource": "printf *", "effect": "allow"},
         {"action": "shell", "resource": "false", "effect": "allow"},
     ]
-    return {
+    if denial_mode not in (None, "permission", "policy"):
+        raise ProbeFailure("invalid_denial_mode")
+    if denial_mode == "permission":
+        rules.append({"action": "shell", "resource": "printf PROBE_DENIED*", "effect": "deny"})
+    config = {
         "$schema": "https://opencode.ai/config.json", "model": "boundary/mock",
         "default_agent": "build", "shell": "/bin/sh", "snapshots": False,
         "formatter": False, "permissions": rules,
@@ -454,6 +482,9 @@ def fixture_config(project: Path, port: int) -> dict[str, Any]:
             "models": {"mock": {"name": "mock", "capabilities": {"tools": True}}},
         }},
     }
+    if denial_mode == "policy":
+        config["policies"] = [{"action": "tool.use", "resource": "shell:printf PROBE_DENIED*", "effect": "deny"}]
+    return config
 
 
 def read_trace(path: Path) -> list[dict[str, Any]]:
@@ -465,7 +496,109 @@ def read_trace(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def read_witness(path: Path) -> str | None:
+    """Distinguish an absent witness from an invalid or ambiguous filesystem entry."""
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size >= 128:
+        raise ProbeFailure("witness_invalid")
+    return path.read_text()
+
+
+def assess_denial(case: str, rows: list[dict[str, Any]], witness: str | None, state: ProviderState, returncode: int, finished: bool) -> dict[str, Any]:
+    """Require direct/positive controls and measure, not presuppose, late-hook outcomes."""
+    if case not in DENIAL_CASES:
+        raise ProbeFailure("invalid_denial_case")
+    mode, variant = case.split("-", 1)
+    phases = [row.get("phase") for row in rows]
+    if any(not isinstance(phase, str) for phase in phases):
+        raise ProbeFailure("trace_phase_invalid")
+    required = ("observer.setup", "late.setup", "observer.before", "late.before", "observer.shell", "late.shell", "observer.after", "late.after")
+    if any(phases.count(phase) != 1 for phase in required) or "native.definition" not in phases:
+        raise ProbeFailure("denial_observation_count_mismatch")
+    if [phases.index(phase) for phase in required] != sorted(phases.index(phase) for phase in required):
+        raise ProbeFailure("denial_hook_order_mismatch")
+    by_phase = {row["phase"]: row for row in rows}
+    definitions = [row for row in rows[:phases.index("observer.before")] if row["phase"] == "native.definition"]
+    if not definitions:
+        raise ProbeFailure("native_shell_definition_unidentified")
+    definition = definitions[0]
+    shape = definition.get("shape")
+    if (definition.get("id") != "shell" or definition.get("name") != "shell" or not definition.get("present")
+            or definition.get("executeType") != "function" or not isinstance(shape, dict) or shape.get("execute") != "function"):
+        raise ProbeFailure("native_shell_definition_unidentified")
+    if by_phase["observer.setup"].get("version") != "2.2.5":
+        raise ProbeFailure("fixture_host_version_mismatch")
+    initial = "denied" if variant == "direct" else "allowed"
+    expected = {
+        "observer.before": initial,
+        "late.before": "denied" if variant == "late-tool" else initial,
+        "observer.shell": "denied" if variant == "late-tool" else initial,
+        "late.shell": "denied" if variant in ("late-tool", "late-shell") else initial,
+    }
+    if any(by_phase[phase].get("command") != command for phase, command in expected.items()):
+        raise ProbeFailure("denial_command_observation_mismatch")
+    before, shell, after = (by_phase[phase] for phase in ("observer.before", "observer.shell", "observer.after"))
+    identity = before.get("identity", {})
+    if (not isinstance(identity, dict) or not before.get("directoryMatches") or identity.get("id") != CALL_ID or identity.get("tool") != "shell"
+            or not all(identity.get(key) for key in ("sessionID", "messageID", "agent"))
+            or not {"input", *identity}.issubset(before.get("keys", []))):
+        raise ProbeFailure("native_before_identity_missing")
+    if (not shell.get("directoryMatches") or not shell.get("shellMatches")
+            or not {"command", "cwd", "shell", "timeout", "env"}.issubset(shell.get("keys", []))):
+        raise ProbeFailure("shell_observation_mismatch")
+    late_shell = by_phase["late.shell"]
+    if not late_shell.get("shellMatches") or not late_shell.get("startupMatches") or not late_shell.get("directoryMatches"):
+        raise ProbeFailure("late_shell_observation_incomplete")
+    if (after.get("identity") != identity or after.get("status") not in ("completed", "error")
+            or after.get("shape") in (None, "undefined") or not isinstance(after.get("exits"), list)
+            or by_phase["late.after"].get("status") != after["status"]):
+        raise ProbeFailure("after_observation_incomplete")
+    outcome = state.tool_outcome
+    if (state.failure or state.requests != 2 or state.dispatched != 1 or not state.continued
+            or not state.schema or not state.schema_sha256 or not outcome or outcome.get("call_id") != CALL_ID
+            or not isinstance(outcome.get("content_type"), str)
+            or not all(isinstance(outcome.get(key), bool) for key in ("allowed_marker", "permission_denied", "policy_denied"))
+            or not finished or returncode != 0):
+        raise ProbeFailure(state.failure or "native_run_incomplete")
+    denial_marker = outcome[f"{mode}_denied"]
+    other_marker = outcome["policy_denied" if mode == "permission" else "permission_denied"]
+    if variant == "late-env":
+        if not shell.get("startupAbsent"):
+            raise ProbeFailure("startup_observation_incomplete")
+        if after["status"] != "completed" or denial_marker or other_marker or not outcome["allowed_marker"]:
+            raise ProbeFailure("startup_outcome_ambiguous")
+        if witness == "PROBE_DENIED":
+            result = "startup-denied-command-executed"
+        elif witness is None:
+            result = "startup-not-observed"
+        else:
+            raise ProbeFailure("startup_outcome_ambiguous")
+    elif witness == "PROBE_ALLOWED" and after["status"] == "completed" and not denial_marker and not other_marker:
+        result = "allowed-executed"
+    elif witness == "PROBE_DENIED" and after["status"] == "completed" and not denial_marker and not other_marker:
+        result = "denied-command-executed"
+    elif witness is None and after["status"] == "error" and denial_marker and not other_marker:
+        result = "denied"
+    else:
+        raise ProbeFailure("denial_outcome_ambiguous")
+    if ((variant == "allow" and result != "allowed-executed")
+            or (variant == "direct" and result != "denied")
+            or (variant in ("late-tool", "late-shell") and result not in ("denied", "denied-command-executed"))):
+        raise ProbeFailure("denial_control_mismatch")
+    return {
+        "case": case, "measurement": "PASS", "outcome": result,
+        "provider_requests": state.requests, "returncode": returncode,
+        "consumer_tool_outcome": outcome, "native_schema": state.schema,
+        "native_schema_sha256": state.schema_sha256, "observations": rows,
+    }
+
+
 def assess(case: str, rows: list[dict[str, Any]], witness: str | None, state: ProviderState, returncode: int, finished: bool) -> dict[str, Any]:
+    if case in DENIAL_CASES:
+        return assess_denial(case, rows, witness, state, returncode, finished)
     phases = [row.get("phase") for row in rows]
     required = ("observer.setup", "late.setup", "native.definition", "observer.before", "late.before", "observer.shell", "late.shell", "observer.after", "late.after")
     if any(phase not in phases for phase in required):
@@ -525,17 +658,21 @@ def assess(case: str, rows: list[dict[str, Any]], witness: str | None, state: Pr
 def run_case(root: Path, case: str, binary: str) -> dict[str, Any]:
     project = root / "project"
     trace = root / "trace.jsonl"
-    command = COMMANDS["nonzero" if case == "nonzero" else "baseline"]
+    denial_mode = case.split("-", 1)[0] if case in DENIAL_CASES else None
+    commands = ENV_COMMANDS if case.endswith("-late-env") else DENIAL_COMMANDS if denial_mode else COMMANDS
+    command = commands["denied" if case.endswith("-direct") else "allowed"] if denial_mode else commands["nonzero" if case == "nonzero" else "baseline"]
     state = ProviderState(project, command)
     server = BoundedProvider(state)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     evidence: dict[str, Any] = {"case": case, "measurement": "FAIL"}
     try:
-        settings = json.dumps({"project": str(project), "trace": str(trace), "commands": COMMANDS, "case": case})
+        settings = json.dumps({"project": str(project), "trace": str(trace), "commands": commands, "case": case})
         write_fixture(root, "project/observer/index.ts", OBSERVER_PLUGIN.replace("SETTINGS", settings))
         write_fixture(root, "project/late/index.ts", LATE_PLUGIN.replace("SETTINGS", settings))
-        write_fixture(root, "project/opencode.json", json.dumps(fixture_config(project, server.server_port)))
+        if case.endswith("-late-env"):
+            write_fixture(root, "project/startup.sh", DENIAL_COMMANDS["denied"] + "\n")
+        write_fixture(root, "project/opencode.json", json.dumps(fixture_config(project, server.server_port, denial_mode)))
         write_fixture(root, "home/.config/opencode/opencode.json", json.dumps({"$schema": "https://opencode.ai/config.json", "update": "disable"}))
         write_fixture(root, "tmp/.owned", "synthetic\n")
         for manager in MANAGERS:
@@ -545,10 +682,15 @@ def run_case(root: Path, case: str, binary: str) -> dict[str, Any]:
         evidence.update({"returncode": code, "stdout_bytes": len(stdout), "stderr_bytes": len(stderr), "provider_requests": state.requests})
         if (root / "installer-requested").exists():
             raise ProbeFailure("installer_requested")
+        if case.endswith("-late-env"):
+            startup = project / "startup.sh"
+            expected_startup = DENIAL_COMMANDS["denied"] + "\n"
+            if (startup.is_symlink() or not startup.is_file() or startup.stat().st_size != len(expected_startup.encode())
+                    or startup.read_text() != expected_startup):
+                raise ProbeFailure("fixture_startup_changed")
         rows = read_trace(trace)
         evidence["observations"] = rows
-        witness = project / "witness"
-        observed = witness.read_text() if witness.is_file() and witness.stat().st_size < 128 else None
+        observed = read_witness(project / "witness")
         return assess(case, rows, observed, state, code, b"PROBE_FINISHED" in stdout)
     except ProbeFailure as error:
         evidence["reason"] = str(error)
