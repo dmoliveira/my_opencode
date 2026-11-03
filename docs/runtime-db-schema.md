@@ -265,7 +265,7 @@ Create local data intermediates only with owner-controlled temporary files in th
 
 ## SQLite status dashboard
 
-Use `/doctor sqlite --json` as the SQLite operator dashboard entry point. Use `/doctor run --json` separately for the broader plugin and workflow health surface. Alert on `WARN`/`FAIL`, schema mismatch, FTS mismatch, unsafe permissions, budget breach, and unexpected WAL growth.
+Use `/doctor sqlite --json` as the SQLite operator dashboard entry point. The broader `/doctor`, `/doctor status`, and `/doctor run --json` include a background check that accesses the job store and its lock; do not run them on live state that must be preserved. Alert on `WARN`/`FAIL`, schema mismatch, FTS mismatch, unsafe permissions, budget breach, and unexpected WAL growth.
 
 ## Incident bundle
 

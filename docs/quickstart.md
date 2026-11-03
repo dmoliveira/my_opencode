@@ -17,7 +17,6 @@ These commands affect the helper's legacy config only; they do not verify live s
 Required first-run checks: [h:bf437ec9]
  [h:92b53b41]
 ```text [h:be7b1450]
-/doctor run [h:e0fa3cbe]
 /devtools status [h:edbb473e]
 /plugin status [h:014e2cdb]
 /mcp status [h:5435d065]
@@ -32,7 +31,6 @@ Optional capability checks when you need them: [h:371d5a53]
 /image doctor --json [h:d70ff749]
 /autoflow status --json [h:b4a6e840]
 /gateway status [h:ba871087]
-/bg doctor --json [h:d5f4c4e1]
 /agent-pool doctor --json [h:478f2820]
 /tmux doctor --json [h:ae3cceae]
 ``` [h:0a584b58]
@@ -43,7 +41,10 @@ For browser UX work, use the verified CLI path first:
 - Use `/browser ensure --json` plus `/mcp profile playwright` when integrated MCP network, storage, assertion, or vision tools are the better fit.
 - See `docs/playwright-ux-scenarios.md` for both paths. Do not install external CLI skill bundles.
 
-On Darwin arm64, `/devtools install ast-grep` installs only pinned `ast-grep 0.45.0` after archive, binary, and version verification. First set `OPENCODE_DEVTOOLS_CACHE_ROOT` and `OPENCODE_DEVTOOLS_BIN_ROOT` to pre-existing absolute owner-only (`0700`) directories; see `docs/command-handbook.md` for the setup commands. Other host tools remain observation/manual-only, and Playwright CLI remains an explicit install outside `install all`.
+**Safety hold:** Do not run live ast-grep installation or version probes,
+including `/devtools install ast-grep` and `/devtools install all`, until
+process-group teardown is safe. See `docs/command-handbook.md`. Playwright CLI
+remains a separate explicit install.
 
 Exploratory examples after startup is healthy: [h:9e27aaf8]
  [h:e0a80255]
@@ -51,9 +52,12 @@ Exploratory examples after startup is healthy: [h:9e27aaf8]
 /ox [h:a4484e02]
 /ox-ux --repo top-uni [h:997ec94a]
 /ox-design --goal "explore a design direction for this app" [h:7360f925]
-/digest run --reason manual [h:c26b764a]
 ``` [h:df2941d1]
  [h:f9e58fe7]
+Run `/digest run --reason manual` only after excluding other digest and index
+writers for the entire operation. Leave automatic digest-on-exit disabled until
+concurrency is controlled.
+
 Optional next step when you want lightweight repo or docs context:
 
 ```text
@@ -62,7 +66,16 @@ Optional next step when you want lightweight repo or docs context:
 
 Run `/session handoff --json` after you have at least one indexed digest. If you need to reopen work in a different linked worktree, use `/session handoff --launch-cwd <worktree-path> --fork --json` to get a ready-to-run launch command.
 
-For background runtime ownership, use `/agent-pool` to register or drain visible manual capacity and `/bg` to actually run, inspect, and clean up jobs.
+**Background safety hold:** Do not run live `/bg` mutations or use `/bg read`
+or `/bg status <id>` on untrusted job records. Stored paths can cause file
+truncation or disclosure, and process signals remain racy. Avoid `/bg`
+diagnostics and listing commands on live state that must be preserved: their
+lock access can change another file's permissions through a symlink.
+`/doctor`, `/doctor status`, and `/doctor run` include a background check, and
+`/agent-pool health` invokes background status, so they share this risk.
+Health refreshes and some swarm operations can also read background records;
+avoid them when those records are untrusted. See
+`docs/command-handbook.md` before using these flows.
 
 For automation-friendly help output, prefer command-specific help from this repo (for example `python3 scripts/session_command.py help`) because the upstream `opencode --help` banner formatting is not controlled here.
 

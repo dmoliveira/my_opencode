@@ -50,18 +50,16 @@ npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
 
 The devtools command verifies the exact package version, license, integrity, Node requirement, and lifecycle-script posture before it executes package code. It uses an isolated npm config and owner-only cache; `install all` never includes this optional target.
 
-On Darwin arm64, opt into the exact managed `ast-grep 0.45.0` binary with dedicated private roots:
+**Safety hold:** Do not run live ast-grep installation or version probes,
+including `/devtools install ast-grep` and `/devtools install all`, until
+process-group teardown is made safe. A version process whose leader has exited
+can leave a group that the current teardown cannot authenticate; permission
+errors are also not handled reliably. A mock-only test demonstrated the signal
+path, not that an unrelated process was actually signalled.
 
-```bash
-export OPENCODE_DEVTOOLS_CACHE_ROOT="$HOME/.cache/my_opencode/devtools"
-export OPENCODE_DEVTOOLS_BIN_ROOT="$HOME/.local/share/my_opencode/bin"
-install -d -m 700 "$OPENCODE_DEVTOOLS_CACHE_ROOT" "$OPENCODE_DEVTOOLS_BIN_ROOT"
-export PATH="$OPENCODE_DEVTOOLS_BIN_ROOT:$PATH"
-```
-
-Then run `/devtools install ast-grep` or `/devtools install all`. The installer accepts only the pinned Apple Silicon release, installs `ast-grep` but not deprecated `sg`, refuses existing unmanaged destinations, and rehashes the managed binary on every doctor call. Unsupported platforms fail before creating install state.
-
-All remaining host tools are observation-only. Manage them with your trusted host workflow; `/devtools install all` manages exact ast-grep only and reports other tool state without invoking a package manager. Git hooks use the resolved local `pre-commit` executable only.
+The managed installer targets only pinned Darwin arm64 `ast-grep 0.45.0`;
+other host tools remain observation/manual-only. Git hooks use the resolved
+local `pre-commit` executable only.
 
 Reuse the same session for each command, then close only that session:
 
@@ -500,12 +498,25 @@ Use these directly in OpenCode:
 `/intent preview|apply` is the explicit manual intake coordinator. The MVP accepts fresh add-only proposals with at most ten combined records and links, rejects title collisions, writes a private prepared receipt, and applies the deterministic graph fragment through one idempotent Codememory batch operation. It does not enable automatic chat hooks or task execution.
 Operator-only binary, config, state-directory, and actor overrides are environment variables documented in `docs/specs/intent-control-plane.md`; `/intent` does not accept executable or state-path overrides as command arguments.
 
-Background runtime triage split:
+**Background safety hold:** Do not run live `/bg enqueue`, `start`, `run`,
+`cancel`, `reconcile`, or `cleanup`, including workflows such as
+`/start-work-bg` and `/start-work --background` that enqueue indirectly. A
+swarm handoff with `--bg-command` also starts background work. Stored artifact
+paths can lead to unowned file writes or truncation, and process identity checks
+are not atomic with signals. Do not use `/bg read` or `/bg status <id>` on
+untrusted job records: a stored path can disclose another file's contents.
+These issues were confirmed with synthetic fixtures, not live jobs.
 
-- use `/bg doctor --json` for backend execution health, queue depth, lease-pool state, unknown outcomes, stale-running jobs, and failure triage
-- use `/bg reconcile --json` to recover interrupted lease attempts; effect-possible outcomes stay quarantined instead of being replayed
-- use `/agent-pool doctor --json` and `/agent-pool health --json` for manual capacity registry visibility plus backend health passthrough
-- use `/agent-pool drain --id <agent_id> --json` to mark capacity unavailable; `/bg cleanup --json` reconciles and handles stale jobs but defers terminal retention
+Other `/bg` diagnostics and listing commands read or initialize the store and
+open its lock even without job writeback. A synthetic test showed that a
+symlinked lock can cause the target file's permissions to be changed. Avoid
+these commands on live state that must be preserved. `/doctor`, `/doctor status`,
+and `/doctor run` include a background doctor check, and `/agent-pool health`
+invokes background status, so they have the same risk. `/health`,
+`/health status`, and `/health drift` may refresh by reading the background job
+index; some swarm lane operations also read linked job records. Avoid those
+paths when records are untrusted. Health derives its index path from the config
+write path; setting `MY_OPENCODE_BG_DIR` alone does not isolate that read.
 
 Background cancellation and cleanup leave records with missing process-start
 fingerprints in `reconciling` rather than signalling the recorded PID. Identity

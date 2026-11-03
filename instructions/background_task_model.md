@@ -4,6 +4,20 @@ This document defines the local `/bg` execution model. Jobs are either legacy
 shell jobs or opt-in task-lease jobs. Codememory remains the authority for task
 and session lifecycle in both cases.
 
+**Safety hold:** Do not run live `/bg enqueue`, `start`, `run`, `cancel`,
+`reconcile`, or `cleanup`, including indirect enqueue via `/start-work-bg`,
+`/start-work --background`, or a swarm handoff with `--bg-command`.
+Stored artifact paths can truncate or replace unrelated files, and process
+signals are not atomically bound to identity. Do not use `/bg read` or
+`/bg status <id>` on untrusted records: they can expose contents of a stored
+path. Other `/bg` diagnostics and listings access the store and its lock; avoid
+them on live state that must be preserved. A symlinked lock can cause another
+file's permissions to change. `/doctor`, `/doctor status`, and `/doctor run`
+include a background check; `/agent-pool health` invokes background status.
+Health refreshes and some swarm lane operations can also read job records;
+avoid them when records are untrusted. These restrictions remain even though
+terminal artifact deletion is deferred.
+
 ## Job Lifecycle
 
 All jobs use these states:
@@ -177,6 +191,9 @@ still apply. Stored artifact paths are also used by other read/write paths whose
 ownership and pathname safety have not yet been established.
 
 ## Enqueue Example
+
+This example describes the interface only; do not run it against live state
+while the safety hold above applies.
 
 ```bash
 python3 scripts/background_task_manager.py enqueue \

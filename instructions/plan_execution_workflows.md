@@ -29,15 +29,14 @@ version: 1
 3. Review deviations with `/start-work deviations --json`.
 4. Run `/start-work doctor --json` before handoff.
 
-## Background-safe workflow
+## Background workflow on hold
 
-Use queued execution when you want reviewable handoff through the background subsystem:
-
-1. Run `/start-work-bg path/to/plan.md`.
-2. Capture returned `job_id`.
-3. Execute queued work with `/bg run --id <job-id>`.
-4. Inspect logs via `/bg read <job-id> --json`.
-5. Confirm final state using `/start-work status --json`.
+Do not use `/start-work-bg`, `/start-work --background`, or run queued work
+against live state while background artifact ownership and process-signal
+safety remain unresolved.
+Do not read untrusted jobs with `/bg read` or `/bg status <id>`. Use the primary
+execution workflow above instead; see `instructions/background_task_model.md`
+for the full safety hold.
 
 ## Validation failure examples
 
