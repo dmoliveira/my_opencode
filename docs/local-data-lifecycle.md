@@ -205,6 +205,12 @@ not a complete list of filesystem artifacts. Preserve corrupt originals via the
 existing quarantine workflow. No per-session sidecar delete/redaction contract
 is implemented here.
 
+Before updating or pruning, the index writer also refuses any duplicate parsed
+IDs, including unrelated IDs, without publishing or deduplicating the index.
+The surrounding digest run is not atomic with that check: it may already have
+published a digest or created locks, and configured hooks can have effects.
+See `docs/runtime-db-schema.md` before inspection or recovery.
+
 ### Shared Memory
 
 Use `python3 scripts/memory_lifecycle_command.py stats --json`, followed by

@@ -64,6 +64,11 @@ CORRUPTION_RECOVERY_STEPS = [
     "run /digest run --reason manual",
     "run /session doctor --json",
 ]
+DUPLICATE_ID_RECOVERY_STEPS = (
+    "stop session-index writers and preserve the original index",
+    "inspect duplicate identities privately; do not automatically deduplicate",
+    "use an authorized, verified recovery process before resuming writes",
+)
 
 
 def _map_sidecar_error(exc: SidecarSecurityError) -> SessionIndexError:
@@ -804,6 +809,8 @@ def _recovery_steps(reason_code: str) -> list[str]:
             "migrate the session index to the supported version before writing",
             "run /session doctor --json",
         ]
+    if reason_code == "session_index_duplicate_id":
+        return list(DUPLICATE_ID_RECOVERY_STEPS)
     return [
         "verify session index path ownership and access",
         "run /session doctor --json",
@@ -876,6 +883,20 @@ def _update_session_index_unlocked(
         )
     except SessionIndexError as exc:
         return _failure_result(index_path, exc)
+
+    seen_ids: set[str] = set()
+    for session in index["sessions"]:
+        session_id = session["session_id"]
+        if session_id in seen_ids:
+            return _failure_result(
+                index_path,
+                SessionIndexError(
+                    "session index contains duplicate IDs; index update refused",
+                    reason_code="session_index_duplicate_id",
+                ),
+            )
+        seen_ids.add(session_id)
+
     policy = _load_policy()
 
     timestamp = str(digest.get("timestamp") or _utc_now().isoformat())

@@ -3274,7 +3274,7 @@ def _command_handoff(argv: list[str], index_path: Path) -> int:
                 {
                     "result": "FAIL",
                     "command": "handoff",
-                    "error": "active runtime session is not indexed yet; run /digest run first",
+                    "error": "active runtime session is not indexed yet; inspect the index and digest before running /digest run",
                     "index_path": str(index_path),
                 },
                 json_output,
