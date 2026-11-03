@@ -73,6 +73,7 @@ from checkpoint_snapshot_manager import (  # type: ignore
     list_snapshots,
     prune_snapshots,
     restore_runtime_from_snapshot,
+    runtime_run_id,
     show_snapshot,
     write_snapshot,
 )
@@ -21786,12 +21787,15 @@ version: 1
 
         recover_runtime = load_plan_runtime(recover_config_path)
         if isinstance(recover_runtime, dict):
-            listed_snapshots = list_snapshots(recover_config_path)
+            run_id = runtime_run_id(recover_runtime)
+            listed_snapshots = list_snapshots(recover_config_path, run_id)
             expect(
-                bool(listed_snapshots),
+                bool(listed_snapshots)
+                and all(
+                    snapshot.get("run_id") == run_id for snapshot in listed_snapshots
+                ),
                 "snapshot manager should list persisted snapshots for active run",
             )
-            run_id = str(listed_snapshots[0].get("run_id") or "")
             latest_snapshot = show_snapshot(recover_config_path, run_id, "latest")
             expect(
                 latest_snapshot.get("result") == "PASS"
