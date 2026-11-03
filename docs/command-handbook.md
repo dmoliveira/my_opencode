@@ -90,6 +90,8 @@ Advanced posture:
 
 Managed MCP names: `context7`, `gh_grep`, `playwright`, `exa_search`, `github`, `miro`, `google-drive`.
 
+The `/mcp` helper edits and reports its own resolved legacy configuration; it does not verify a running service or every OpenCode configuration layer. It refuses status, doctor, and mutations when those resolved layers contain `mcp.servers`, including an ambiguous V1 server named `servers`. Manage native V2 entries in the intended OpenCode configuration and verify the intended service separately. A successful legacy edit alone does not prove a server disconnected.
+
 `firecrawl` is retired and disable-only. `/mcp disable firecrawl` changes only `enabled` on an existing custom entry; it does not create a default or print the custom command or URL. Enable requests fail without rewriting the config.
 
 Default posture: Google Drive is enabled in this project; Miro and all other optional managed MCPs start disabled until you enable a targeted profile or individual server.
@@ -97,7 +99,7 @@ Default posture: Google Drive is enabled in this project; Miro and all other opt
 Alias shortcuts: `ghgrep` -> `gh_grep`, `exa` -> `exa_search`.
 
 Profiles:
-- `minimal` -> disables all managed MCPs
+- `minimal` -> disables managed entries in the helper's legacy config
 - `research` -> `context7`, `gh_grep`
 - `context7` -> `context7`
 - `ghgrep` -> `gh_grep`
@@ -109,7 +111,7 @@ Profiles:
 - `web` -> `playwright`, `exa_search`
 - `all` -> enables all managed MCPs, including Miro
 
-Google Drive is enabled in the project config by default. Use `/mcp disable google-drive` to turn it off, `/mcp enable google-drive` to turn it back on, or `/mcp profile minimal` to disable every managed MCP. Miro is configured as the official hosted remote server at `https://mcp.miro.com/` but remains disabled by default. Use `/mcp enable miro` or `/mcp profile miro` to opt in; the first connection opens Miro OAuth and requires selecting the target team. No token or authorization header is stored in this configuration. See Miro's [MCP connection guide](https://developers.miro.com/docs/connecting-to-miro-mcp.md) for current OAuth, team-access, and enterprise-admin details.
+Google Drive is enabled in the project config by default. Use `/mcp disable google-drive` or `/mcp enable google-drive` to change its legacy helper setting, or `/mcp profile minimal` to disable managed legacy entries. Miro is configured as the official hosted remote server at `https://mcp.miro.com/` but remains disabled by default. Use `/mcp enable miro` or `/mcp profile miro` to opt in; the first connection opens Miro OAuth and requires selecting the target team. No token or authorization header is stored in this configuration. See Miro's [MCP connection guide](https://developers.miro.com/docs/connecting-to-miro-mcp.md) for current OAuth, team-access, and enterprise-admin details.
 
 ## Plugin control inside OpenCode 🎛️
 
