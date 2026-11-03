@@ -115,10 +115,13 @@ Use this when work is already captured as a plan file and you want deterministic
 
 ## Flow 6: Reconciliation and Hygiene
 
+`/doctor`, `/doctor status`, and `/doctor run` access the background job store
+and its lock. Do not run them on live state that must be preserved; see the
+safety hold in `docs/command-handbook.md`.
+
 ```text
 /daemon tick --claims-hours 24 --json
 /claims expire-stale --hours 48 --apply --json
-/doctor run
 ```
 
 Use this to keep stale claims and runtime state from drifting.
@@ -137,20 +140,23 @@ Import validates the full export before opening or changing the store, publishes
 
 ## Incident Checklist
 
+`/agent-pool health` invokes background status; `/doctor`, `/doctor status`,
+and `/doctor run` include a background check. Avoid them on live state that
+must be preserved; a symlinked background lock can change another file's
+permissions. Some swarm lane operations can also read untrusted job records.
+
 ```text
 /delivery status --json
 /workflow status --json
 /claims status --json
-/agent-pool health --json
 /daemon summary --json
-/doctor run
 ```
 
 If an operation fails repeatedly:
 
 1. capture failing command output in JSON
-2. run `/doctor run`
-3. apply the first listed quick fix
-4. re-run the failing command once
+2. use a targeted diagnostic that does not access the live background store
+3. review its proposed fix before applying any changes
+4. re-run the failing command only when it is safe
 
 For a reusable reliability/E2E validation plan that connects hooks, slash commands, tmux/bg flows, session handoff, and SQLite investigation, use `docs/plan/opencode-reliability-review-runbook.md`.

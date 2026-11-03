@@ -5,6 +5,15 @@ Status: draft
 Mode: reusable / append-only
 Branch intent: reliability review, hook+slash validation, long-run autonomy hardening
 
+> **Safety hold:** The background-job exercises and cleanup instructions below
+> are historical examples, not safe live procedures. Do not run live `/bg`
+> mutations or inspect untrusted job records; stored paths and process signals
+> are not yet safely bound to ownership. `/doctor`, `/doctor status`, and
+> `/doctor run` include a background check whose lock can affect another file
+> through a symlink; avoid them on live state that must be preserved. Health
+> refreshes and some swarm operations may also read untrusted job records. See
+> `docs/command-handbook.md`.
+
 ## Purpose
 
 Use this runbook to re-run a focused OpenCode reliability review across future sessions.

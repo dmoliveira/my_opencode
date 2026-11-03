@@ -4,6 +4,12 @@ This document contains detailed historical implementation notes moved out of the
 
 Note: this archive includes historical implementation notes and may mention legacy or compatibility command forms alongside canonical ones. Use `docs/quickstart.md` and `docs/command-handbook.md` for the current operator-facing command surface.
 
+**Safety hold:** Background mutations, untrusted background-record reads, and
+live ast-grep installation or version probes are not safe to run as examples.
+`/doctor`, `/doctor status`, and `/doctor run` also access the background store
+and its lock; avoid them on live state that must be preserved. Some health and
+swarm operations read background records. See `docs/command-handbook.md`.
+
 ## Roadmap plan 🗺️
 
 - Track upcoming orchestration features in `IMPLEMENTATION_ROADMAP.md`.
@@ -337,12 +343,11 @@ Task 26.3 health command integration notes:
 - JSON export paths: trend and drift output are CLI-friendly JSON payloads for dashboards/CI ingestion.
 - remediation guidance now includes score-bucket defaults (`healthy`, `degraded`, `critical`) when indicator-specific actions are missing.
 
-Examples:
+`/health`, health status, and drift refreshes may read the background job
+index; do not use them with untrusted job records. Other command examples:
 
 ```text
-/health status --force-refresh --json
 /health trend --limit 10 --json
-/health drift --json
 /health doctor --json
 ```
 
@@ -608,8 +613,6 @@ Use these directly in OpenCode:
 ```text
 /devtools status
 /devtools help
-/devtools install all
-/devtools install ast-grep
 /devtools install playwright-cli
 /devtools doctor
 /devtools doctor --json
@@ -634,7 +637,7 @@ direnv allow
 ```
 
 Notes:
-- On Darwin arm64, `/devtools install ast-grep` and `install all` can install pinned `ast-grep 0.45.0` into pre-existing absolute owner-only (`0700`) roots selected with `OPENCODE_DEVTOOLS_CACHE_ROOT` and `OPENCODE_DEVTOOLS_BIN_ROOT`. Deprecated `sg` is never installed.
+- Do not run live ast-grep installation or version probes, including `/devtools install ast-grep` and `/devtools install all`, until process-group teardown is safe. The installer targets pinned Darwin arm64 `ast-grep 0.45.0`; see `docs/command-handbook.md` for the safety hold.
 - `/devtools` observes all other host-managed tools and gives manual guidance without invoking a host package manager.
 - `playwright-cli` remains an exact explicit install and is never included in `install all`.
 - `.pre-commit-config.yaml` is the canonical local hook configuration; `/devtools hooks-install` invokes the resolved local `pre-commit` executable with a finite deadline.
@@ -674,6 +677,9 @@ This will:
 - link `~/.config/opencode/opencode.json` to this repo config
 - enable `/mcp` command backend automatically
 - run a post-install self-check (`/mcp status`, `/plugin status`, `/notify status`, `/digest show`, `/session list --json`, `/session doctor --json`, `/telemetry status`, `/post-session status`, `/notify policy status`, `/config status`, `/bg status`, `/refactor-lite profile --scope scripts/*.py --dry-run --json`, `/safe-edit status --json`, `/stack status`, `/browser status`, `/doctor run`, `/plugin doctor`)
+
+The historical self-check includes background store access; do not run it on
+live state that must be preserved while the safety hold applies.
 
 ## Manual install 🛠️
 
@@ -759,11 +765,10 @@ Notes:
 
 ## Unified doctor inside OpenCode 🩺
 
-Use these directly in OpenCode:
+The unified doctor includes a background check that accesses the job store and
+its lock. Do not run it on live state that must be preserved.
 
 ```text
-/doctor run
-/doctor run --json
 /doctor help
 ```
 
@@ -1056,15 +1061,13 @@ Epic 14 Task 14.1 defines the baseline plan format and execution-state rules for
 Use:
 ```text
 /start-work path/to/plan.md --json
-/start-work-bg path/to/plan.md
-/bg run --id <job-id>
 /start-work status --json
 /start-work deviations --json
 /start-work-doctor-json
 ```
 
 Integration notes:
-- use `/start-work-bg` when you want queued, reviewable execution via the background subsystem before running `/bg run`
+- `/start-work-bg` and `/bg run` are on hold for live use; see the background safety warning below
 - `/digest run` now includes a `plan_execution` recap block (status, plan id, step counts, deviation count)
 - `/doctor run` includes `start-work` health diagnostics for execution-state visibility
 
@@ -1161,39 +1164,30 @@ Engine behavior currently includes:
 - preservation of protected artifacts and latest command outcomes as critical evidence
 - recovery planning with automatic resume hints, safe fallback steps, and pruning diagnostics
 
-Use:
-```text
-/doctor run --json
-/health status --json
-```
+The historical `/doctor run --json` example includes a background check and
+must not be run on live state that must be preserved. `/health status --json`
+may refresh by reading the background job index; do not use it with untrusted
+job records.
 
 ## Background jobs inside OpenCode 🧵
 
-Use these directly in OpenCode:
-
-```text
-/bg start -- python3 scripts/selftest.py
-/bg status
-/bg status <job-id>
-/bg list
-/bg list --status running
-/bg read <job-id>
-/bg cancel <job-id>
-/bg cleanup
-/bg doctor --json
-/bg status --json
-```
-
+**Safety hold:** Do not run live `/bg enqueue`, `start`, `run`, `cancel`,
+`reconcile`, or `cleanup`, including indirect enqueue through `/start-work-bg`,
+`/start-work --background`, or a swarm handoff with `--bg-command`.
+Stored artifact paths can truncate or replace unrelated files, and process
+signals are not atomically tied to identity. Do not use `/bg read` or
+`/bg status <id>` on untrusted records: stored paths can expose other files.
+Other `/bg` diagnostics and listing commands access the store and its lock;
+avoid them on live state that must be preserved. A symlinked lock can cause
+another file's permissions to change. `/doctor`, `/doctor status`, and
+`/doctor run` include a background check; `/agent-pool health` invokes
+background status. Health refreshes and some swarm lane operations can also
+read job records. See `docs/command-handbook.md`.
 
 `/bg` uses `~/.config/opencode/my_opencode/bg/` by default with:
 - `jobs.json` as authoritative state
 - `runs/<job-id>.log` for combined stdout/stderr
 - `runs/<job-id>.meta.json` for execution metadata
-
-Examples:
-- Basic async start + read: `/bg start -- make validate` then `/bg list --status running` and `/bg read <job-id>`
-- Intermediate queue workflow: `/bg enqueue -- make selftest`, `/bg enqueue -- make install-test`, then `/bg run --max-jobs 1`
-- Failure/recovery: `/bg start -- python3 -c "import time; time.sleep(5)" --timeout-seconds 1`, inspect with `/bg doctor --json`, then `/bg cleanup`
 
 Notification behavior:
 - Background terminal states emit optional alerts through the existing notify stack (`notify` config event/channel rules).
