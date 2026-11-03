@@ -453,6 +453,11 @@ class BoundedSubprocessTest(unittest.TestCase):
     def test_capped_timeout_kills_descendants_after_leader_exit(self) -> None:
         policy = COMMAND_CLASS_POLICIES["git_probe"]
         with tempfile.TemporaryDirectory() as tmp:
+            existing_readers = {
+                thread.ident
+                for thread in threading.enumerate()
+                if thread.name.startswith("bounded-")
+            }
             child_pid_path = Path(tmp) / "child-pid"
             child_script = (
                 "import os, pathlib, sys, time; "
@@ -493,7 +498,7 @@ class BoundedSubprocessTest(unittest.TestCase):
                     if proc_stat.exists() and proc_stat.read_text().split()[2] == "Z":
                         break
                     os.kill(child_pid, 0)
-                except ProcessLookupError:
+                except (ProcessLookupError, FileNotFoundError):
                     break
                 except OSError as exc:
                     if os.name == "nt" and getattr(exc, "winerror", None) == 87:
@@ -502,6 +507,13 @@ class BoundedSubprocessTest(unittest.TestCase):
                 time.sleep(0.05)
             else:
                 self.fail("capped bounded timeout left a descendant process running")
+            self.assertFalse(
+                {
+                    thread.ident
+                    for thread in threading.enumerate()
+                    if thread.name.startswith("bounded-")
+                } - existing_readers
+            )
 
     @unittest.skipUnless(os.name == "posix", "detached-session fixture requires POSIX")
     def test_capped_timeout_does_not_wait_for_detached_pipe_holder(self) -> None:
