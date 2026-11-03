@@ -14,7 +14,7 @@ The panel is local and deterministic. It does not call a model, MCP server, or e
 
 Run `./install.sh`, then restart OpenCode. The installer builds both local plugins, enables the direct gateway entrypoint, and merges the sidebar entry into `~/.config/opencode/tui.json` without replacing existing TUI settings or plugins. It replaces stale `my_opencode` managed sidebar paths and removes duplicate managed entries while retaining the first tuple's options; unrelated local plugins are left unchanged.
 
-For a live checkout, run `./scripts/setup_local_dev_symlinks.sh`. It builds the sidebar before adding the same TUI entry.
+For a V1 live checkout, run `./scripts/setup_local_dev_symlinks.sh`. It builds the sidebar before adding the same TUI entry and refuses to replace existing instruction or agent paths that are not matching links. The setup refuses V2 or an unverified runtime before making changes.
 
 The feature requires exactly OpenCode `1.18.18`. The sidebar disables itself with a visible warning on another version.
 

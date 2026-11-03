@@ -38,13 +38,15 @@ If this project helps your workflow, please consider supporting ongoing maintena
 
 ## Local dev install
 
-For a live local checkout that OpenCode reads directly, use the bootstrap script:
+For a live local checkout used with OpenCode V1, use the bootstrap script:
 
 ```bash
 ./scripts/setup_local_dev_symlinks.sh
 ```
 
-This keeps `~/.config/opencode/my_opencode` pointed at your working repo, keeps `~/.config/opencode/opencode.json` pointed at this repo's `opencode.json`, symlinks repo agents into `~/.config/opencode/agent/`, refreshes `AGENTS.md` from the sibling `../agents_md/AGENTS.md` when present (with `../agents.md/AGENTS.md` as a compatibility fallback), builds the execution sidebar, and merges its entry into `~/.config/opencode/tui.json` without replacing existing TUI settings.
+The script points `~/.config/opencode/my_opencode` and `opencode.json` at the working repo, links repo agents into `~/.config/opencode/agent/`, builds the execution sidebar, and merges its entry into `~/.config/opencode/tui.json` without replacing existing TUI settings. It links `AGENTS.md` to the sibling `../agents_md/AGENTS.md` when present, with `../agents.md/AGENTS.md` as a compatibility fallback. Existing instruction and agent paths must already be matching links; the script refuses to replace files, directories, or different links.
+
+Both this script and `scripts/setup_dual_opencode.sh` require a verified OpenCode V1 executable. They run the version probe in a disposable home and refuse V2, a missing or unrecognized executable, and failed or timed-out probes before changing configuration or runtime records. The V2 gateway migration is still in progress; see [the migration inventory](docs/plan/doing/opencode-v2-migration.md).
 
 New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a global startup instruction. In the local-dev symlink setup, that file resolves to the sibling checkout at `../agents_md/AGENTS.md` when present (or `../agents.md/AGENTS.md` in older layouts), so edits to the central file propagate automatically to any newly started session, even when launched from an unrelated folder and without rerunning installation.
 

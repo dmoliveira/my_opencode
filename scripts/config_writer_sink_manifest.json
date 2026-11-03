@@ -3360,18 +3360,13 @@
     "classification": "serialized_provisioner"
   },
   {
-    "language": "shell",
-    "file": "setup_local_dev_symlinks.sh",
-    "command": "ln -sfn \"$AGENTS_LINK_TARGET\" \"$MY_OPENCODE_REPO/AGENTS.md\"",
+    "language": "python",
+    "file": "setup_safety.py",
+    "function": "instruction_links",
+    "kind": "os.symlink",
+    "destination": "link",
     "count": 1,
-    "classification": "shell_non_config_exemption"
-  },
-  {
-    "language": "shell",
-    "file": "setup_local_dev_symlinks.sh",
-    "command": "ln -sfn \"$agent_file\" \"$OPENCODE_CONFIG_DIR/agent/$(basename \"$agent_file\")\"",
-    "count": 1,
-    "classification": "shell_non_config_exemption"
+    "classification": "checked_config_writer_exemption"
   },
   {
     "language": "shell",

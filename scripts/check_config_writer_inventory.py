@@ -163,8 +163,6 @@ EXPECTED_SHELL_SINKS = Counter(
         ("setup_local_dev_symlinks.sh", 'mkdir -p "$OPENCODE_CONFIG_DIR/agent"'): 1,
         ("setup_local_dev_symlinks.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-link --link "$OPENCODE_CONFIG_DIR/my_opencode" --target "$MY_OPENCODE_REPO"'): 1,
         ("setup_local_dev_symlinks.sh", 'python3 "$SCRIPT_DIR/config_layering.py" provision-link --link "$OPENCODE_CONFIG_DIR/opencode.json" --target "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"'): 1,
-        ("setup_local_dev_symlinks.sh", 'ln -sfn "$AGENTS_LINK_TARGET" "$MY_OPENCODE_REPO/AGENTS.md"'): 1,
-        ("setup_local_dev_symlinks.sh", 'ln -sfn "$agent_file" "$OPENCODE_CONFIG_DIR/agent/$(basename "$agent_file")"'): 1,
     }
 )
 

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SCRIPT_DIR/setup_safety.py" runtime
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 resolve_default_repo_root() {
@@ -46,13 +47,14 @@ OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 AGENTS_SOURCE_PATH="${AGENTS_SOURCE_PATH:-$DEFAULT_AGENTS_SOURCE}"
 AGENTS_LINK_TARGET="$AGENTS_SOURCE_PATH"
 
-if [[ -n "$DEFAULT_AGENTS_SOURCE" && "$AGENTS_SOURCE_PATH" == "$DEFAULT_AGENTS_SOURCE" ]]; then
-	AGENTS_LINK_TARGET="$DEFAULT_AGENTS_LINK_TARGET"
-fi
-
 if [[ ! -d "$MY_OPENCODE_REPO" ]]; then
 	printf 'error: repo not found at %s\n' "$MY_OPENCODE_REPO" >&2
 	exit 1
+fi
+MY_OPENCODE_REPO="$(cd "$MY_OPENCODE_REPO" && pwd)"
+
+if [[ -n "$DEFAULT_AGENTS_SOURCE" && "$AGENTS_SOURCE_PATH" == "$DEFAULT_AGENTS_SOURCE" && "$(cd "$MY_OPENCODE_REPO/.." && pwd)" == "$PARENT_ROOT" ]]; then
+	AGENTS_LINK_TARGET="$DEFAULT_AGENTS_LINK_TARGET"
 fi
 
 if [[ ! -f "$MY_OPENCODE_REPO/opencode.json" ]]; then
@@ -73,6 +75,15 @@ if [[ ! -f "$AGENTS_SOURCE_PATH" ]]; then
 	exit 1
 fi
 
+if [[ "$AGENTS_SOURCE_PATH" != /* ]]; then
+	AGENTS_SOURCE_PATH="$(cd "$(dirname "$AGENTS_SOURCE_PATH")" && pwd)/$(basename "$AGENTS_SOURCE_PATH")"
+	AGENTS_LINK_TARGET="$AGENTS_SOURCE_PATH"
+fi
+
+python3 "$SCRIPT_DIR/setup_safety.py" links \
+	--repo "$MY_OPENCODE_REPO" --config-dir "$OPENCODE_CONFIG_DIR" \
+	--agents-target "$AGENTS_LINK_TARGET"
+
 mkdir -p "$OPENCODE_CONFIG_DIR"
 mkdir -p "$OPENCODE_CONFIG_DIR/agent"
 
@@ -82,15 +93,9 @@ python3 "$SCRIPT_DIR/config_layering.py" provision-link \
 python3 "$SCRIPT_DIR/config_layering.py" provision-link \
 	--link "$OPENCODE_CONFIG_DIR/opencode.json" \
 	--target "$OPENCODE_CONFIG_DIR/my_opencode/opencode.json"
-ln -sfn "$AGENTS_LINK_TARGET" "$MY_OPENCODE_REPO/AGENTS.md"
-
-if [[ -d "$MY_OPENCODE_REPO/agent" ]]; then
-	for agent_file in "$MY_OPENCODE_REPO"/agent/*.md; do
-		if [[ -e "$agent_file" ]]; then
-			ln -sfn "$agent_file" "$OPENCODE_CONFIG_DIR/agent/$(basename "$agent_file")"
-		fi
-	done
-fi
+python3 "$SCRIPT_DIR/setup_safety.py" links \
+	--repo "$MY_OPENCODE_REPO" --config-dir "$OPENCODE_CONFIG_DIR" \
+	--agents-target "$AGENTS_LINK_TARGET" --create
 
 if [[ -d "$OPENCODE_CONFIG_DIR/my_opencode/plugin/gateway-sidebar" ]]; then
 	if [[ ! -f "$MY_OPENCODE_REPO/tui.json" || ! -f "$SCRIPT_DIR/tui_config.py" ]]; then
