@@ -62,3 +62,8 @@ The installed OpenCode 2.2.5 API was checked in a disposable standalone instance
 parent-filtered pagination is available, but delete takes only a session ID and
 the activity list covers only foreground drains in that process. These do not bind
 a descendant set to deletion or exclude all writers.
+
+`docs/specs/local-data-lifecycle-coordination.md` proposes an owner-bound
+admission, durable dispatch, outcome, retry, and recovery contract with a
+fault-injection matrix. It is design only: neither the coordinator nor the
+required owner capabilities are implemented, and this task remains blocked.

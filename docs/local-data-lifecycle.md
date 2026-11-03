@@ -220,8 +220,11 @@ cross-store retry/partial-failure contract. Runtime V2 cascading deletion and
 sidecar file removal cannot be wrapped safely by treating this plan as approval.
 Implementing direct SQL, broad filesystem deletion or a caller-only confirmation
 flag would bypass those boundaries. Archive is not a substitute for deletion.
+The proposed failure and retry contract is documented in
+`docs/specs/local-data-lifecycle-coordination.md`; it is not an implemented
+coordinator, an operator runbook, or an authorization to mutate any source.
 
-Validation for this slice uses actual CLI subprocesses on disposable inputs next
-to sentinel runtime/shared-memory/Codememory SQLite files and sidecars, checking
-unchanged bytes, no new files and no privacy canary on either output stream.
-It is planner CLI validation, not native deletion validation.
+Validation for the offline planner uses actual CLI subprocesses on disposable
+inputs next to sentinel runtime/shared-memory/Codememory SQLite files and
+sidecars, checking unchanged bytes, no new files and no privacy canary on either
+output stream. It is planner CLI validation, not native deletion validation.
