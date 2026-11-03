@@ -550,6 +550,7 @@ def _validate_committed_wal_frames(
     checksum_order: str,
     max_frame: int,
     shm_frame_checksum: tuple[int, int],
+    max_source_bytes: int | None = None,
 ) -> None:
     if not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("read-only WAL preview requires no-follow file opens")
@@ -558,6 +559,8 @@ def _validate_committed_wal_frames(
         before = os.fstat(descriptor)
         if not _same_identity(expected, before):
             raise RuntimeError("shared-memory WAL identity changed while validating")
+        if max_source_bytes is not None and before.st_size > max_source_bytes:
+            raise RuntimeError("shared-memory WAL exceeds preview size limit")
         frame_size = page_size + 24
         available_frames = (before.st_size - 32) // frame_size
         if max_frame > available_frames:
@@ -606,6 +609,8 @@ def _validate_active_wal_headers(
     shm_path: Path,
     wal_details: os.stat_result,
     shm_details: os.stat_result,
+    *,
+    max_source_bytes: int | None = None,
 ) -> None:
     wal_header, current_wal = _read_entry_prefix(
         wal_path, wal_details, 32, "WAL sidecar"
@@ -613,6 +618,10 @@ def _validate_active_wal_headers(
     shm_headers, current_shm = _read_entry_prefix(
         shm_path, shm_details, 96, "SHM sidecar"
     )
+    if max_source_bytes is not None and (
+        current_wal.st_size > max_source_bytes or current_shm.st_size > max_source_bytes
+    ):
+        raise RuntimeError("shared-memory WAL or SHM exceeds preview size limit")
     magic = int.from_bytes(wal_header[0:4], "big")
     if magic not in {0x377F0682, 0x377F0683}:
         raise RuntimeError("shared-memory WAL sidecar has an invalid magic value")
@@ -682,11 +691,12 @@ def _validate_active_wal_headers(
         checksum_order=checksum_order,
         max_frame=max_frame,
         shm_frame_checksum=shm_frame_checksum,
+        max_source_bytes=max_source_bytes,
     )
 
 
 def _checkpointed_database_image(
-    canonical: Path, expected: os.stat_result
+    canonical: Path, expected: os.stat_result, *, max_source_bytes: int | None = None
 ) -> bytearray:
     if fcntl is None or not hasattr(os, "O_NOFOLLOW"):
         raise RuntimeError("read-only checkpointed preview requires POSIX file locks")
@@ -718,6 +728,8 @@ def _checkpointed_database_image(
         if wal_details is not None or shm_details is not None:
             raise RuntimeError("shared-memory sidecar appeared while snapshotting")
         before = os.fstat(descriptor)
+        if max_source_bytes is not None and before.st_size > max_source_bytes:
+            raise RuntimeError("shared-memory database exceeds preview size limit")
         image = bytearray(_read_fd_bytes(descriptor, before.st_size))
         after = os.fstat(descriptor)
         stable_fields = (
@@ -744,7 +756,10 @@ def _checkpointed_database_image(
 
 
 def connect_readonly(
-    db_path: Path | None = None, *, allow_legacy: bool = False
+    db_path: Path | None = None,
+    *,
+    allow_legacy: bool = False,
+    max_source_bytes: int | None = None,
 ) -> sqlite3.Connection:
     """Open one coherent shared-memory snapshot without initializing the store."""
     path = (db_path or DEFAULT_DB_PATH).expanduser()
@@ -752,12 +767,21 @@ def connect_readonly(
         raise RuntimeError("read-only shared-memory preview requires the Unix VFS")
     if sqlite3.sqlite_version_info < (3, 22, 0):
         raise RuntimeError("read-only WAL preview requires SQLite 3.22 or newer")
+    if max_source_bytes is not None and (
+        type(max_source_bytes) is not int or max_source_bytes < 1
+    ):
+        raise ValueError("shared-memory preview size limit must be a positive integer")
 
     canonical, database_details = _canonical_preview_path(path)
     wal_path = Path(f"{canonical}-wal")
     shm_path = Path(f"{canonical}-shm")
     wal_details, shm_details = _sidecar_state(canonical)
     active_wal = wal_details is not None and shm_details is not None
+    if max_source_bytes is not None and any(
+        item is not None and item.st_size > max_source_bytes
+        for item in (database_details, wal_details, shm_details)
+    ):
+        raise RuntimeError("shared-memory preview source exceeds size limit")
 
     if active_wal:
         uri = (
@@ -770,7 +794,9 @@ def connect_readonly(
             raise RuntimeError(
                 "read-only checkpointed preview requires SQLite deserialize support"
             )
-        image = _checkpointed_database_image(canonical, database_details)
+        image = _checkpointed_database_image(
+            canonical, database_details, max_source_bytes=max_source_bytes
+        )
         if len(image) < 100 or bytes(image[:16]) != b"SQLite format 3\x00":
             raise RuntimeError("shared-memory snapshot has an invalid SQLite header")
         # A checkpointed WAL database can retain WAL read/write header bytes even
@@ -793,6 +819,9 @@ def connect_readonly(
             raise RuntimeError("shared-memory preview could not verify query-only mode")
         conn.execute("BEGIN")
         if active_wal:
+            # BEGIN is deferred: perform a read before validating the WAL so
+            # later commits cannot enter the snapshot after that validation.
+            conn.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
             current_database = _require_regular_entry(canonical, "database")
             current_wal, current_shm = _sidecar_state(canonical)
             if (
@@ -806,11 +835,17 @@ def connect_readonly(
                 raise RuntimeError(
                     "shared-memory database sidecars changed while opening preview"
                 )
+            if max_source_bytes is not None and any(
+                item.st_size > max_source_bytes
+                for item in (current_database, current_wal, current_shm)
+            ):
+                raise RuntimeError("shared-memory preview source exceeds size limit")
             _validate_active_wal_headers(
                 wal_path,
                 shm_path,
                 current_wal,
                 current_shm,
+                max_source_bytes=max_source_bytes,
             )
         inspection = _schema_inspection(conn)
         if allow_legacy:

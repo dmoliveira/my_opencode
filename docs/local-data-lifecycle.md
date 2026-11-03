@@ -1,4 +1,4 @@
-# Local Data Lifecycle: Offline Planning Slice
+# Local Data Lifecycle: Planning and Read-Only Inventory
 
 Task: `task_26`. Status: **partial implementation; source mutation remains blocked**.
 
@@ -9,7 +9,7 @@ python3 scripts/data_lifecycle_command.py preview --file /private/staging/reques
 python3 scripts/data_lifecycle_command.py summarize-export --file /private/staging/export.json --store runtime_history
 ```
 
-Both commands emit JSON to stdout and execute no owner commands, subprocesses,
+These two commands emit JSON to stdout and execute no owner commands, subprocesses,
 network calls or writes. There is no `apply` operation and no new slash alias.
 The only file read is the explicitly supplied input. Input must be an existing
 current-user-owned private regular single-link file (`0600` or stricter) beneath
@@ -19,6 +19,8 @@ verified root-owned system aliases (for example, macOS `/var`). Parents may be
 `0755`; use a private `0700` staging directory outside synchronized repositories
 for this workflow. The reader
 does not repair permissions, copy unsafe inputs, or create missing files.
+The separate shared-memory inventory described below **does inspect** an
+explicitly selected source database in an isolated read-only worker.
 
 `preview` returns an `offline_workflow_plan`: a successful plan has `result: PASS`
 but **`status: blocked`**, `source_inspected: false`, `affected_count: null`, and
@@ -84,6 +86,58 @@ input paths, content or exception details. Invalid arguments also produce fixed
 JSON failures rather than argparse's normal argument echo. Success exits 0;
 failure exits 1; help exits 0. No partial plan or summary is emitted on failure.
 
+## Read-Only Shared-Memory Candidate Snapshot
+
+For an explicitly selected shared-memory database, scope, exact namespace and
+frozen UTC cutoff, the separate inventory command reports the count and a
+fingerprint of the **archive candidates** in one owner snapshot:
+
+```bash
+python3 scripts/data_lifecycle_command.py inventory-shared-memory \
+  --db-path /private/example/shared-memory.db \
+  --scope repo --namespace example --cutoff 2026-01-01T00:00:00Z
+```
+
+It uses the same candidate predicate as `/memory-lifecycle cleanup`: active,
+unpinned records older than the cutoff, including the owner's date fallback and
+scope/namespace filters. The cutoff must be an explicit UTC whole-second instant;
+the command does not silently recalculate a moving `--older-days` predicate.
+
+The fingerprint covers a versioned domain, the exact selector, column names and
+every value of each selected row in deterministic order. No row values, IDs,
+namespace, or path are printed. The process arguments and the resulting count,
+cutoff, scope and content-derived hash are **local-sensitive**; hashes can expose
+equality or enable guessing and are not automatically safe to share. The digest
+is an observation, not a backup, anonymization or secure erasure.
+
+The command uses the existing owner read-only connection and never opens the
+source for writing, archives rows, deletes, redacts, creates a backup or creates
+a missing source. Its public entry point always starts a separate worker: an
+embedded owner reader sharing a process with a writable connection to the same
+database can alter transient SHM coordination bytes, even with `readonly_shm=1`.
+That was observed on Darwin with SQLite 3.54.1; do not call the private inventory
+function inside such a process. Failure emits only a fixed reason code. The
+isolated worker has a 30-second deadline, a 128 MiB SQLite hard-heap ceiling,
+checks for a 64 MiB limit on each source database/WAL/SHM file, a 1 MiB SQLite
+row limit, and limits of 10,000 candidate rows, 128 columns, 256 characters per
+column name and 16 MiB serialized candidate data. Linux also enforces a 512 MiB
+process address-space ceiling. Some Darwin kernels reject that OS ceiling; on
+those systems the source-copy, SQLite-heap and row limits still apply, but they
+are **not** a hard ceiling on total Python process memory. Exceeding a limit or
+encountering an unsupported store fails rather than returning a partial digest.
+The owner reader may follow a configured database symlink to a verified regular,
+single-link target; it rejects unsupported sidecars. These checks do not freeze a
+concurrent writer or guarantee that file sizes stay fixed throughout inspection;
+the sample can become stale immediately after it is taken.
+
+**This is not a source-removal or redaction preview.** `apply_supported`, source
+identity binding, authorization, quiescence, verified recovery and cross-store
+completeness remain false. The fingerprint is not compared in an owner write
+transaction and must not be treated as a token to apply cleanup or deletion.
+Pinned/archived records, FTS, other namespaces, other stores, backups and exports
+are outside its candidate set. Existing cleanup archives records; it does not
+erase their content. The cross-store source-mutation blocker below remains open.
+
 ## Owner Workflow Before Source Changes
 
 1. **Authorize exact scope.** Decide removal versus export-only redaction and
@@ -115,6 +169,15 @@ artifact. The installed CLI also exposes cascading session deletion, but no
 revision-bound descendant preview was found. Therefore this planner does not
 generate a delete command. V1 compatibility is not inferred from V2 help.
 
+In a disposable OpenCode 2.2.5 instance, the installed API described paginated
+`parentID` filtering for session listing, but deletion accepted only a session
+ID and cascaded to children. Its active-session endpoint described only
+foreground drains owned by that OpenCode process. Neither pagination nor that
+activity list establishes an atomic descendant inventory or writer exclusion.
+In a disposable race probe, a child created after a prior listing was also
+removed by a later parent delete. The initial listing included a next cursor,
+so this demonstrates a post-observation race, not complete pagination.
+
 ### Session Sidecars
 
 Use `python3 scripts/session_command.py show <sessionID> --json` and `doctor --json`
@@ -140,6 +203,13 @@ is `oc --config <config> archive <recordID> --reason <reason> --format json`; it
 limited to memory/doc records and must preserve native reference/revision checks.
 No task/session cancellation, direct SQLite mutation or overridden reference check
 is added. Archive and operation history are retained, not securely erased.
+
+In a disposable SQLite-backed Codememory graph, archive previews provided a
+revision and plan hash. Applying one synthetic plan caused a second plan from
+the prior revision to be rejected; repeating the successful request with the
+same request ID and hash returned a replay of the same operation. This evidence
+applies only to that native reversible archive flow, not erasure or cross-store
+retry safety.
 
 ## Remaining Blocker For Task 26
 
