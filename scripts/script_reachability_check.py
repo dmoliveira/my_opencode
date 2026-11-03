@@ -17,6 +17,8 @@ ROOT_FILES = [
     REPO_ROOT / "Makefile",
     REPO_ROOT / "scripts" / "selftest.py",
     REPO_ROOT / "scripts" / "doctor_command.py",
+    REPO_ROOT / "scripts" / "setup_dual_opencode.sh",
+    REPO_ROOT / "scripts" / "setup_local_dev_symlinks.sh",
 ]
 
 WRAPPER_SCRIPT_OVERRIDES = {

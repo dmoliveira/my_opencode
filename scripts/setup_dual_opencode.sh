@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SCRIPT_DIR/setup_safety.py" runtime
 
 MY_OPENCODE_REPO="${MY_OPENCODE_REPO:-$HOME/Codes/Projects/my_opencode}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
