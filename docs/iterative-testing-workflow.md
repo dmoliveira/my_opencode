@@ -48,15 +48,15 @@ If terminal/session state is the blocker and `tmux` is available:
 
 Use the strongest realistic isolated environment available without turning a normal task into a heavyweight lab exercise.
 
-`make selftest` ignores inherited `GIT_*` overrides and system/global Git
-configuration in its own process. Its `--since` tag coverage uses a temporary
-Git repository rather than changing refs in the checkout, and its image
-preference fixtures use temporary paths. Known claims, agent-pool, audit,
-workflow, task-graph, daemon, delivery, and background-job paths are rebound to
-an owned temporary runtime. These safeguards do not isolate all
-checkout-relative or inherited state: run the full self-test in a disposable
-standalone checkout with isolated home, runtime, and temporary paths when
-preserving local data matters.
+`make selftest` ignores inherited `GIT_*`, `MY_OPENCODE_*`, `OPENCODE_*`, and
+`XDG_*` overrides in its own process, binds its home and XDG paths to temporary
+locations, and uses isolated Git configuration. Its `--since` tag coverage and
+image preference fixtures also use temporary paths. These safeguards do not
+isolate all checkout-relative or inherited state. Configuration transactions
+still share the per-user `/tmp/my-opencode-config-locks-<uid>` registry, so an
+isolated home and `TMPDIR` are not an OS sandbox. When preserving local data
+matters, run the full self-test in a disposable standalone checkout inside an
+isolated OS environment.
 
 Examples:
 

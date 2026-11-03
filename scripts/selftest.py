@@ -320,6 +320,58 @@ def _selftest_runtime_paths(tmp: Path) -> dict[str, str]:
     }
 
 
+def _wait_for_fixture_background_job(bg_dir: Path, job_id: str) -> None:
+    if not job_id:
+        raise AssertionError("synthetic background job id is missing")
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        try:
+            payload = json.loads((bg_dir / "jobs.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
+        for job in jobs if isinstance(jobs, list) else []:
+            if not isinstance(job, dict) or job.get("id") != job_id:
+                continue
+            status = job.get("status")
+            if status == "completed":
+                try:
+                    meta = json.loads(
+                        (bg_dir / "runs" / f"{job_id}.meta.json").read_text(encoding="utf-8")
+                    )
+                except (OSError, json.JSONDecodeError):
+                    meta = {}
+                if isinstance(meta, dict) and meta.get("id") == job_id and meta.get("status") == status:
+                    return
+            if status in {"failed", "cancelled"}:
+                raise AssertionError(f"synthetic background job ended as {status}")
+        time.sleep(0.05)
+    raise AssertionError("synthetic background job did not finish in time")
+
+
+def _isolated_application_environment(
+    environment: dict[str, str], tmp: Path, home: Path
+) -> dict[str, str]:
+    sanitized = {
+        key: value
+        for key, value in environment.items()
+        if not key.startswith(("MY_OPENCODE_", "OPENCODE_", "XDG_"))
+    }
+    sanitized.update({
+        "HOME": str(home),
+        "TMPDIR": str(tmp),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_CACHE_HOME": str(home / ".cache"),
+        "XDG_DATA_HOME": str(home / ".local" / "share"),
+        "XDG_STATE_HOME": str(home / ".local" / "state"),
+        "XDG_CONFIG_DIRS": str(tmp / "xdg-config-dirs"),
+        "XDG_DATA_DIRS": str(tmp / "xdg-data-dirs"),
+        "XDG_RUNTIME_DIR": str(tmp / "xdg-runtime"),
+    })
+    sanitized.update(_selftest_runtime_paths(tmp))
+    return sanitized
+
+
 def initialize_validation_git_fixture(
     directory: Path, *, env: dict[str, str] | None = None
 ) -> None:
@@ -479,8 +531,14 @@ def main() -> int:
         tmp = Path(tmpdir)
         home = tmp / "home"
         home.mkdir(parents=True, exist_ok=True)
-        # These fixture writes must not follow caller paths or the later checkout symlink.
-        os.environ.update(_selftest_runtime_paths(tmp))
+        # Child commands and direct runtime helpers must not inherit caller state paths.
+        safe_environment = _isolated_application_environment(dict(os.environ), tmp, home)
+        for name in tuple(os.environ):
+            if name not in safe_environment:
+                del os.environ[name]
+        os.environ.update(safe_environment)
+        (tmp / "xdg-runtime").mkdir(mode=0o700)
+        tempfile.tempdir = str(tmp)
         test_env = os.environ.copy()
         test_env["HOME"] = str(home)
         test_bin_dir = home / "bin"
@@ -5614,7 +5672,15 @@ exit 0
             "workflow status should return idle with the stopped run as latest history",
         )
 
+        swarm_bg_workspace = tmp / "swarm-bg-workspace"
+        swarm_bg_scripts = swarm_bg_workspace / "scripts"
+        swarm_bg_scripts.mkdir(parents=True)
+        (swarm_bg_scripts / "doctor_command.py").write_text(
+            "print('synthetic background fixture')\n", encoding="utf-8"
+        )
         swarm_env = productivity_env.copy()
+        # No notification work should outlive these immediately completing fixtures.
+        swarm_env["MY_OPENCODE_BG_NOTIFICATIONS_ENABLED"] = "0"
         swarm_workflow_state_path = tmp / "swarm-workflow-state.json"
         swarm_claims_path = tmp / "swarm-claims.json"
         swarm_agent_pool_path = tmp / "swarm-agent-pool.json"
@@ -5702,7 +5768,7 @@ exit 0
             text=True,
             env=swarm_env,
             check=False,
-            cwd=REPO_ROOT,
+            cwd=swarm_bg_workspace,
         )
         expect(result.returncode == 0, f"workflow swarm plan failed: {result.stderr}")
         swarm_plan_payload = parse_json_output(result.stdout)
@@ -6000,7 +6066,7 @@ exit 0
                 "--by",
                 "agent:discover-1",
                 "--bg-command",
-                "python3 scripts/selftest.py",
+                "python3 scripts/doctor_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -6077,7 +6143,7 @@ exit 0
                 "--by",
                 "agent:discover-1",
                 "--bg-command",
-                "python3 scripts/selftest.py",
+                "python3 scripts/doctor_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -6095,6 +6161,10 @@ exit 0
             swarm_accept_payload.get("lane", {}).get("status") == "active"
             and bool(swarm_accept_payload.get("lane", {}).get("bg_job_id")),
             "workflow swarm accept-handoff should activate the lane and enqueue background work when requested",
+        )
+        _wait_for_fixture_background_job(
+            Path(swarm_env["MY_OPENCODE_BG_DIR"]),
+            str(swarm_accept_payload.get("lane", {}).get("bg_job_id") or ""),
         )
 
         result = subprocess.run(
@@ -6400,7 +6470,7 @@ exit 0
             text=True,
             env=swarm_env,
             check=False,
-            cwd=REPO_ROOT,
+            cwd=swarm_bg_workspace,
         )
         expect(result.returncode == 0, f"off-root swarm plan failed: {result.stderr}")
         result = subprocess.run(
@@ -6435,7 +6505,7 @@ exit 0
                 "--by",
                 "agent:discover-1",
                 "--bg-command",
-                "python3 scripts/selftest.py",
+                "python3 scripts/doctor_command.py",
                 "--json",
             ],
             capture_output=True,
@@ -6449,6 +6519,10 @@ exit 0
             f"workflow swarm off-root accept-handoff failed: {result.stderr}",
         )
         offroot_accept_payload = parse_json_output(result.stdout)
+        _wait_for_fixture_background_job(
+            Path(swarm_env["MY_OPENCODE_BG_DIR"]),
+            str(offroot_accept_payload.get("lane", {}).get("bg_job_id") or ""),
+        )
         bg_read_result = subprocess.run(
             [
                 sys.executable,
@@ -6469,7 +6543,7 @@ exit 0
         )
         offroot_bg_payload = parse_json_output(bg_read_result.stdout)
         expect(
-            offroot_bg_payload.get("job", {}).get("cwd") == str(REPO_ROOT),
+            offroot_bg_payload.get("job", {}).get("cwd") == str(swarm_bg_workspace),
             "workflow swarm accept-handoff should enqueue background work against the swarm plan cwd",
         )
 
@@ -7388,8 +7462,6 @@ exit 0
                 "lane-1",
                 "--by",
                 "agent:discover-1",
-                "--bg-command",
-                "python3 scripts/selftest.py",
                 "--json",
             ],
             capture_output=True,
@@ -7402,6 +7474,26 @@ exit 0
             result.returncode == 0, f"running-bg accept-handoff failed: {result.stderr}"
         )
         running_accept_payload = parse_json_output(result.stdout)
+        expect(
+            running_accept_payload.get("lane", {}).get("status") == "active",
+            "running-bg fixture should activate its synthetic lane",
+        )
+        running_job_id = "bg-selftest-status-only"
+        running_state = load_json_file(swarm_workflow_state_path)
+        running_lanes = running_state.get("swarm", {}).get("active", {}).get("lanes", [])
+        running_lane = next(
+            (lane for lane in running_lanes if lane.get("lane_id") == "lane-1"), None
+        )
+        expect(isinstance(running_lane, dict), "running-bg fixture lane should exist")
+        running_lane["bg_job_id"] = running_job_id
+        running_lane["bg_job_status"] = "running"
+        swarm_workflow_state_path.write_text(
+            json.dumps(running_state, indent=2) + "\n", encoding="utf-8"
+        )
+        (swarm_running_bg_path / "jobs.json").write_text(
+            json.dumps({"version": 1, "jobs": [{"id": running_job_id, "status": "running"}]}) + "\n",
+            encoding="utf-8",
+        )
         result = subprocess.run(
             [
                 sys.executable,
@@ -7409,7 +7501,7 @@ exit 0
                 "swarm",
                 "complete-lane",
                 "--lane-id",
-                "lane-2",
+                "lane-1",
                 "--summary",
                 "Should block",
                 "--json",
@@ -7421,7 +7513,9 @@ exit 0
             cwd=REPO_ROOT,
         )
         expect(
-            result.returncode != 0,
+            result.returncode != 0
+            and parse_json_output(result.stdout).get("error")
+            == "background job still in progress for lane: lane-1",
             "workflow swarm complete-lane should reject lanes with running background jobs",
         )
         result = subprocess.run(
@@ -7431,7 +7525,7 @@ exit 0
                 "swarm",
                 "handoff",
                 "--lane-id",
-                "lane-2",
+                "lane-1",
                 "--to",
                 "agent:discover-1",
                 "--json",
@@ -7443,7 +7537,9 @@ exit 0
             cwd=REPO_ROOT,
         )
         expect(
-            result.returncode != 0,
+            result.returncode != 0
+            and parse_json_output(result.stdout).get("error")
+            == "lane has active background work: lane-1",
             "workflow swarm handoff should reject lanes with running background jobs",
         )
 
@@ -7456,7 +7552,7 @@ exit 0
                 "swarm",
                 "handoff",
                 "--lane-id",
-                "lane-2",
+                "lane-1",
                 "--to",
                 "agent:discover-1",
                 "--json",
@@ -7468,7 +7564,9 @@ exit 0
             cwd=REPO_ROOT,
         )
         expect(
-            result.returncode != 0,
+            result.returncode != 0
+            and parse_json_output(result.stdout).get("error")
+            == "lane has active background work: lane-1",
             "workflow swarm handoff should reject lanes with unknown background job state",
         )
 
