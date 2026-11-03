@@ -63,9 +63,10 @@ New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a g
 ## Features and benefits 🌟
 
 **Safety hold:** Avoid live background job mutations, untrusted background job
-reads, and ast-grep installation or version probes. Some diagnostics can also
-access or initialize the background store. See `docs/command-handbook.md` for
-affected commands and remaining risks.
+reads; ast-grep installation, retries, recovery, or version probes; and
+Playwright CLI installation or retries. Preserve existing ast-grep stages and
+journals and the Playwright CLI cache. Some diagnostics also access preserved
+state. See `docs/command-handbook.md` for affected commands and remaining risks.
 
 - 🧠 Built-in `/mcp` command for `status`, `help`, `doctor`, `profile`, `enable`, and `disable`.
 - 🎛️ Built-in `/plugin` command to enable or disable plugins without editing JSON.

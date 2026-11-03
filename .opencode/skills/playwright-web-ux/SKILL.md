@@ -7,9 +7,15 @@ description: Use when browser-first validation, Playwright CLI or MCP, implement
 Validate the real implemented web experience in-browser and produce concrete UX findings with evidence.
 
 ## Default Operating Mode
-- Use the verified, exact `playwright-cli` package first for standard coding-agent browser flows and longer exploratory sessions.
-- Use Playwright MCP when the task specifically benefits from its integrated network, storage, assertion, vision, or protocol tool surface.
+- Choose a browser backend only after independently checking its effects on state that must be preserved.
+- Consider Playwright MCP when its integrated network, storage, assertion, vision, or protocol tools are useful and its state effects are acceptable.
 - Keep the same quality bar in both paths: deterministic state setup, user-visible assertions, and evidence-backed findings.
+
+**Safety hold:** Do not run live `/devtools install playwright-cli` or retry it.
+Preserve the existing Playwright CLI cache, npm config, and attestation files
+until cache-write authority and no-clobber publication are qualified. See
+`docs/command-handbook.md`. This hold does not qualify MCP or `npx` as safe
+alternatives.
 
 ## Use When
 - the user asks for Playwright or browser testing
@@ -23,21 +29,20 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - static code review is sufficient
 
 ## First Steps
-- `/devtools install playwright-cli`
+- Check the safety hold and preserve existing state.
 - `/ox-ux --repo <repo>` or use `--target` and `--scope` for a narrower audit.
-- Start a unique session with `npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>`.
-- If MCP is the better fit, run `/browser ensure --json` and `/mcp profile playwright` instead.
+- Start a unique session only with a backend independently confirmed safe for the task.
 
 ## Tool Selection Rules
 - Quick gate:
-  - Use `playwright-cli` for standard implemented website and app audits, repeated coding-agent interactions, and token-efficient persistent sessions.
-  - Use Playwright MCP when integrated network mocking, storage control, assertions, vision, or host-managed browser tools are the deciding requirement.
-  - If semantics are weak, use CLI screenshots or coordinates, or switch to MCP vision when its integrated tool path is more useful.
+  - Use `playwright-cli` for standard implemented website and app audits only when it is independently available and safe for the task.
+  - Consider Playwright MCP when integrated network mocking, storage control, assertions, vision, or host-managed browser tools are needed and its state effects are acceptable.
+  - If semantics are weak, consider screenshots, coordinates, or MCP vision only with an independently safe backend.
 - Prefer accessibility snapshots and refs first.
 - Use Playwright MCP assertions when you need deterministic visible-state checks.
 - Use network and storage controls when auth, retries, offline mode, or error states must be reproduced reliably.
 - Use vision mode only when the accessibility tree is insufficient, such as canvas, WebGL, maps, charts, or custom widgets without meaningful ARIA.
-- Use `playwright-cli` first when the task needs longer exploratory loops, multiple sessions, browser-game traversal, or token-efficient repeated commands.
+- Consider `playwright-cli` for longer exploratory loops or browser-game traversal only when it is independently available and safe.
 - Reuse one unique `-s=<session>` value and end it with the scoped `close` command.
 - Use `close-all` or `kill-all` only inside a fully owned isolated `HOME` and cache. Never use them against the host session inventory.
 - Do not install external CLI skill bundles; keep this audited skill and the pinned package invocation as the command contract.
@@ -47,7 +52,7 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 ## Scenario Playbooks
 
 ### Standard website or app audit
-- Run `/devtools install playwright-cli`, then use a unique CLI session for the journey.
+- Use a unique session with an independently safe backend for the journey.
 - Exercise the main journey first.
 - Then cover loading, empty, error, success, and mobile states.
 - Verify visible copy, hierarchy, responsiveness, and trust cues.
@@ -58,7 +63,7 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - Assert the post-login state explicitly.
 
 ### Canvas, WebGL, or browser-game flow
-- Start with `playwright-cli` when the UI is mostly non-semantic or coordinate-driven.
+- Consider `playwright-cli` for non-semantic or coordinate-driven UI only when it is independently available and safe.
 - High-value starter moves:
   - use `open --persistent` or `attach --cdp=chrome` for longer sessions
   - use `state-save` / `state-load` for auth-heavy flows
@@ -69,7 +74,7 @@ Validate the real implemented web experience in-browser and produce concrete UX 
 - Be explicit when a game scenario is observational UX validation rather than deterministic state proof.
 
 ### Session cleanup
-- Close only the session you opened: `npx --yes @playwright/cli@0.1.17 -s=<session> close`.
+- Close only the session you opened; do not use a close command that implicitly installs a package.
 - Confirm the owned session and browser processes exited before reporting completion.
 - Reserve `close-all` and `kill-all` for disposable sandboxes whose `HOME`, cache, and process groups are fully owned by the current gate.
 

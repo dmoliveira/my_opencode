@@ -41,31 +41,50 @@ Use these directly in OpenCode:
 /mcp disable all
 ```
 
-For browser-first coding-agent work, start with:
+**Playwright CLI safety hold:** Do not run live
+`/devtools install playwright-cli` or retry it until cache-write authority and
+no-clobber publication are qualified. Preserve the existing Playwright CLI cache, npm
+config files, and attestation files; do not clean or repair them as a shortcut.
+Synthetic tests showed that an attestation-stage symlink or a hardlinked npm
+config can overwrite and change permissions on a file outside the cache. No
+live file or package was involved. Package provenance checks do not establish
+filesystem write authority.
 
-```text
-/devtools install playwright-cli
-npx --yes @playwright/cli@0.1.17 -s=<unique-session> open <url>
-```
+For browser-first work, use a backend only after independently confirming it is
+safe for the state that must be preserved. The optional Playwright CLI target is
+not part of `install all`; that does not qualify it for live installation.
 
-The devtools command verifies the exact package version, license, integrity, Node requirement, and lifecycle-script posture before it executes package code. It uses an isolated npm config and owner-only cache; `install all` never includes this optional target.
+**Safety hold:** Do not run live ast-grep installation, retries, recovery, or
+version probes, including `/devtools install ast-grep` and
+`/devtools install all`, until process containment, bounded draining, and
+recovery ownership and cleanup are qualified.
+Preserve existing ast-grep journals, staged files, and managed artifacts; do not
+manually remove them as a recovery shortcut.
 
-**Safety hold:** Do not run live ast-grep installation or version probes,
-including `/devtools install ast-grep` and `/devtools install all`, until
-process-group teardown is made safe. A version process whose leader has exited
-can leave a group that the current teardown cannot authenticate; permission
-errors are also not handled reliably. A mock-only test demonstrated the signal
-path, not that an unrelated process was actually signalled.
+A version process whose leader has exited can leave a group that the current
+teardown cannot authenticate, and permission errors are not handled reliably.
+Downloader cleanup can also wait without a deadline after a timeout.
+A mock-only test demonstrated the signal path, not that an unrelated process
+was actually signalled. Separately, a synthetic same-UID test with a valid
+journal showed that recovery can unlink a file moved from outside the cache
+under an expected stage name. No live file was involved. A journal, pathname,
+or metadata check does not prove stage ownership or make a later unlink atomic.
+
+`/devtools status` and `/devtools doctor` inspect managed ast-grep and Playwright
+CLI state; avoid them on live state that must be preserved or remain unaccessed.
+They may still recommend the held installers: disregard those recommendations.
+`/auto-slash execute` can route a devtools install request with no target to
+`install all`. Do not execute such requests while the hold applies; preview-first
+can be disabled, so execution without `--force` is not always a preview.
+`/auto-slash doctor --json` may also suggest executing `/doctor`; disregard that
+suggestion when the background state must be preserved.
 
 The managed installer targets only pinned Darwin arm64 `ast-grep 0.45.0`;
 other host tools remain observation/manual-only. Git hooks use the resolved
 local `pre-commit` executable only.
 
-Reuse the same session for each command, then close only that session:
-
-```text
-npx --yes @playwright/cli@0.1.17 -s=<unique-session> close
-```
+Reuse a session only when its backend is independently safe, and close only the
+session you opened. Do not use a close command that implicitly installs a package.
 
 Use `close-all` or `kill-all` only in a disposable sandbox with a fully owned `HOME`, cache, and process group. Do not install external CLI skill bundles.
 
