@@ -17,6 +17,9 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from opencode_version_probe import OpenCodeVersionProbeError, probe_opencode_version
+from setup_safety import VERSION_PATTERN
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ID_RE = re.compile(r"\b(?P<kind>task|epic|memory|doc|link)_\d+\b")
 TASKER_MODEL = "opencode/deepseek-v4.1-flash-free"
@@ -159,7 +162,20 @@ def resolve_tasker_launcher(name: str) -> str:
 
 
 def resolve_tasker_launchers() -> tuple[str, str]:
-    return resolve_tasker_launcher("oc"), resolve_tasker_launcher("opencode")
+    real_oc = resolve_tasker_launcher("oc")
+    real_opencode = resolve_tasker_launcher("opencode")
+    try:
+        version = probe_opencode_version(real_opencode)
+    except OpenCodeVersionProbeError:
+        raise RuntimeError(
+            "unable to verify the OpenCode V1 executable for the tasker harness"
+        ) from None
+    match = VERSION_PATTERN.fullmatch(version)
+    if match is None or match.group(1) != "1":
+        raise RuntimeError(
+            "tasker harness requires a verified OpenCode V1 executable; V2 and other versions are unsupported"
+        )
+    return real_oc, real_opencode
 
 
 def render_tasker_oc_launcher(real_oc: str, codememory_config: Path) -> str:
@@ -1144,6 +1160,7 @@ def main(argv: list[str]) -> int:
     repository_codememory_before = snapshot_tree(repository_codememory)
     disposable_database_created = False
     temporary_root_removed = False
+    temporary_root: Path | None = None
     try:
         real_oc, real_opencode = resolve_tasker_launchers()
         with tempfile.TemporaryDirectory(prefix="tasker-e2e-config-") as config_home:
@@ -1179,7 +1196,7 @@ def main(argv: list[str]) -> int:
         failures.append({"name": "runtime-isolation", "error": str(exc)})
     finally:
         temporary_root_removed = (
-            "temporary_root" in locals() and not temporary_root.exists()
+            temporary_root is not None and not temporary_root.exists()
         )
 
     repository_codememory_isolated = (
@@ -1192,14 +1209,14 @@ def main(argv: list[str]) -> int:
                 "error": "repository .codememory content changed during the disposable sandbox run",
             }
         )
-    if not temporary_root_removed:
+    if temporary_root is not None and not temporary_root_removed:
         failures.append(
             {
                 "name": "temporary-root-cleanup",
                 "error": "tasker sandbox temporary root was not removed",
             }
         )
-    if not disposable_database_created:
+    if temporary_root is not None and not disposable_database_created:
         failures.append(
             {
                 "name": "disposable-codememory-store",
@@ -1216,6 +1233,7 @@ def main(argv: list[str]) -> int:
         "warning_count": warning_count,
         "repository_codememory_isolated": repository_codememory_isolated,
         "disposable_database_created": disposable_database_created,
+        "temporary_root_created": temporary_root is not None,
         "temporary_root_removed": temporary_root_removed,
         "duration_seconds": round(time.time() - started, 2),
         "passed": passed,

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import io
 import json
+import os
+import shlex
+import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -14,6 +19,251 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import tasker_e2e_sandbox
+import tasker_production_live_smoke
+from opencode_version_probe import OpenCodeVersionProbeError
+
+
+class TaskerLaunchVersionTest(unittest.TestCase):
+    def test_only_explicit_v1_version_passes_for_selected_executable(self) -> None:
+        selected = ("/fixture/oc", "/fixture/selected-opencode")
+        for version in ("1.18.18", "opencode v1.18.18", "1.2.3-rc.1"):
+            with (
+                self.subTest(version=version),
+                patch.object(
+                    tasker_e2e_sandbox, "resolve_tasker_launcher", side_effect=selected
+                ),
+                patch.object(
+                    tasker_e2e_sandbox, "probe_opencode_version", return_value=version
+                ) as probe,
+            ):
+                self.assertEqual(
+                    selected, tasker_e2e_sandbox.resolve_tasker_launchers()
+                )
+                probe.assert_called_once_with(selected[1])
+
+        for version in (
+            "2.2.5", "3.0.0", "0.9.0", "unknown", "1.18",
+            "prefix 1.18.18", "1.18.18 trailing", "SECRET_CANARY",
+        ):
+            with (
+                self.subTest(version=version),
+                patch.object(
+                    tasker_e2e_sandbox, "resolve_tasker_launcher", side_effect=selected
+                ),
+                patch.object(
+                    tasker_e2e_sandbox, "probe_opencode_version", return_value=version
+                ),
+                self.assertRaisesRegex(RuntimeError, "verified OpenCode V1"),
+            ):
+                tasker_e2e_sandbox.resolve_tasker_launchers()
+
+    def test_probe_failure_is_refused_without_leaking_diagnostics(self) -> None:
+        with (
+            patch.object(
+                tasker_e2e_sandbox, "resolve_tasker_launcher",
+                side_effect=("/fixture/oc", "/fixture/opencode"),
+            ),
+            patch.object(
+                tasker_e2e_sandbox, "probe_opencode_version",
+                side_effect=OpenCodeVersionProbeError("SECRET_CANARY"),
+            ),
+            self.assertRaises(RuntimeError) as caught,
+        ):
+            tasker_e2e_sandbox.resolve_tasker_launchers()
+        self.assertNotIn("SECRET_CANARY", str(caught.exception))
+
+    def test_e2e_entrypoint_refuses_before_creating_any_fixture(self) -> None:
+        output = io.StringIO()
+        with (
+            patch.object(
+                tasker_e2e_sandbox, "resolve_tasker_launcher",
+                side_effect=("/fixture/oc", "/fixture/opencode"),
+            ),
+            patch.object(
+                tasker_e2e_sandbox, "probe_opencode_version", return_value="2.2.5"
+            ),
+            patch.object(tasker_e2e_sandbox, "snapshot_tree", return_value={}),
+            patch.object(
+                tasker_e2e_sandbox.tempfile, "TemporaryDirectory",
+                side_effect=AssertionError("unexpected fixture creation"),
+            ) as temporary,
+            patch.object(tasker_e2e_sandbox, "prepare_tasker_runtime") as prepare,
+            patch.object(tasker_e2e_sandbox, "initialize_tasker_runtime") as initialize,
+            redirect_stdout(output),
+        ):
+            result = tasker_e2e_sandbox.main(["--runs", "1", "--json"])
+        payload = json.loads(output.getvalue())
+        self.assertEqual(1, result)
+        self.assertEqual("FAIL", payload["result"])
+        self.assertEqual(
+            ["runtime-isolation"], [item["name"] for item in payload["failures"]]
+        )
+        self.assertIn("verified OpenCode V1", payload["failures"][0]["error"])
+        self.assertFalse(payload["temporary_root_created"])
+        self.assertFalse(payload["temporary_root_removed"])
+        self.assertFalse(payload["disposable_database_created"])
+        temporary.assert_not_called()
+        prepare.assert_not_called()
+        initialize.assert_not_called()
+
+    def test_production_entrypoint_refuses_before_snapshot_or_fixture(self) -> None:
+        with (
+            patch.object(
+                tasker_e2e_sandbox, "resolve_tasker_launcher",
+                side_effect=("/fixture/oc", "/fixture/opencode"),
+            ),
+            patch.object(
+                tasker_e2e_sandbox, "probe_opencode_version", return_value="2.2.5"
+            ),
+            patch.object(
+                tasker_e2e_sandbox, "snapshot_tree",
+                side_effect=AssertionError("unexpected snapshot"),
+            ) as snapshot,
+            patch.object(
+                tasker_production_live_smoke, "TemporaryDirectory",
+                side_effect=AssertionError("unexpected fixture creation"),
+            ) as temporary,
+            self.assertRaisesRegex(RuntimeError, "verified OpenCode V1"),
+        ):
+            tasker_production_live_smoke.run(1000)
+        snapshot.assert_not_called()
+        temporary.assert_not_called()
+
+    def test_failure_after_fixture_creation_still_checks_cleanup(self) -> None:
+        output = io.StringIO()
+        with (
+            patch.object(
+                tasker_e2e_sandbox, "resolve_tasker_launcher",
+                side_effect=("/fixture/oc", "/fixture/opencode"),
+            ),
+            patch.object(
+                tasker_e2e_sandbox, "probe_opencode_version", return_value="1.18.18"
+            ),
+            patch.object(tasker_e2e_sandbox, "snapshot_tree", return_value={}),
+            patch.object(
+                tasker_e2e_sandbox, "prepare_tasker_runtime",
+                side_effect=RuntimeError("fixture failed"),
+            ),
+            redirect_stdout(output),
+        ):
+            result = tasker_e2e_sandbox.main(["--runs", "1", "--json"])
+        payload = json.loads(output.getvalue())
+        self.assertEqual(1, result)
+        self.assertTrue(payload["temporary_root_created"])
+        self.assertTrue(payload["temporary_root_removed"])
+        self.assertEqual(
+            ["runtime-isolation", "disposable-codememory-store"],
+            [item["name"] for item in payload["failures"]],
+        )
+
+    def test_failed_fixture_cleanup_remains_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            fixture = Path(parent) / "fixture"
+            fixture.mkdir()
+            output = io.StringIO()
+            with (
+                patch.object(
+                    tasker_e2e_sandbox, "resolve_tasker_launcher",
+                    side_effect=("/fixture/oc", "/fixture/opencode"),
+                ),
+                patch.object(
+                    tasker_e2e_sandbox, "probe_opencode_version", return_value="1.18.18"
+                ),
+                patch.object(tasker_e2e_sandbox, "snapshot_tree", return_value={}),
+                patch.object(tasker_e2e_sandbox.tempfile, "TemporaryDirectory") as temporary,
+                patch.object(
+                    tasker_e2e_sandbox, "prepare_tasker_runtime",
+                    side_effect=RuntimeError("fixture failed"),
+                ),
+                redirect_stdout(output),
+            ):
+                temporary.return_value.__enter__.return_value = str(fixture)
+                temporary.return_value.__exit__.return_value = False
+                result = tasker_e2e_sandbox.main(["--runs", "1", "--json"])
+            payload = json.loads(output.getvalue())
+            self.assertEqual(1, result)
+            self.assertTrue(payload["temporary_root_created"])
+            self.assertFalse(payload["temporary_root_removed"])
+            self.assertIn(
+                "temporary-root-cleanup", [item["name"] for item in payload["failures"]]
+            )
+
+
+@unittest.skipUnless(os.name == "posix", "fixture launchers require POSIX")
+class TaskerLaunchVersionCliTest(unittest.TestCase):
+    def test_both_entrypoints_reject_v2_without_launching_a_fixture(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="tasker-v2-launch-test-") as raw:
+            root = Path(raw)
+            binary_dir = root / "bin"
+            home = root / "home"
+            temporary = root / "tmp"
+            for directory in (binary_dir, home, temporary):
+                directory.mkdir()
+            sentinel = home / "runtime-sentinel"
+            sentinel.write_text("owned runtime sentinel\n", encoding="utf-8")
+            calls = root / "opencode-calls"
+            unexpected = root / "unexpected-run"
+            oc_called = root / "oc-called"
+            opencode = binary_dir / "opencode"
+            opencode.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' \"$*\" >> {shlex.quote(str(calls))}\n"
+                "if [ \"$#\" = 1 ] && [ \"$1\" = --version ]; then\n"
+                "  printf '%s\\n' 'opencode v2.2.5'\n"
+                "  exit 0\n"
+                "fi\n"
+                f"printf called > {shlex.quote(str(unexpected))}\n"
+                "exit 97\n",
+                encoding="utf-8",
+            )
+            opencode.chmod(0o700)
+            oc = binary_dir / "oc"
+            oc.write_text(
+                f"#!/bin/sh\nprintf called > {shlex.quote(str(oc_called))}\nexit 97\n",
+                encoding="utf-8",
+            )
+            oc.chmod(0o700)
+            env = {
+                "HOME": str(home),
+                "PATH": f"{binary_dir}{os.pathsep}{os.defpath}",
+                "TMPDIR": str(temporary),
+                "XDG_CONFIG_HOME": str(home / ".config"),
+                "XDG_DATA_HOME": str(home / ".local/share"),
+                "XDG_STATE_HOME": str(home / ".local/state"),
+                "XDG_CACHE_HOME": str(home / ".cache"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "CI": "true",
+            }
+            for name, args in (
+                ("tasker_e2e_sandbox.py", ["--runs", "1", "--json"]),
+                ("tasker_production_live_smoke.py", ["--json"]),
+            ):
+                with self.subTest(entrypoint=name):
+                    result = subprocess.run(
+                        [sys.executable, str(SCRIPTS_DIR / name), *args],
+                        cwd=root,
+                        env=env,
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=30,
+                    )
+                    payload = json.loads(result.stdout)
+                    self.assertEqual(1, result.returncode, result.stderr)
+                    self.assertEqual("FAIL", payload["result"])
+                    self.assertIn("verified OpenCode V1", json.dumps(payload))
+                    if name == "tasker_e2e_sandbox.py":
+                        self.assertFalse(payload["temporary_root_created"])
+                        self.assertFalse(payload["disposable_database_created"])
+                        self.assertEqual(
+                            ["runtime-isolation"],
+                            [item["name"] for item in payload["failures"]],
+                        )
+            self.assertEqual(["--version", "--version"], calls.read_text().splitlines())
+            self.assertFalse(unexpected.exists())
+            self.assertFalse(oc_called.exists())
+            self.assertEqual("owned runtime sentinel\n", sentinel.read_text())
 
 
 class TaskerEventEvidenceTest(unittest.TestCase):
