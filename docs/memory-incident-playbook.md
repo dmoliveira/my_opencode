@@ -24,40 +24,28 @@ Pause active continuation work before opening more sessions:
 /autopilot pause
 ```
 
-If critical pressure persists, stop only the highest RSS processes listed in `process_pressure.high_rss`.
+Automatic process recovery is disabled for both V1 and V2. The sampled PID
+and command do not establish a stable process identity or whether the process
+owns a shared service. Do not treat a high-RSS entry as authorization to signal
+it. Inspect the affected service and sessions before any manual action.
 
-Phase A recovery command (dry-run first):
-
-```bash
-/gateway recover memory
-/gateway recover memory --apply
-/gateway recover memory --apply --force-kill
-```
-
-Dry-run output now includes a compact threshold summary (`candidate_mode`, `candidate_count`, and `policy_thresholds`) so operators can quickly see why recovery did or did not select targets.
-
-`recover memory` targets top `high_footprint` entries first on macOS (falls back to `high_rss`) and sends graceful `SIGTERM` before recommending escalation.
-When tmux pane mapping is available, recovery now sends `Ctrl+C` first, then falls back to `SIGTERM`, and only uses `SIGKILL` when pressure exceeds `memoryRecovery.forceKillMinPressureMb`.
-
-Pane-aware recovery (Phase B):
+To inspect candidates without terminating them:
 
 ```bash
-/gateway recover memory --apply --resume --compress --force-kill
-/gateway recover memory --apply --resume --compress --continue-prompt --force-kill
-/gateway recover memory --watch --apply --resume --compress --force-kill --interval-seconds 20 --max-cycles 6
+/gateway recover memory --json
 ```
 
-When PID-to-pane mapping is available in tmux, this restarts `opencode --continue` (or `--session <id>`) in the impacted pane and injects `/compact` after resume with safety checks and a retry wait window.
-Use `--watch` for automated polling and recovery actions in bounded cycles.
-
-Thresholds and recovery criteria are configurable via `memoryRecovery` in your config:
+Candidates are **unqualified observations**, not a safe termination plan.
+The command does not signal processes or resume panes, and preview no longer
+updates the pane cache or starts an OpenCode session lookup. `--apply` fails
+closed. Thresholds used to select diagnostic candidates remain configurable via
+`memoryRecovery`:
 
 ```json
 {
   "memoryRecovery": {
     "candidateMinFootprintMb": 6000,
     "candidateMinRssMb": 1400,
-    "forceKillMinPressureMb": 10240,
     "aggregateEnabled": true,
     "aggregateMaxPressureMb": 40960,
     "aggregateCandidateMinFootprintMb": 5000,
@@ -69,34 +57,35 @@ Thresholds and recovery criteria are configurable via `memoryRecovery` in your c
     "emergencySwapUsedMb": 28000,
     "emergencyCandidateMinFootprintMb": 4500,
     "emergencyBatchSize": 1,
-    "compactWaitSeconds": 10,
-    "compactPollSeconds": 0.5,
-    "autoContinuePromptOnResume": true,
-    "notificationsEnabled": true,
-    "notifyBeforeRecovery": true,
-    "notifyAfterRecovery": true,
     "criticalPressureMb": 10240,
     "criticalSwapUsedMb": 12000
   }
 }
 ```
 
-Session targeting: pane-aware resume prefers `opencode --session <id>` when a session id (`ses_*`) is visible in tmux pane title, then falls back to a per-pane cache (`~/.config/opencode/my_opencode/runtime/gateway-pane-session-cache.json`), then per-directory latest session, and finally `opencode --continue`.
+Aggregate and emergency thresholds can change which candidates are reported;
+they do not authorize termination. Resume, compaction, force-kill and automatic
+continuation settings do not enable recovery actions.
 
-Aggregate safety net: when no single process crosses `candidateMinFootprintMb`, recovery can still trigger in aggregate mode if total opencode footprint crosses `aggregateMaxPressureMb` and swap/session preconditions are met; it then recovers only the top `aggregateBatchSize` offenders.
+New protection LaunchAgents cannot be enabled. An existing watcher that loads
+this version with `--watch --apply` continues on its configured schedule in
+diagnostic-only mode, warns on stderr, and records blocked cycles in its usual
+bounded state file. Finite watches still exit and may be restarted by launchd.
+The watcher does not signal processes or resume panes. A separately installed
+runtime or already-running process may still use older code; updating this
+repository does not stop or update it.
 
-Emergency swap safety net: when swap crosses `emergencySwapUsedMb`, recovery can select top footprint candidates even if normal/aggregate candidate thresholds are not met, to prevent full machine stalls.
-
-LaunchAgent controls from OpenCode:
+Existing LaunchAgent status and reports remain available:
 
 ```bash
 /gateway protection status --json
-/gateway protection enable --interval-seconds 20 --json
 /gateway protection report --limit 20 --json
 /gateway protection cache --json
-/gateway protection cache --clear --json
-/gateway protection disable --json
 ```
+
+The `loaded` field reports launchd state, not which code the agent is running.
+Status and report mark the local code's automatic recovery as unavailable and
+do not claim to have verified a loaded agent's version.
 
 ## 3) Recover
 
