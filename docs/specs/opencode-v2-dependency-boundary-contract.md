@@ -27,7 +27,7 @@ definition keys/types without changing it. An observer plugin records native
 BEFORE identity, session-directory lookup, shell-create input and AFTER result
 shape/numeric exit candidates. A second plugin deliberately runs later.
 
-Five separate fresh runtime fixtures exercise:
+The first five fresh runtime fixtures exercise:
 
 | Case | Fixed command and observation |
 | --- | --- |
@@ -36,6 +36,25 @@ Five separate fresh runtime fixtures exercise:
 | Late tool mutation | Later BEFORE hook substitutes a different fixed `printf`. |
 | Late shell mutation | Later shell-create hook substitutes a different fixed `printf`. |
 | Late AFTER error | Later AFTER hook throws after an earlier observer saw completion. |
+
+Ten additional fresh fixtures exercise the same five controls twice: once with a
+native shell permission deny and once with a `tool.use` policy deny. In each
+group, the fixture allows `printf` generally but denies the synthetic resource
+`printf PROBE_DENIED*` (the policy prefixes it with `shell:`).
+
+| Case | Fixed input or hook mutation |
+| --- | --- |
+| Allow control | An allowed `printf` writes an owned witness. |
+| Direct deny control | `printf PROBE_DENIED > witness` is submitted directly. |
+| Late tool mutation | A later tool BEFORE hook replaces the allowed command with that same denied command. |
+| Late shell mutation | A later shell-create hook replaces the allowed command with that same denied command. |
+| Late shell/environment mutation | The command stays `printf PROBE_ALLOWED`; the later shell-create hook changes `/bin/sh` to `/bin/bash` and sets `BASH_ENV` to an owned startup file containing the same directly denied command. |
+
+The startup case is deliberately a **trusted synthetic plugin** modifying the
+shell and environment; it is not a model command or an untrusted plugin sandbox
+escape. OpenCode's policy documentation explicitly says policies do not sandbox
+plugin code. The test measures whether command-text denial alone supplies an
+immutable process boundary when a later hook can change its inputs.
 
 The trace records each callback, not an invented raw executor envelope. AFTER
 identity is reported only when that event actually contains it; it is never
@@ -68,12 +87,34 @@ possible V2 authority bridge is impossible. An early BEFORE check was not a
 terminal binding point in these cases. Observed numeric exits and matching IDs
 do not supply the missing raw-order, exactly-once or revocation guarantees.
 
-Independent verification collected all five cases with two localhost provider
-requests each and matching native BEFORE/AFTER identities. Each case's explicit
+For both the permission and policy groups, the allowed control executed, the
+direct-deny control was denied, and the tool-mutated and shell-mutated commands
+were denied without writing the witness. The matching denial marker reached the
+synthetic consumer. In the environment case the allowed command completed and
+the startup file wrote the denied-command witness; no denial marker appeared.
+The observer saw `/bin/sh` without `BASH_ENV` before the late hook, which then
+set the fixture-owned startup path and `/bin/bash`.
+
+The matching command controls therefore show that these particular native
+checks account for the late changes to command text, while the environment
+control shows that they do not bind all inputs to the process. This does not
+prove behavior for other versions, shells, hooks, policy sources or command
+encodings, and it does not claim a privilege boundary against plugins that
+already execute with host authority. It cannot qualify gateway or dependency
+authority.
+
+Independent verification of the earlier slice collected its five cases with two
+localhost provider requests each and matching native BEFORE/AFTER identities. Each case's explicit
 database and runtime persistence stayed within its owned fixture; all six roots
 (including the version check) were removed. Real configuration file bytes and
 inodes matched before/after. These checks do not prove continuous absence of
 transient writes or correlate a native database session row.
+
+The extended measurement collected all fifteen cases, each with two localhost
+provider requests; the sixteen identity-checked roots include the version check.
+PASS for a late mutation records either a denial or an observed execution, not a
+presumed safe outcome. The direct-deny and allowed controls must show their
+expected outcomes; missing, ambiguous or uncorrelated evidence fails the probe.
 
 ## Isolation and failure rules
 
@@ -92,9 +133,13 @@ transient writes or correlate a native database session row.
   model. Its sole tool call is the real native shell; no custom shell service or
   undocumented executor wrapper substitutes for it.
 - Fixture permissions deny other actions and allow only `printf`/`false` shell
-  resources. A fixture safety hook also checks the exact fixed command, owned
-  working directory and `/bin/sh`. No `--auto` is used. These test-only rules
-  are not a production dependency guard.
+  resources, with the synthetic permission or policy deny added in the ten
+  comparison cases. A fixture safety hook also checks the exact fixed command
+  and owned working directory; it permits `/bin/sh`, except in the two startup
+  cases where it requires `/bin/bash` and the fixed owned `BASH_ENV` file. Other
+  cases require `BASH_ENV` to be absent. The startup file is checked unchanged
+  after execution. No `--auto` is used. These test-only rules are not a
+  production dependency guard.
 - Caps: 60 seconds per runtime, 128 KiB per stdout/stderr stream, 1 MiB per
   provider request, eight requests per case, 64 trace rows and 64 KiB per trace.
   Socket reads time out. Owned process groups are terminated and reaped; cleanup
@@ -104,8 +149,10 @@ transient writes or correlate a native database session row.
   diagnostics. They are observations, not capability tokens or receipt frames.
 
 PASS requires collection of every case's native definition/schema, fixture
-setup, BEFORE identity/directory, shell callback, expected witness, AFTER result
-and provider continuation. Missing collection, wrong host, unexpected requests,
+setup, BEFORE identity/directory, shell callback, classified witness, AFTER result
+and provider continuation. Denial controls also require their matching denial
+marker; startup cases require the expected shell/environment observations and
+allowed-command output. Missing collection, wrong host, unexpected requests,
 implicit installers, bounds violations or failed cleanup fail measurement.
 An observed absent result field or an observed ordering gap can PASS
 **measurement only**. Authority remains `disabled-unqualified` on every outcome.
@@ -133,7 +180,8 @@ Official V2 documentation is rolling, not pinned 2.2.5 implementation evidence:
 [plugin loading](https://opencode.ai/v2/docs/build/plugins),
 [server hooks and snapshots](https://opencode.ai/v2/docs/build/plugins/server),
 [configuration discovery](https://opencode.ai/v2/docs/config), and
-[permissions](https://opencode.ai/v2/docs/permissions).
+[permissions](https://opencode.ai/v2/docs/permissions); see also
+[policies](https://opencode.ai/v2/docs/policies).
 See the [migration inventory](../plan/doing/opencode-v2-migration.md) and the
 [existing dependency workflow](../dependency-security-workflow.md) for the
 separate compatibility and authority gates.
