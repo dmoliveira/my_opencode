@@ -51,4 +51,6 @@ The isolated V2 runtime created `session_v2`, `session_message`, and `session_pa
 
 Runtime snapshot application validation still uses the V1-only `--pure db` command. The snapshot flow rejects V2 and unidentifiable validator versions without publishing a bundle; the version of that executable does not establish the source service version. A synthetic V2 `session list --standalone` control opened its selected database but changed the disposable copy, so it is not a qualified replacement for the current strict-copy validation.
 
+The tasker E2E evaluator examines both V1 `bash` and V2 `shell` event records and rejects incomplete or unrecognized evidence, including delegated tools whose nested execution it cannot see. This is a post-run check, not a sandbox. The live tasker harness still uses V1 invocation and plugin configuration and is not qualified for V2; event parsing is not a harness port.
+
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.

@@ -157,8 +157,8 @@ Expected flow:
 - returns created ids plus the inferred dependency graph
 - `tasker` can be selected directly or delegated to when the prompt clearly asks for planning-only capture instead of implementation
 - `python3 scripts/selftest.py` validates the `tasker` contract metadata plus the isolated Codememory artifact/link flow this planning path relies on
-- `python3 scripts/tasker_e2e_sandbox.py --runs 30 --json` drives live `opencode run --agent tasker` simulations against sandboxed Codememory scopes when you want runtime-level confidence beyond selftest
-- that live harness now mixes happy-path planning, duplicate-control, and planning-only execution-boundary scenarios so regressions surface under broader runtime pressure
+- `python3 scripts/tasker_e2e_sandbox.py --runs 30 --json` runs happy-path planning, duplicate-control, and planning-only refusal scenarios with a disposable Codememory database. The harness currently targets V1; its `--dir` invocation, gateway plugin, and permissions are not qualified for V2.
+- Event checks occur **after** execution. They examine V1 `bash` and V2 `shell` records and reject missing, malformed, incomplete, or unsupported evidence; they do not prevent commands, prove an event stream includes every action, or establish OS sandbox containment. Refusal-text matching is a conservative literal heuristic, not proof of intent. Delegated `task`/`subagent` tool events are rejected because this evaluator cannot inspect their nested execution. A disposable home is not an OS sandbox.
 
 ---
 

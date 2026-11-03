@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,271 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import tasker_e2e_sandbox
+
+
+class TaskerEventEvidenceTest(unittest.TestCase):
+    SESSION = "ses_fixture"
+
+    def event(self, kind: str, **part: object) -> dict:
+        part_type = {
+            "step_start": "step-start",
+            "step_finish": "step-finish",
+            "tool_use": "tool",
+            "text": "text",
+        }.get(kind, kind)
+        return {
+            "type": kind,
+            "sessionID": self.SESSION,
+            "part": {
+                "type": part_type,
+                "sessionID": self.SESSION,
+                "messageID": "msg_fixture",
+                **part,
+            },
+        }
+
+    def tool(self, name: str, command: object = "oc current --format json") -> dict:
+        return self.event(
+            "tool_use",
+            tool=name,
+            state={
+                "status": "completed",
+                "input": {"command": command},
+                "output": "{}",
+            },
+        )
+
+    def trace(self, *body: dict, reason: str = "stop") -> list[dict]:
+        if any(event.get("type") == "tool_use" for event in body):
+            return [
+                self.event("step_start"),
+                *body,
+                self.event("step_finish", reason="tool-calls"),
+                self.event("step_start"),
+                self.event("text", text="Planning-only; did not execute."),
+                self.event("step_finish", reason=reason),
+            ]
+        return [
+            self.event("step_start"),
+            *body,
+            self.event("text", text="Planning-only; did not execute."),
+            self.event("step_finish", reason=reason),
+        ]
+
+    def refusal(self) -> tasker_e2e_sandbox.Scenario:
+        return tasker_e2e_sandbox.Scenario(
+            name="synthetic-refusal",
+            prompt="planning only",
+            expected_titles={},
+            expected_edges=[],
+            mode="refusal",
+        )
+
+    def test_json_lines_require_complete_unambiguous_objects(self) -> None:
+        invalid = (
+            "",
+            "  \n",
+            "not json\n",
+            "null\n",
+            "[]\n",
+            "1\n",
+            '{"type":"text"}\n{"type":',
+            '{"type":"text","type":"tool_use"}\n',
+            '{"type":"tool_use","part":{"tool":"bash","tool":"shell"}}\n',
+            '{"type":"text","value":NaN}\n',
+        )
+        for stdout in invalid:
+            with (
+                self.subTest(stdout=stdout),
+                self.assertRaises(AssertionError),
+            ):
+                tasker_e2e_sandbox.parse_events(stdout)
+
+    def test_json_lines_accept_valid_events_and_blank_lines(self) -> None:
+        events = self.trace(self.tool("bash"))
+        stdout = "\n" + "\n".join(json.dumps(event) for event in events) + "\n\n"
+        self.assertEqual(events, tasker_e2e_sandbox.parse_events(stdout))
+
+    def test_v1_bash_and_v2_shell_are_examined(self) -> None:
+        for name in ("bash", "shell"):
+            with self.subTest(name=name):
+                events = self.trace(self.tool(name))
+                self.assertEqual(
+                    ["oc current --format json"],
+                    tasker_e2e_sandbox.extract_commands(events),
+                )
+                self.assertEqual(
+                    [],
+                    tasker_e2e_sandbox.validate_scenario(self.refusal(), events)[
+                        "warnings"
+                    ],
+                )
+                unsafe = self.trace(self.tool(name, "git push"))
+                with self.assertRaisesRegex(AssertionError, "non-Codememory"):
+                    tasker_e2e_sandbox.validate_scenario(self.refusal(), unsafe)
+
+    def test_positive_v1_scenario_still_checks_planning_commands(self) -> None:
+        scenario = tasker_e2e_sandbox.Scenario(
+            name="positive",
+            prompt="planning only",
+            expected_titles={},
+            expected_edges=[],
+        )
+        command = 'oc add task "example" --scope sandbox --worktree /tmp/worktree --branch sandbox/tasker'
+        outcome = tasker_e2e_sandbox.validate_scenario(
+            scenario, self.trace(self.tool("bash", command))
+        )
+        self.assertEqual("positive", outcome["name"])
+
+    def test_refusal_without_tool_calls_accepts_complete_final_text(self) -> None:
+        self.assertEqual(
+            [],
+            tasker_e2e_sandbox.validate_scenario(self.refusal(), self.trace())[
+                "warnings"
+            ],
+        )
+
+    def test_rejects_unsupported_or_unexamined_tools(self) -> None:
+        for name in ("unknown", "write", "edit", "task", "subagent", "", None, []):
+            with self.subTest(name=name), self.assertRaises(AssertionError):
+                tasker_e2e_sandbox.validate_scenario(
+                    self.refusal(), self.trace(self.tool(name))
+                )
+
+    def test_accepts_known_read_only_tool_evidence(self) -> None:
+        for name in ("read", "list", "glob", "grep"):
+            with self.subTest(name=name):
+                tasker_e2e_sandbox.validate_scenario(
+                    self.refusal(), self.trace(self.tool(name))
+                )
+
+    def test_rejects_missing_or_malformed_tool_state(self) -> None:
+        parts = (
+            {},
+            {"tool": "shell"},
+            {"tool": "shell", "state": None},
+            {"tool": "shell", "state": {"status": "completed", "input": {}}},
+            {
+                "tool": "shell",
+                "state": {"status": "completed", "input": {"command": 12}},
+            },
+            {
+                "tool": "shell",
+                "state": {
+                    "status": "completed",
+                    "input": {"command": ""},
+                    "output": "",
+                },
+            },
+            {
+                "tool": "shell",
+                "state": {"status": "running", "input": {"command": "oc current"}},
+            },
+            {
+                "tool": "read",
+                "state": {"status": "completed", "input": None, "output": ""},
+            },
+            {
+                "tool": "read",
+                "state": {"status": "completed", "input": {}, "output": None},
+            },
+        )
+        for part in parts:
+            with self.subTest(part=part), self.assertRaises(AssertionError):
+                tasker_e2e_sandbox.validate_scenario(
+                    self.refusal(), self.trace(self.event("tool_use", **part))
+                )
+
+    def test_refuses_incomplete_or_incoherent_streams(self) -> None:
+        valid = self.trace()
+        other_session = self.event("text", text="Planning-only")
+        other_session["sessionID"] = "ses_other"
+        invalid_part = self.event("text", text="Planning-only")
+        invalid_part["part"]["type"] = "tool"
+        invalid_part_session = self.event(
+            "text", text="Planning-only", sessionID="ses_other"
+        )
+        missing_session = self.event("text", text="Planning-only")
+        del missing_session["sessionID"]
+        missing_part_session = self.event("text", text="Planning-only")
+        del missing_part_session["part"]["sessionID"]
+        missing_message = self.event("text", text="Planning-only")
+        del missing_message["part"]["messageID"]
+        changed_message = self.event("text", text="Planning-only", messageID="msg_other")
+        bad_streams = (
+            [],
+            valid[:-1],
+            valid[1:],
+            self.trace(reason="tool-calls"),
+            [self.event("step_start"), self.event("step_finish", reason="stop")],
+            [
+                self.event("step_start"),
+                self.event("text", text=""),
+                self.event("step_finish", reason="stop"),
+            ],
+            self.trace(self.event("error", message="failed")),
+            self.trace(self.event("unknown")),
+            self.trace(other_session),
+            self.trace(invalid_part),
+            self.trace(invalid_part_session),
+            self.trace(missing_session),
+            self.trace(missing_part_session),
+            self.trace(missing_message),
+            self.trace(changed_message),
+            [self.event("step_start"), self.event("step_start"), *valid[1:]],
+            [*valid, self.event("text", text="unexpected trailing output")],
+            [
+                self.event("step_start"),
+                self.event("step_finish", reason="tool-calls"),
+                *valid,
+            ],
+            [
+                self.event("step_start"),
+                self.event("text", text="Planning-only"),
+                self.event("step_finish", reason="tool-calls"),
+                self.event("step_start"),
+                self.event("step_finish", reason="stop"),
+            ],
+        )
+        for events in bad_streams:
+            with self.subTest(events=events), self.assertRaises(AssertionError):
+                tasker_e2e_sandbox.validate_scenario(self.refusal(), events)
+
+    def test_refusal_requires_a_final_explicit_planning_boundary(self) -> None:
+        for text in (
+            "I will implement this.",
+            "Planning-only is over; I will implement this.",
+        ):
+            events = [
+                self.event("step_start"),
+                self.event("text", text=text),
+                self.event("step_finish", reason="stop"),
+            ]
+            with (
+                self.subTest(text=text),
+                self.assertRaisesRegex(AssertionError, "explicit planning boundary"),
+            ):
+                tasker_e2e_sandbox.validate_scenario(self.refusal(), events)
+
+    def test_run_scenario_cannot_pass_with_missing_or_bad_output(self) -> None:
+        runtime = {
+            "TASKER_E2E_WORKSPACE": "/fixture",
+            "TASKER_E2E_OPENCODE_BIN": "/fixture/opencode",
+        }
+        results = (
+            SimpleNamespace(returncode=0, stdout="", stderr=""),
+            SimpleNamespace(returncode=0, stdout="{broken", stderr=""),
+            SimpleNamespace(returncode=1, stdout="", stderr="runtime failed"),
+        )
+        for result in results:
+            with (
+                self.subTest(result=result),
+                patch.object(tasker_e2e_sandbox, "run_process", return_value=result),
+                self.assertRaises(AssertionError),
+            ):
+                tasker_e2e_sandbox.run_scenario(
+                    self.refusal(), timeout_ms=1000, runtime_env=runtime
+                )
 
 
 class TaskerShellBoundaryTest(unittest.TestCase):
