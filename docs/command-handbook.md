@@ -361,7 +361,10 @@ were inspected or authorization to apply a repair. Preview does not apply repair
 and may exit nonzero when candidates need attention. Inspect the candidates and
 choose a scope before any explicit apply; generic-session apply also requires
 `--include-generic --confirm-generic`. SQLite reads may update transient WAL
-coordination bytes, as described in `docs/runtime-db-schema.md`.
+coordination bytes, as described in `docs/runtime-db-schema.md`. Apply refuses
+blocked or unverified runtime paths and creates a private no-clobber backup,
+but pathname checks do not prove quiescence or exclude same-UID replacement
+races. Stop the owner and verify recovery before any explicit repair.
 
 `/session doctor` also reports the active runtime SQLite directory, database, WAL, and SHM permission states. `/session repair-runtime-permissions` previews only that doctor-resolved active path; an explicit `--db-path` must match current runtime resolution. Apply narrows the runtime directory to `0700`, then the database and every present WAL/SHM generation to `0600` through `O_NOFOLLOW`, descriptor identity checks, and `fchmod`. It never replaces files, writes SQLite content, or broadens owner permissions. Missing databases, unsafe authority, linked or foreign targets, and persistent WAL/SHM churn fail closed. A partial result records every completed narrowing and never restores broader modes automatically. Stop OpenCode and retry if active sidecar churn cannot converge within the fixed bound.
 

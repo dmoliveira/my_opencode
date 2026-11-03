@@ -77,6 +77,23 @@ LIMIT 20;
 
 Use the SQLite online backup API rather than copying a live `opencode.db` file. `/session snapshot-runtime --json` creates a verified private bundle for the exact active runtime path, while `/session repair-stale --apply --json` creates a consistent pre-repair `backup_path` automatically. Keep either artifact outside synced or shared directories because runtime history can contain prompts, paths, tool inputs, and tool output.
 
+Stale repair refuses apply when runtime filesystem safety is blocked or cannot
+be verified. Its pre-repair backup uses an exclusive `0600` file, writes through
+an open descriptor, runs SQLite `quick_check`, and verifies the destination
+identity before reporting success. A collision is not overwritten. If backup
+creation fails after the file was created, an unverified artifact may remain at
+the reported path; it is not a usable recovery point until independently
+inspected. No existing path is automatically deleted on failure. Existing
+backups and separately installed runtimes are not changed by this safeguard.
+
+Source identity is observed before the scan, before and after backup, and after
+opening the writer, but SQLite connections are still opened by pathname. These
+checks cannot exclude a same-UID swap-and-restore race or establish owner
+quiescence. The backup pathname or contents can also change after validation;
+they are not held under exclusive ownership throughout the repair. Stop OpenCode
+writers, protect the backup, and test recovery independently in isolation before
+any explicit repair; a successful check alone is not a restore contract.
+
 The snapshot command defaults to `${XDG_STATE_HOME:-~/.local/state}/my_opencode/runtime-history-snapshots`; override it with `--output-dir` or `MY_OPENCODE_RUNTIME_SNAPSHOT_OUTPUT_DIR`. It preflights space for two logical copies plus reserve, uses SQLite Online Backup, runs `quick_check` by default or full `integrity_check` with `--full-integrity-check`, hashes the result, and asks the selected OpenCode executable to open a disposable isolated copy. The verified application validator currently supports identified V1 executables only. V2 or an unidentifiable version fails without publishing a bundle; V2-native validation remains unimplemented. A successful application open establishes readability by that executable only: it does not identify the source service version or establish an import or restoration contract.
 
 Each published bundle is a private `0700` directory containing exactly:

@@ -100,6 +100,7 @@ class StaleRepairGuidanceTest(unittest.TestCase):
             "repairs": [],
             "preview": [{"session_id": "synthetic-session"}],
             "backup_path": None,
+            "runtime_permission_status": "private",
         }
         output = io.StringIO()
         with (
