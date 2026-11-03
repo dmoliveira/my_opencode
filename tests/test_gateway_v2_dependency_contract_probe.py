@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import socket
@@ -224,6 +225,24 @@ class BoundaryProbeTests(unittest.TestCase):
             with self.assertRaisesRegex(probe.ProbeFailure, "trace_missing_or_oversized"):
                 probe.read_trace(path)
 
+    def test_absent_witness_differs_from_invalid_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "witness"
+            self.assertIsNone(probe.read_witness(path))
+            path.write_text("PROBE_DENIED")
+            self.assertEqual(probe.read_witness(path), "PROBE_DENIED")
+            path.write_text("x" * 128)
+            with self.assertRaisesRegex(probe.ProbeFailure, "witness_invalid"):
+                probe.read_witness(path)
+            path.unlink()
+            path.symlink_to(Path(temp) / "missing")
+            with self.assertRaisesRegex(probe.ProbeFailure, "witness_invalid"):
+                probe.read_witness(path)
+            path.unlink()
+            path.mkdir()
+            with self.assertRaisesRegex(probe.ProbeFailure, "witness_invalid"):
+                probe.read_witness(path)
+
     def test_failure_never_echoes_native_diagnostics_or_qualifies_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.object(probe, "run_child", side_effect=OSError("SECRET_CANARY /real/consumer/path")):
             report = probe.probe("/native/host", Path(temp))
@@ -283,6 +302,126 @@ class BoundaryProbeTests(unittest.TestCase):
             altered[index][field] = value
             with self.assertRaisesRegex(probe.ProbeFailure, reason):
                 probe.assess("baseline", altered, "PROBE_BASELINE\n", state, 0, True)
+
+
+class DenialBoundaryProbeTests(unittest.TestCase):
+    @staticmethod
+    def sample(case: str, outcome: str):
+        mode, variant = case.split("-", 1)
+        initial = "denied" if variant == "direct" else "allowed"
+        tool_command = "denied" if variant == "late-tool" else initial
+        shell_command = "denied" if variant in ("late-tool", "late-shell") else initial
+        identity = {"id": probe.CALL_ID, "sessionID": "synthetic-session", "messageID": "synthetic-message", "tool": "shell", "agent": "build"}
+        status = "error" if outcome == "denied" else "completed"
+        state = probe.ProviderState(
+            Path("/owned"), "synthetic", requests=2, dispatched=1, continued=True,
+            schema={"type": "object"}, schema_sha256="synthetic-hash",
+            tool_outcome={"call_id": probe.CALL_ID, "content_type": "str",
+                          "allowed_marker": variant == "late-env",
+                          "permission_denied": outcome == "denied" and mode == "permission",
+                          "policy_denied": outcome == "denied" and mode == "policy"},
+        )
+        rows = [
+            {"phase": "observer.setup", "version": "2.2.5"}, {"phase": "late.setup"},
+            {"phase": "native.definition", "id": "shell", "name": "shell", "present": True, "executeType": "function", "shape": {"execute": "function"}},
+            {"phase": "observer.before", "directoryMatches": True, "identity": identity, "command": initial, "keys": ["input", *identity]},
+            {"phase": "late.before", "command": tool_command},
+            {"phase": "observer.shell", "command": tool_command, "directoryMatches": True, "shellMatches": True, "startupAbsent": True, "keys": ["command", "cwd", "shell", "timeout", "env"]},
+            {"phase": "late.shell", "command": shell_command, "shellMatches": True, "startupMatches": True, "directoryMatches": True},
+            {"phase": "observer.after", "status": status, "exits": [], "shape": {}, "identity": identity},
+            {"phase": "late.after", "status": status},
+        ]
+        witness = {"denied": None, "allowed-executed": "PROBE_ALLOWED", "denied-command-executed": "PROBE_DENIED",
+                   "startup-denied-command-executed": "PROBE_DENIED", "startup-not-observed": None}[outcome]
+        return rows, witness, state
+
+    def test_fixture_denies_only_the_synthetic_resource(self) -> None:
+        project = Path("/owned/project")
+        permission = probe.fixture_config(project, 12345, "permission")
+        self.assertEqual(permission["permissions"][-1], {"action": "shell", "resource": "printf PROBE_DENIED*", "effect": "deny"})
+        self.assertEqual(permission["agents"]["build"]["permissions"], permission["permissions"])
+        self.assertNotIn("policies", permission)
+        policy = probe.fixture_config(project, 12345, "policy")
+        self.assertEqual(policy["policies"], [{"action": "tool.use", "resource": "shell:printf PROBE_DENIED*", "effect": "deny"}])
+        self.assertFalse(any(rule["resource"] == "printf PROBE_DENIED*" for rule in policy["permissions"]))
+        self.assertEqual(probe.ENV_COMMANDS["denied"], probe.DENIAL_COMMANDS["denied"])
+        with self.assertRaisesRegex(probe.ProbeFailure, "invalid_denial_mode"):
+            probe.fixture_config(project, 12345, "unexpected")
+
+    def test_both_direct_controls_and_both_late_mutations_are_measured(self) -> None:
+        for case in probe.DENIAL_CASES:
+            outcome = "startup-denied-command-executed" if case.endswith("-late-env") else "allowed-executed" if case.endswith("-allow") else "denied"
+            rows, witness, state = self.sample(case, outcome)
+            with self.subTest(case=case):
+                result = probe.assess(case, rows, witness, state, 0, True)
+                self.assertEqual(result["outcome"], outcome)
+                self.assertEqual(result["measurement"], "PASS")
+
+    def test_late_execution_is_reported_not_mislabelled_as_denial(self) -> None:
+        for mode in ("permission", "policy"):
+            for variant in ("late-tool", "late-shell"):
+                case = f"{mode}-{variant}"
+                rows, witness, state = self.sample(case, "denied-command-executed")
+                self.assertEqual(probe.assess(case, rows, witness, state, 0, True)["outcome"], "denied-command-executed")
+
+    def test_startup_absence_is_not_invented_as_a_denial(self) -> None:
+        for mode in ("permission", "policy"):
+            case = f"{mode}-late-env"
+            rows, witness, state = self.sample(case, "startup-not-observed")
+            self.assertEqual(probe.assess(case, rows, witness, state, 0, True)["outcome"], "startup-not-observed")
+            for index, field in ((5, "startupAbsent"), (6, "shellMatches"), (6, "startupMatches"), (6, "directoryMatches")):
+                changed = copy.deepcopy(rows)
+                changed[index][field] = False
+                reason = "startup_observation_incomplete" if index == 5 else "late_shell_observation_incomplete"
+                with self.subTest(mode=mode, field=field), self.assertRaisesRegex(probe.ProbeFailure, reason):
+                    probe.assess(case, changed, witness, state, 0, True)
+            state.tool_outcome["allowed_marker"] = False
+            with self.assertRaisesRegex(probe.ProbeFailure, "startup_outcome_ambiguous"):
+                probe.assess(case, rows, witness, state, 0, True)
+
+    def test_provider_reports_only_fixed_denial_markers(self) -> None:
+        state = probe.ProviderState(Path("/owned"), "synthetic", dispatched=1)
+        state.response({"messages": [{"role": "tool", "tool_call_id": probe.CALL_ID, "content": "Permission denied: read SECRET_CANARY"}]})
+        self.assertFalse(state.tool_outcome["permission_denied"])
+        self.assertNotIn("SECRET_CANARY", json.dumps(state.tool_outcome))
+
+    def test_controls_reject_wrong_outcomes_and_ambiguous_denials(self) -> None:
+        for case, outcome in (("permission-allow", "denied"), ("policy-direct", "denied-command-executed"), ("policy-late-shell", "allowed-executed")):
+            rows, witness, state = self.sample(case, outcome)
+            with self.subTest(case=case), self.assertRaisesRegex(probe.ProbeFailure, "denial_control_mismatch"):
+                probe.assess(case, rows, witness, state, 0, True)
+        for markers in ((False, False), (True, True), (False, True)):
+            rows, witness, state = self.sample("permission-direct", "denied")
+            state.tool_outcome["permission_denied"], state.tool_outcome["policy_denied"] = markers
+            with self.subTest(markers=markers), self.assertRaisesRegex(probe.ProbeFailure, "denial_outcome_ambiguous"):
+                probe.assess("permission-direct", rows, witness, state, 0, True)
+
+    def test_missing_or_forged_evidence_fails_closed(self) -> None:
+        case = "policy-late-shell"
+        rows, witness, state = self.sample(case, "denied")
+        changes = (
+            (lambda r: r.pop(6), "denial_observation_count_mismatch"),
+            (lambda r: r.append(copy.deepcopy(r[6])), "denial_observation_count_mismatch"),
+            (lambda r: r.__setitem__(slice(5, 7), [r[6], r[5]]), "denial_hook_order_mismatch"),
+            (lambda r: r[2].pop("phase"), "trace_phase_invalid"),
+            (lambda r: r.append(r.pop(2)), "native_shell_definition_unidentified"),
+            (lambda r: r[2].__setitem__("shape", "not-a-definition"), "native_shell_definition_unidentified"),
+            (lambda r: r[3].__setitem__("identity", None), "native_before_identity_missing"),
+            (lambda r: r[5].__setitem__("directoryMatches", False), "shell_observation_mismatch"),
+            (lambda r: r[6].__setitem__("command", "allowed"), "denial_command_observation_mismatch"),
+            (lambda r: r[7].__setitem__("identity", {}), "after_observation_incomplete"),
+            (lambda r: r[8].__setitem__("status", "completed"), "after_observation_incomplete"),
+        )
+        for change, reason in changes:
+            altered = copy.deepcopy(rows)
+            change(altered)
+            with self.subTest(reason=reason), self.assertRaisesRegex(probe.ProbeFailure, reason):
+                probe.assess(case, altered, witness, state, 0, True)
+        for attribute, value in (("schema_sha256", None), ("continued", False), ("requests", 3)):
+            bad_state = copy.copy(state)
+            setattr(bad_state, attribute, value)
+            with self.subTest(attribute=attribute), self.assertRaisesRegex(probe.ProbeFailure, "native_run_incomplete"):
+                probe.assess(case, rows, witness, bad_state, 0, True)
 
 
 if __name__ == "__main__":

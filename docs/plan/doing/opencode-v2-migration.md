@@ -35,6 +35,11 @@ The separate [native dependency-boundary probe](../../specs/opencode-v2-dependen
 measures the installed 2.2.5 built-in shell with synthetic fixtures only. It does
 not enable the gateway or qualify dependency installation authority; terminal
 binding, raw-result guarantees and lifecycle revocation remain separate gates.
+Native shell permission and `tool.use` policy denied directly submitted and
+late-mutated command text in the synthetic controls. They did not prevent a
+trusted later hook from changing the shell and `BASH_ENV` so that an owned
+startup file ran the same denied command. This is a process-binding limitation,
+not a claim that policies sandbox plugin code.
 
 Experimental, unconfigured adapters cover V2 model-context and native transport redaction, tool-output and error redaction, two shell guards, and write/protected-worktree guards. `make gateway-v2-slice-smoke` builds and exercises them with isolated OpenCode processes, synthetic data, disposable Git worktrees and a localhost provider. The live checks cover a late context mutation before the HTTP hook, rejection of unsupported HTTP content, allowed and blocked shell commands, tool-output redaction, sanitized tool errors and redactor failures, explicit permission denial, interactive rejection with or without feedback, one running-tool interruption, and linked versus primary worktree writes. The error adapter accepts only OpenCode 2.2.5 and replaces the error with a host `Tool.Error` containing a redacted or generic message and no original metadata. For plain permission rejection it retains the decline prototype only after checking the internal 2.2.5 shape, and shadows common inherited fields with safe values. Prototype behavior is not fully audited, and this dependency on V2 internals needs security review and regression coverage for each supported runtime. Other cancellation and control-flow errors remain unverified.
 
