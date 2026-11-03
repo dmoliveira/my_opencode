@@ -13021,7 +13021,7 @@ exit 0
         result = run_gateway("status", "--json")
         gateway_status = parse_json_output(result.stdout)
         gateway_major = gateway_status.get("opencode_cli_major")
-        gateway_cli_unsupported = gateway_major is None or gateway_major >= 2
+        gateway_cli_unsupported = gateway_major != 1
         expect(
             result.returncode == (1 if gateway_cli_unsupported and gateway_status.get("enabled") else 0),
             f"gateway status exit did not reflect runtime compatibility: {result.stderr}",

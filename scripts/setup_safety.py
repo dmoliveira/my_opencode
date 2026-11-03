@@ -38,6 +38,9 @@ def _probe_version(binary: str, home: str) -> bytes:
         key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL") if key in os.environ
     }
     env.update(
+        CI="true",
+        GIT_TERMINAL_PROMPT="0",
+        GCM_INTERACTIVE="never",
         HOME=home,
         XDG_CONFIG_HOME=os.path.join(home, "config"),
         XDG_DATA_HOME=os.path.join(home, "data"),

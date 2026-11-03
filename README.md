@@ -48,6 +48,8 @@ The script points `~/.config/opencode/my_opencode` and `opencode.json` at the wo
 
 Both this script and `scripts/setup_dual_opencode.sh` require a verified OpenCode V1 executable. They run the version probe in a disposable home and refuse V2, a missing or unrecognized executable, and failed or timed-out probes before changing configuration or runtime records. The V2 gateway migration is still in progress; see [the migration inventory](docs/plan/doing/opencode-v2-migration.md).
 
+The standalone installer and gateway diagnostics also isolate their version probes. These checks identify the selected executable on `PATH`; they do not verify the version or protection status of a separately running or remote service. A disposable home is not an OS sandbox, so the selected executable must be trusted.
+
 New OpenCode sessions now load `~/.config/opencode/my_opencode/AGENTS.md` as a global startup instruction. In the local-dev symlink setup, that file resolves to the sibling checkout at `../agents_md/AGENTS.md` when present (or `../agents.md/AGENTS.md` in older layouts), so edits to the central file propagate automatically to any newly started session, even when launched from an unrelated folder and without rerunning installation.
 
 ## Why this setup rocks 🎯

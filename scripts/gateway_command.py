@@ -114,6 +114,10 @@ from gateway_state_protocol import (  # type: ignore
     GatewayStateProtocolError,
     gateway_state_lock_status,
 )
+from opencode_version_probe import (  # type: ignore
+    OpenCodeVersionProbeError,
+    probe_opencode_version,
+)
 from session_command import (  # type: ignore
     DEFAULT_GENERIC_STALE_PROBLEM_THRESHOLD,
     DEFAULT_RUNTIME_DB_PATH,
@@ -500,22 +504,12 @@ def _gateway_smoke_fingerprint() -> str:
         raise RuntimeError("opencode binary unavailable")
     resolved_binary = Path(opencode_binary).resolve(strict=True)
     binary_stat = resolved_binary.stat()
-    version = subprocess.run(
-        [str(resolved_binary), "--version"],
-        cwd=REPO_ROOT,
-        env={**os.environ, "CI": "true", "GIT_TERMINAL_PROMPT": "0"},
-        text=True,
-        capture_output=True,
-        timeout=5,
-        check=False,
-    )
-    if version.returncode != 0:
-        raise RuntimeError("opencode version probe failed")
+    version = probe_opencode_version(str(resolved_binary))
     material = {
         "binary": str(resolved_binary),
         "binary_size": binary_stat.st_size,
         "binary_mtime_ns": binary_stat.st_mtime_ns,
-        "version": version.stdout.strip(),
+        "version": version,
         "platform": sys.platform,
         "machine": platform.machine(),
     }
@@ -2562,20 +2556,14 @@ def bun_runtime_available() -> bool:
 def opencode_major_version() -> int | None:
     """Detect the CLI version without assuming an unavailable binary is V1."""
     try:
-        result = subprocess.run(
-            ["opencode", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
+        version = probe_opencode_version()
+    except OpenCodeVersionProbeError:
         return None
     match = re.fullmatch(
         r"(?:opencode\s+)?v?(\d+)\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?",
-        result.stdout.strip(),
+        version,
     )
-    return int(match.group(1)) if result.returncode == 0 and match else None
+    return int(match.group(1)) if match else None
 
 
 # Resolves active gateway runtime mode and deterministic reason code.
@@ -2615,6 +2603,9 @@ def gateway_runtime_mode(
     elif opencode_major >= 2:
         mode = "python_command_bridge"
         reason_code = GATEWAY_PLUGIN_INCOMPATIBLE_V2
+    elif opencode_major != 1:
+        mode = "python_command_bridge"
+        reason_code = GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE
     elif not plugin_ready:
         reason_code = GATEWAY_PLUGIN_NOT_READY
     return {
@@ -2764,7 +2755,7 @@ def enable_safety_problems(status: dict[str, Any]) -> list[str]:
             "gateway V1 plugin is incompatible with OpenCode V2; security hooks are not active"
         )
     if status.get("runtime_reason_code") == GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE:
-        problems.append("OpenCode version could not be verified; gateway security hooks are not verified")
+        problems.append("A compatible OpenCode V1 executable could not be verified; gateway security hooks are not verified")
     if status.get("plugin_dir_exists") is not True:
         problems.append("gateway plugin directory is missing")
     if status.get("plugin_dist_exists") is not True:
@@ -2886,7 +2877,7 @@ def command_doctor(
             "gateway V1 plugin is incompatible with OpenCode V2; security hooks are not active"
         )
     if status.get("runtime_reason_code") == GATEWAY_PLUGIN_RUNTIME_UNAVAILABLE:
-        problems.append("OpenCode version could not be verified; gateway security hooks are not verified")
+        problems.append("A compatible OpenCode V1 executable could not be verified; gateway security hooks are not verified")
     if not status["plugin_dir_exists"]:
         warnings.append("gateway plugin directory is missing")
     if not status["plugin_dist_exists"]:
