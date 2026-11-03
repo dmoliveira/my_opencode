@@ -162,7 +162,19 @@ terminal semantics, and the complete lease identity before adoption.
 
 Cancellation fences the current attempt before signalling its process group.
 It becomes terminal only after group settlement; failed containment remains
-`reconciling` with process identity evidence intact.
+`reconciling` with process identity evidence intact. Cleanup, cancellation,
+lease reconciliation, and worker-exception recovery refuse to signal a stored
+process record without a lowercase SHA-256 start fingerprint. A supplied
+fingerprint is checked again before escalation to `SIGKILL`. An aborted-gate
+marker does not release a running attempt's lease when containment is unproven.
+
+These checks are observations, not atomic signal authorization. The target can
+change between a check and a signal, and a leaderless process group cannot be
+authenticated from the stored leader fingerprint. Do not treat a match as proof
+that unrelated processes cannot be signalled. The `ps`-based fallback hashes a
+start time with one-second resolution, so rapid PID reuse can also collide. Use
+OS-level isolation when that guarantee matters, and retain `reconciling` cases
+for investigation.
 
 `/bg reconcile` recovers known pre-effect interruptions and adopts a durable
 terminal receipt only under the still-current exact lease. Missing or ambiguous

@@ -29,6 +29,7 @@ import task_lease_command as leases
 SCOPE = "dmoliveira/my_opencode"
 TASK = "task_129"
 SESSION = "session_74"
+SYNTHETIC_FINGERPRINT = "a" * 64
 
 
 class BackgroundTaskManagerTest(unittest.TestCase):
@@ -487,7 +488,7 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                         "status": "running",
                         "pid": 12345,
                         "pgid": 12345,
-                        "process_start_fingerprint": "reused-process",
+                        "process_start_fingerprint": SYNTHETIC_FINGERPRINT,
                         "run_token": "reserved",
                     }
                 )
@@ -519,7 +520,7 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                         "status": "running",
                         "pid": 12345,
                         "pgid": 12345,
-                        "process_start_fingerprint": "process-start",
+                        "process_start_fingerprint": SYNTHETIC_FINGERPRINT,
                         "run_token": "reserved",
                     }
                 )
@@ -549,6 +550,7 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                         "pid": 12345,
                         "pgid": 12345,
                         "started_at": "2000-01-01T00:00:00Z",
+                        "process_start_fingerprint": SYNTHETIC_FINGERPRINT,
                     }
                 )
                 with (
@@ -579,7 +581,7 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                     {
                         "pid": 12345,
                         "pgid": 12345,
-                        "process_start_fingerprint": "process-start",
+                        "process_start_fingerprint": SYNTHETIC_FINGERPRINT,
                     }
                 )
             )
@@ -1298,14 +1300,14 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                 stored_attempt["worker_pid"] = 2**30
                 stored_attempt["pid"] = 2**30
                 stored_attempt["pgid"] = 2**30
-                stored_attempt["process_start_fingerprint"] = "dead-process"
+                stored_attempt["process_start_fingerprint"] = SYNTHETIC_FINGERPRINT
             bg._write_gate_marker(
                 Path(attempt["gate_path"]),
                 "gate_aborted",
                 job_id=job["id"],
                 attempt_id=attempt["id"],
                 pid=2**30,
-                process_start_fingerprint="dead-process",
+                process_start_fingerprint=SYNTHETIC_FINGERPRINT,
             )
             report = bg.reconcile_lease_jobs()
             self.assertEqual(1, report["failed"])
@@ -1345,7 +1347,7 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                 stored_attempt["worker_pid"] = 2**30
                 stored_attempt["pid"] = 2**30
                 stored_attempt["pgid"] = 2**30
-                stored_attempt["process_start_fingerprint"] = "dead-process"
+                stored_attempt["process_start_fingerprint"] = SYNTHETIC_FINGERPRINT
             current = bg._snapshot_job(job["id"])
             assert current is not None
             attempt = bg.current_attempt(current)
@@ -1356,13 +1358,13 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                 job_id=job["id"],
                 attempt_id=attempt["id"],
                 pid=2**30,
-                process_start_fingerprint="dead-process",
+                process_start_fingerprint=SYNTHETIC_FINGERPRINT,
             )
             Path(attempt["log_path"]).write_bytes(b"")
             receipt = bg._prepared_receipt(current, attempt, identity)
             receipt["receipt_path"] = attempt["receipt_path"]
             receipt["started_at"] = bg.to_iso(bg.now_utc())
-            receipt["process_start_fingerprint"] = "dead-process"
+            receipt["process_start_fingerprint"] = SYNTHETIC_FINGERPRINT
             bg._write_terminal_receipt(
                 receipt,
                 attempt_status="succeeded",
@@ -1404,7 +1406,7 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                         "worker_pid": 2**30,
                         "pid": 2**30,
                         "pgid": 2**30,
-                        "process_start_fingerprint": "dead-process",
+                        "process_start_fingerprint": SYNTHETIC_FINGERPRINT,
                     }
                 )
             current = bg._snapshot_job(job["id"])
@@ -1417,12 +1419,12 @@ class BackgroundTaskManagerTest(unittest.TestCase):
                 job_id=job["id"],
                 attempt_id=attempt["id"],
                 pid=2**30,
-                process_start_fingerprint="dead-process",
+                process_start_fingerprint=SYNTHETIC_FINGERPRINT,
             )
             Path(attempt["log_path"]).write_bytes(b"")
             receipt = bg._prepared_receipt(current, attempt, identity)
             receipt["started_at"] = bg.to_iso(bg.now_utc())
-            receipt["process_start_fingerprint"] = "dead-process"
+            receipt["process_start_fingerprint"] = SYNTHETIC_FINGERPRINT
             terminal, _ = bg._write_terminal_receipt(
                 receipt,
                 attempt_status="succeeded",
@@ -2061,7 +2063,7 @@ raise SystemExit(0 if release.exists() else 3)
                         "status": "running",
                         "pid": 12345,
                         "pgid": 12345,
-                        "process_start_fingerprint": "expected-process",
+                        "process_start_fingerprint": SYNTHETIC_FINGERPRINT,
                     }
                 )
                 stored["pid"] = 12345
@@ -2077,7 +2079,7 @@ raise SystemExit(0 if release.exists() else 3)
                 )
             self.assertEqual("reconciling", status)
             self.assertEqual(
-                "expected-process",
+                SYNTHETIC_FINGERPRINT,
                 terminate_mock.call_args.kwargs["expected_start_fingerprint"],
             )
             release_mock.assert_not_called()
