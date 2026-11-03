@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,7 +31,9 @@ class RuntimeHistorySnapshotTest(unittest.TestCase):
             sys.path.insert(0, str(SCRIPTS_DIR))
         return importlib.reload(importlib.import_module("session_command"))
 
-    def _write_fake_opencode(self, path: Path, *, fail_query: bool = False) -> None:
+    def _write_fake_opencode(
+        self, path: Path, *, fail_query: bool = False, version: str = "1.18.10-test"
+    ) -> None:
         path.write_text(
             "#!/usr/bin/env python3\n"
             "import json, os, sqlite3, sys\n"
@@ -40,7 +43,7 @@ class RuntimeHistorySnapshotTest(unittest.TestCase):
             "Path(os.environ['TMPDIR']).joinpath('validator-tmp').write_text('residue')\n"
             "assert 'OPENCODE_SESSION_ID' not in os.environ\n"
             "if '--version' in sys.argv:\n"
-            "    print('1.18.10-test')\n"
+            f"    print({version!r})\n"
             "    raise SystemExit(0)\n"
             + (
                 "print('injected failure', file=sys.stderr)\nraise SystemExit(7)\n"
@@ -161,6 +164,14 @@ class RuntimeHistorySnapshotTest(unittest.TestCase):
                         "1.18.10-test",
                         manifest["application_validation"]["opencode_version"],
                     )
+                    self.assertIn(
+                        "selected_binary_open_does_not_identify_source_service_or_prove_restoration",
+                        manifest["limitations"],
+                    )
+                    self.assertNotIn(
+                        "same_version_open_proves_readability_not_restoration",
+                        manifest["limitations"],
+                    )
                     connection = sqlite3.connect(
                         f"file:{snapshot}?mode=ro&immutable=1", uri=True
                     )
@@ -258,6 +269,151 @@ class RuntimeHistorySnapshotTest(unittest.TestCase):
                 "runtime_snapshot_application_open_failed", raised.exception.reason_code
             )
             self.assertEqual([], list(output.iterdir()))
+
+    def test_v2_validator_refuses_snapshot_without_running_legacy_query(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path, _ = self._create_source(root)
+            output = self._private_output(root)
+            fake = root / "opencode"
+            self._write_fake_opencode(fake, version="opencode v2.2.5")
+            before_bytes = db_path.read_bytes()
+            before_stat = db_path.stat()
+            real_run = subprocess.run
+            with (
+                patch.dict(
+                    os.environ,
+                    {"MY_OPENCODE_RUNTIME_SNAPSHOT_OPENCODE_BIN": str(fake)},
+                ),
+                patch.object(module.subprocess, "run", wraps=real_run) as run,
+                self.assertRaises(module.RuntimeSnapshotError) as raised,
+            ):
+                module.create_runtime_history_snapshot(db_path, output)
+            self.assertEqual(
+                "runtime_snapshot_application_version_unsupported",
+                raised.exception.reason_code,
+            )
+            self.assertEqual("application_validation", raised.exception.phase)
+            self.assertFalse(raised.exception.committed)
+            self.assertEqual(1, run.call_count)
+            self.assertEqual([str(fake.resolve()), "--version"], run.call_args.args[0])
+            self.assertEqual([], list(output.iterdir()))
+            self.assertEqual(before_bytes, db_path.read_bytes())
+            after_stat = db_path.stat()
+            self.assertEqual(
+                (before_stat.st_dev, before_stat.st_ino),
+                (after_stat.st_dev, after_stat.st_ino),
+            )
+
+    def test_application_validator_rejects_unsupported_and_unverified_versions(self) -> None:
+        module = self._module()
+        cases = (
+            ("opencode v2.2.5", 0, "runtime_snapshot_application_version_unsupported"),
+            ("2.0.0-rc.1+build", 0, "runtime_snapshot_application_version_unsupported"),
+            ("v3.0.0", 0, "runtime_snapshot_application_version_unsupported"),
+            ("0.9.0", 0, "runtime_snapshot_application_version_unsupported"),
+            ("opencode version 2.2.5", 0, "runtime_snapshot_application_version_invalid"),
+            ("1.2", 0, "runtime_snapshot_application_version_invalid"),
+            ("1.0.0-" + "a" * 256, 0, "runtime_snapshot_application_version_invalid"),
+            ("\ud800", 0, "runtime_snapshot_application_version_invalid"),
+            ("", 0, "runtime_snapshot_application_version_invalid"),
+            ("1.18.18", 7, "runtime_snapshot_application_open_failed"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sandbox = root / "sandbox"
+            sandbox.mkdir(mode=0o700)
+            sandbox_fd = os.open(
+                sandbox, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+            )
+            layout, opencode_fd = module._create_sandbox_layout(sandbox, sandbox_fd)
+            fake = root / "opencode"
+            self._write_fake_opencode(fake)
+            binary = module._binary_identity(fake)
+            try:
+                for version, returncode, reason in cases:
+                    with self.subTest(version=version, returncode=returncode), patch.object(
+                        module.subprocess,
+                        "run",
+                        return_value=subprocess.CompletedProcess([str(fake)], returncode, version, ""),
+                    ) as run, self.assertRaises(module.RuntimeSnapshotError) as raised:
+                        module._run_application_validation(binary, layout)
+                    self.assertEqual(reason, raised.exception.reason_code)
+                    self.assertEqual("application_validation", raised.exception.phase)
+                    self.assertEqual(1, run.call_count)
+                    self.assertEqual([str(fake), "--version"], run.call_args.args[0])
+            finally:
+                os.close(opencode_fd)
+                os.close(sandbox_fd)
+
+    def test_application_validator_handles_undecodable_output_without_leaking_it(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sandbox = root / "sandbox"
+            sandbox.mkdir(mode=0o700)
+            sandbox_fd = os.open(
+                sandbox, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+            )
+            layout, opencode_fd = module._create_sandbox_layout(sandbox, sandbox_fd)
+            fake = root / "opencode"
+            self._write_fake_opencode(fake)
+            binary = module._binary_identity(fake)
+            error = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "secret-marker")
+            version = subprocess.CompletedProcess([str(fake)], 0, "1.18.18", "")
+            cases = (
+                ([error], "runtime_snapshot_application_version_invalid"),
+                ([version, error], "runtime_snapshot_application_output_invalid"),
+            )
+            try:
+                for results, reason in cases:
+                    with self.subTest(reason=reason), patch.object(
+                        module.subprocess, "run", side_effect=results
+                    ) as run, self.assertRaises(module.RuntimeSnapshotError) as raised:
+                        module._run_application_validation(binary, layout)
+                    self.assertEqual(reason, raised.exception.reason_code)
+                    self.assertEqual(len(results), run.call_count)
+                    self.assertNotIn(
+                        "secret-marker",
+                        "".join(traceback.format_exception(raised.exception)),
+                    )
+            finally:
+                os.close(opencode_fd)
+                os.close(sandbox_fd)
+
+    def test_application_validator_accepts_identified_v1_versions(self) -> None:
+        module = self._module()
+        versions = ("1.18.18", "opencode v1.18.18", "v1.18.18-rc.1+build")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sandbox = root / "sandbox"
+            sandbox.mkdir(mode=0o700)
+            sandbox_fd = os.open(
+                sandbox, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+            )
+            layout, opencode_fd = module._create_sandbox_layout(sandbox, sandbox_fd)
+            fake = root / "opencode"
+            self._write_fake_opencode(fake)
+            binary = module._binary_identity(fake)
+            try:
+                for version in versions:
+                    runs = (
+                        subprocess.CompletedProcess([str(fake)], 0, version, ""),
+                        subprocess.CompletedProcess([str(fake)], 0, '[{"schema_version": 1}]', ""),
+                    )
+                    with self.subTest(version=version), patch.object(
+                        module.subprocess, "run", side_effect=runs
+                    ) as run:
+                        result = module._run_application_validation(binary, layout)
+                    self.assertEqual("readable", result["result"])
+                    self.assertEqual(version, result["opencode_version"])
+                    self.assertEqual(2, run.call_count)
+                    self.assertEqual([str(fake), "--version"], run.call_args_list[0].args[0])
+                    self.assertEqual("--pure", run.call_args_list[1].args[0][1])
+            finally:
+                os.close(opencode_fd)
+                os.close(sandbox_fd)
 
     def test_backup_check_copy_and_application_timeouts_are_distinct(self) -> None:
         module = self._module()

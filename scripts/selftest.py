@@ -2975,7 +2975,7 @@ exit 0
             "assert 'OPENCODE_SESSION_ID' not in os.environ\n"
             "Path(os.environ['TMPDIR']).joinpath('validator-residue').write_text('ok')\n"
             "if '--version' in sys.argv:\n"
-            "    print('selftest-opencode')\n"
+            "    print('1.18.18-selftest')\n"
             "    raise SystemExit(0)\n"
             "db = Path(os.environ['XDG_DATA_HOME']) / 'opencode' / 'opencode.db'\n"
             "conn = sqlite3.connect(f'file:{db}?mode=ro', uri=True)\n"
@@ -3033,7 +3033,9 @@ exit 0
             == sha256(snapshot_artifact.read_bytes()).hexdigest()
             and snapshot_manifest.get("integrity", {}).get("result") == "ok"
             and snapshot_manifest.get("application_validation", {}).get("result")
-            == "readable",
+            == "readable"
+            and snapshot_manifest.get("application_validation", {}).get("opencode_version")
+            == "1.18.18-selftest",
             "session snapshot-runtime manifest should verify hash and readability",
         )
         result = subprocess.run(
