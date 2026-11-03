@@ -2057,6 +2057,124 @@ class RuntimeDatabaseConnectionTest(unittest.TestCase):
             self.assertEqual(before, self._quiescent_snapshot(db_path))
             backup.assert_not_called()
 
+    def test_incomplete_preview_without_problems_cannot_report_success(self) -> None:
+        module = self._module()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "missing.db"
+            index_path = root / "unused-index.json"
+            for apply in (False, True):
+                for scoped in (False, True):
+                    with self.subTest(apply=apply, scoped=scoped):
+                        args = ["--db-path", str(db_path), "--json"]
+                        if apply:
+                            args.append("--apply")
+                        if scoped:
+                            args.extend(["--session-id", "synthetic-session"])
+                        with contextlib.redirect_stdout(io.StringIO()) as output:
+                            code = module._command_repair_stale(args, index_path)
+                        report = json.loads(output.getvalue())
+                        self.assertEqual(1, code)
+                        self.assertEqual("FAIL", report["result"])
+                        self.assertIn(
+                            "runtime session database scan did not complete",
+                            report["problems"],
+                        )
+                        self.assertEqual(0, report["candidate_count"])
+                        self.assertEqual(0, report["repaired_count"])
+                        self.assertIsNone(report["backup_path"])
+                        self.assertFalse(db_path.exists())
+                        self.assertFalse(index_path.exists())
+
+    def test_database_missing_after_preview_cannot_report_repair_success(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        for scoped in (False, True):
+            with self.subTest(scoped=scoped), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                db_path = root / "runtime # case.db"
+                fixture = self._create_tied_family_fixture(
+                    db_path, family="stale_running_tool", indexes=False,
+                    now_ms=now_ms, count=1,
+                )
+                scan = module._scan_runtime_stuck_sessions(db_path, 300, now_ms=now_ms)
+                self.assertTrue(scan["runtime_db_scan_complete"])
+                self.assertEqual(1, len(scan["stuck_findings"]))
+                db_path.unlink()
+                args = ["--db-path", str(db_path), "--apply", "--json"]
+                if scoped:
+                    args.extend(["--session-id", fixture["positive_ids"][0]])
+                with (
+                    patch.object(module, "_scan_runtime_stuck_sessions", return_value=scan),
+                    patch.object(module, "_backup_runtime_database") as backup,
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                ):
+                    code = module._command_repair_stale(args, root / "unused-index.json")
+                report = json.loads(output.getvalue())
+                self.assertEqual(1, code)
+                self.assertEqual("FAIL", report["result"])
+                self.assertIn("runtime session database disappeared after scan", report["problems"])
+                self.assertEqual(1, report["candidate_count"])
+                self.assertEqual(0, report["repaired_count"])
+                self.assertIsNone(report["backup_path"])
+                self.assertFalse(db_path.exists())
+                backup.assert_not_called()
+
+    def test_database_missing_after_backup_is_not_recreated(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db_path = root / "runtime # case.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False,
+                now_ms=now_ms, count=1,
+            )
+            before_rows = self._canonical_rows(db_path)
+            real_backup = module._backup_runtime_database
+
+            def backup_then_remove(path: Path) -> Path:
+                backup_path = real_backup(path)
+                path.unlink()
+                return backup_path
+
+            args = [
+                "--db-path", str(db_path), "--session-id", fixture["positive_ids"][0],
+                "--apply", "--json",
+            ]
+            with (
+                patch.object(module, "_backup_runtime_database", side_effect=backup_then_remove),
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                code = module._command_repair_stale(args, root / "unused-index.json")
+            report = json.loads(output.getvalue())
+            self.assertEqual(1, code)
+            self.assertEqual("FAIL", report["result"])
+            self.assertTrue(any("failed to open runtime session database for repair" in p for p in report["problems"]))
+            self.assertEqual(1, report["candidate_count"])
+            self.assertEqual(0, report["repaired_count"])
+            self.assertFalse(db_path.exists())
+            backup_path = Path(report["backup_path"])
+            self.assertTrue(backup_path.is_file())
+            self.assertEqual(before_rows, self._canonical_rows(backup_path))
+
+    def test_repair_handles_special_characters_in_database_path(self) -> None:
+        module = self._module()
+        now_ms = int(module.time.time() * 1000)
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "runtime # case.db"
+            fixture = self._create_tied_family_fixture(
+                db_path, family="stale_running_tool", indexes=False,
+                now_ms=now_ms, count=1,
+            )
+            result = module._repair_runtime_stuck_sessions(
+                db_path, 300, apply_changes=True, include_generic=False,
+                scope_session_id=fixture["positive_ids"][0],
+            )
+            self.assertEqual([], result["problems"])
+            self.assertEqual(1, result["repaired_count"])
+            self.assertTrue(Path(result["backup_path"]).is_file())
+
     def test_v2_doctor_reports_schema_without_suggesting_legacy_repairs(self) -> None:
         module = self._module()
         with tempfile.TemporaryDirectory() as tmp:

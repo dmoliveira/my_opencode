@@ -840,6 +840,11 @@ def _connect_runtime_database_readonly(db_path: Path) -> sqlite3.Connection:
     return connection
 
 
+def _connect_runtime_database_writable(db_path: Path) -> sqlite3.Connection:
+    """Open an existing runtime database without creating a replacement."""
+    return sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=rw", uri=True)
+
+
 def _has_v2_session_schema(conn: sqlite3.Connection) -> bool:
     """Conservatively detect a V2 table or view using SQLite identifier rules."""
     return conn.execute(
@@ -2492,13 +2497,17 @@ def _repair_runtime_stuck_sessions(
     candidate_findings = (
         collect_candidates(scan) if scan.get("runtime_db_scan_complete") is True else []
     )
-    # Scoping can suppress findings outside the target, not a failed scan.
-    base_problems = (
-        scan["problems"]
-        if not scope_session_id or scan.get("runtime_db_scan_complete") is not True
-        else []
-    )
-    if not apply_changes or not candidate_findings or not db_path.exists():
+    # Scoping can suppress findings outside the target, not an incomplete scan.
+    if scan.get("runtime_db_scan_complete") is not True:
+        base_problems = list(
+            scan.get("problems") or ["runtime session database scan did not complete"]
+        )
+    else:
+        base_problems = scan["problems"] if not scope_session_id else []
+    missing_after_scan = apply_changes and bool(candidate_findings) and not db_path.exists()
+    if missing_after_scan:
+        base_problems = [*base_problems, "runtime session database disappeared after scan"]
+    if not apply_changes or not candidate_findings or missing_after_scan:
         return {
             "warnings": scan["warnings"],
             "problems": base_problems,
@@ -2521,7 +2530,18 @@ def _repair_runtime_stuck_sessions(
             "preview": candidate_findings,
             "backup_path": None,
         }
-    conn = sqlite3.connect(str(db_path))
+    try:
+        conn = _connect_runtime_database_writable(db_path)
+    except (sqlite3.DatabaseError, OSError) as exc:
+        return {
+            "warnings": scan["warnings"],
+            "problems": [*base_problems, f"failed to open runtime session database for repair: {exc}"],
+            "candidate_count": len(candidate_findings),
+            "repaired_count": 0,
+            "repairs": repairs,
+            "preview": candidate_findings,
+            "backup_path": str(backup_path),
+        }
     conn.row_factory = sqlite3.Row
     try:
         remaining_candidates = candidate_findings

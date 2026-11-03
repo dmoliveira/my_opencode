@@ -6,8 +6,12 @@ The table names and queries below describe the legacy V1 schema, not V2.
 The legacy stale-session scanner and repair refuse any database containing a
 `session_v2` table or view, using SQLite's case-insensitive identifier matching,
 even when V1 tables are also present. V2-native stale diagnosis and repair are
-not yet implemented. If a post-repair rescan detects V2 or cannot finish, the
-repair reports a problem and retains any committed repairs and the backup.
+not yet implemented. Incomplete scans, including when the database is missing,
+cannot authorize a repair or report success. If a post-repair rescan detects V2
+or cannot finish, the repair reports a problem and retains any committed
+repairs and the backup. If the database disappears after the scan, repair
+fails; a writable open never recreates a missing database. A backup already
+created before an open failure is retained.
 
 Use these read-only inspection patterns for V1 databases:
 
