@@ -63,4 +63,6 @@ The legacy `/mcp` helper refuses an observed native or ambiguous `mcp.servers` l
 
 The legacy `/plugin` helper similarly refuses an observed native or ambiguous `plugins` key, including during locked mutations. Its results describe only helper-resolved legacy configuration, not loaded plugins or active gateway hooks; it does not port V2 plugin management.
 
+The [auxiliary redaction probe](../../specs/opencode-v2-auxiliary-redaction-probe.md) exercises native context, title, generate and compaction request hooks against an owned localhost provider, with unprotected controls and separate system/message canaries. It measures those synthetic requests only; it does not verify compaction completion, other transports, later-hook ordering or gateway protection.
+
 Reference: <https://opencode.ai/v2/docs/migrate-v1> and <https://opencode.ai/v2/docs/build/plugins/migrate-v1>.
