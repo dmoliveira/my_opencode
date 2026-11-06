@@ -1,6 +1,51 @@
 [
   {
     "language": "python",
+    "file": "gateway_v2_auxiliary_redaction_probe.py",
+    "function": "prepare_fixture",
+    "kind": "path.mkdir",
+    "destination": "root / name",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_auxiliary_redaction_probe.py",
+    "function": "write_fixture",
+    "kind": "os.mkdir",
+    "destination": "part",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_auxiliary_redaction_probe.py",
+    "function": "write_fixture",
+    "kind": "os.open",
+    "destination": "part",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_auxiliary_redaction_probe.py",
+    "function": "write_fixture",
+    "kind": "os.open",
+    "destination": "path.parts[-1]",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
+    "file": "gateway_v2_auxiliary_redaction_probe.py",
+    "function": "write_fixture",
+    "kind": "os.open",
+    "destination": "root",
+    "count": 1,
+    "classification": "isolated_fixture_exemption"
+  },
+  {
+    "language": "python",
     "file": "gateway_v2_dependency_profile_probe.py",
     "function": "rewrite_config",
     "kind": "os.replace",
