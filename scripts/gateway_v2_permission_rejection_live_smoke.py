@@ -87,6 +87,8 @@ def run_case(
         plugin.mkdir(parents=True)
         marker = root / "redactor-called"
         identity_marker = root / "host-cause.json"
+        quarantine_marker = root / "quarantine-enforced"
+        settled_marker = root / "interrupt-settled"
         registered_marker = root / "guard-registered"
         started, aborted, after = root / "started", root / "aborted", root / "after"
         dist = ROOT / "plugin/gateway-core/dist"
@@ -96,16 +98,21 @@ def run_case(
             'import { Error as ToolError } from "@opencode/plugin/promise/tool"\n'
             'import { writeFileSync } from "node:fs"\n'
             'import { inspect } from "node:util"\n'
-            f"import {{ registerV2ToolOutputRedaction }} from {json.dumps((dist / 'v2/tool-output-redaction.js').as_uri())}\n"
+            f"import {{ registerV2ToolOutputRedaction, registerV2InterruptingToolOutputRedaction }} from {json.dumps((dist / 'v2/tool-output-redaction.js').as_uri())}\n"
             f"import {{ createSecretRedactor }} from {json.dumps((dist / 'hooks/shared/secret-redaction.js').as_uri())}\n"
             'export default Plugin.define({ id: "v2-permission-rejection-probe", async setup(ctx) {\n'
             '  if (!["2.2.5", "2.2.6"].includes(ctx.app.version)) throw new Error("fixture requires OpenCode 2.2.5 or 2.2.6")\n'
             '  let capturedDecline, registered = false, activeCase = false\n'
-            '  await ctx.tool.hook("execute.after", event => {\n'
+            '  await ctx.tool.hook("execute.after", async event => {\n'
             '    if (event.input?.kind === "bootstrap") return\n'
             f'    writeFileSync({json.dumps(str(after))}, "after")\n'
             '    if (event.tool !== "synthetic_probe" || event.status !== "error") return\n'
             '    const mode = process.env.V2_SMOKE_CONTROL\n'
+            '    if (mode === "interrupt_fail_unprotected") {\n'
+            '      event.error = new ToolError({ message: "synthetic rejection" })\n'
+            f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true }}))\n'
+            f'      try {{ throw new Error({json.dumps(REDACTOR_CANARY)}) }} catch {{ throw new Error("Permission interruption failed") }}\n'
+            '    }\n'
             '    if (mode === "drop_cause") {\n'
             '      event.error = new ToolError({ message: "synthetic rejection" })\n'
             f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true }}))\n'
@@ -131,7 +138,7 @@ def run_case(
             '      event.error = new ToolError({ message: "synthetic rejection", error: clone })\n'
             f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, same }}))\n'
             '    }\n'
-            '    if (mode === "forged" || mode === "forged_unprotected") {\n'
+            '    if (mode === "forged" || mode === "forged_unprotected" || mode === "interrupt_forged") {\n'
             '      const base = Object.create(Error.prototype)\n'
             '      for (const key of ["constructor", "~effect/Effect", "pipe", "toJSON", "~effect/Effect/identifier", "~effect/Effect/evaluate", "~effect/Effect/successCont", "~effect/Effect/failureCont", "~effect/Effect/ensureCont", Symbol.for("nodejs.util.inspect.custom"), Symbol.iterator])\n'
             f'        Object.defineProperty(base, key, {{ value() {{ return {json.dumps(FORGED_CANARY)} }} }})\n'
@@ -143,6 +150,24 @@ def run_case(
             '    }\n'
             '  })\n'
             f'  const redactor = process.env.V2_SMOKE_REDACTOR_FAIL === "1" ? {{ async redactMutableValueAsync() {{ if (activeCase) writeFileSync({json.dumps(str(marker))}, "called"); throw new Error({json.dumps(REDACTOR_CANARY)}) }} }} : createSecretRedactor({{ patterns: {json.dumps([FEEDBACK_CANARY, ABORT_CANARY])}, redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
+            '  const mode = process.env.V2_SMOKE_CONTROL\n'
+            '  if (["interrupt_plain", "interrupt_fail", "interrupt_forged", "interrupt_feedback"].includes(mode)) {\n'
+            '    const session = {\n'
+            '      hook: (name, callback) => ctx.session.hook(name, async event => {\n'
+            f'        try {{ await callback(event) }} catch (error) {{ writeFileSync({json.dumps(str(quarantine_marker))} + "-" + name, "enforced"); if (name === "context") writeFileSync({json.dumps(str(quarantine_marker))}, "enforced"); throw error }}\n'
+            '      }),\n'
+            '      interrupt: async input => {\n'
+            f'        writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, phase: "before" }}))\n'
+            f'        if (mode === "interrupt_fail") throw new Error({json.dumps(REDACTOR_CANARY)})\n'
+            '        const result = await ctx.session.interrupt(input)\n'
+            f'        writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, phase: "after", result }}))\n'
+            '        return result\n'
+            '      },\n'
+            f'      wait: async input => {{ await ctx.session.wait(input); writeFileSync({json.dumps(str(settled_marker))}, "settled") }},\n'
+            '    }\n'
+            '    await registerV2InterruptingToolOutputRedaction(session, ctx.tool, redactor, message => new ToolError({ message }), ctx.app.version)\n'
+            f'    writeFileSync({json.dumps(str(registered_marker))}, "registered")\n'
+            '  }\n'
             '  const inspectForged = event => {\n'
             '    const mode = process.env.V2_SMOKE_CONTROL\n'
             '    if ((mode !== "forged" && mode !== "forged_unprotected") || event.tool !== "synthetic_probe" || event.status !== "error" || event.input?.kind === "bootstrap") return\n'
@@ -194,9 +219,9 @@ def run_case(
         env.pop("OPENCODE_SESSION_ID", None)
         password = secrets.token_urlsafe(24)
         env["OPENCODE_PASSWORD"] = password
-        if mode in {"baseline", "host_clone", "drop_cause", "throw_after", "forged_unprotected", "schema_clone"}:
+        if mode in {"baseline", "host_clone", "drop_cause", "throw_after", "forged_unprotected", "schema_clone", "interrupt_plain", "interrupt_fail", "interrupt_fail_unprotected", "interrupt_forged", "interrupt_feedback"}:
             env["V2_SMOKE_GUARD"] = "off"
-        if mode in {"host_clone", "drop_cause", "throw_after", "forged", "forged_unprotected", "schema_clone"}:
+        if mode in {"host_clone", "drop_cause", "throw_after", "forged", "forged_unprotected", "schema_clone", "interrupt_plain", "interrupt_fail", "interrupt_fail_unprotected", "interrupt_forged", "interrupt_feedback"}:
             env["V2_SMOKE_CONTROL"] = mode
         if mode == "redactor_failure":
             env["V2_SMOKE_REDACTOR_FAIL"] = "1"
@@ -232,6 +257,16 @@ def run_case(
                     request(base, password, "POST", f"/api/session/{bootstrap}/permission/{pending[0]['id']}/reply", {"decision": "reject"})
                     request(base, password, "POST", f"/api/experimental/session/{bootstrap}/wait", timeout=25)
                     wait_for(lambda: registered_marker.is_file(), process)
+                peer = peer_pending_id = None
+                if mode in {"interrupt_plain", "interrupt_fail", "interrupt_forged"}:
+                    peer = request(base, password, "POST", "/api/session", session_body)["data"]["id"]
+                    request(base, password, "POST", f"/api/session/{peer}/prompt", {"text": "PEER_PERMISSION_PROBE"})
+                    peer_pending = wait_for(
+                        lambda: request(base, password, "GET", f"/api/session/{peer}/permission").get("data"), process
+                    )
+                    if len(peer_pending) != 1:
+                        raise RuntimeError("unexpected peer permissions")
+                    peer_pending_id = peer_pending[0]["id"]
                 with state.lock:
                     start = len(state.requests)
                 session = request(
@@ -295,6 +330,54 @@ def run_case(
                     if identity_marker.is_file()
                     else {}
                 )
+                peer_pending_preserved = peer_completed = None
+                if peer is not None and peer_pending_id is not None:
+                    pending_peer = request(base, password, "GET", f"/api/session/{peer}/permission").get("data", [])
+                    peer_pending_preserved = len(pending_peer) == 1 and pending_peer[0].get("id") == peer_pending_id
+                    if not peer_pending_preserved:
+                        raise RuntimeError("other session's permission was affected")
+                    with state.lock:
+                        peer_start = len(state.requests)
+                    request(base, password, "POST", f"/api/session/{peer}/permission/{peer_pending_id}/reply", {"decision": "once"})
+                    request(base, password, "POST", f"/api/experimental/session/{peer}/wait", timeout=25)
+                    with state.lock:
+                        peer_requests = list(state.requests[peer_start:])
+                    peer_completed = any(item.get("role") == "tool" for req in peer_requests for item in req.get("messages", []))
+                retry_blocked = retry_completed = None
+                auxiliary_blocked = None
+                if mode == "interrupt_fail":
+                    with state.lock:
+                        retry_start = len(state.requests)
+                    request(base, password, "POST", f"/api/session/{session}/prompt", {"text": "RETRY_PERMISSION_PROBE"})
+                    request(base, password, "POST", f"/api/experimental/session/{session}/wait", timeout=25)
+                    with state.lock:
+                        retry_blocked = len(state.requests) == retry_start
+                    auxiliary_blocked = {}
+                    for kind, endpoint, body in (
+                        ("generate", "generate", {"prompt": "AUXILIARY_QUARANTINE_PROBE"}),
+                        ("compaction", "compact", {}),
+                    ):
+                        with state.lock:
+                            auxiliary_start = len(state.requests)
+                        try:
+                            request(base, password, "POST", f"/api/session/{session}/{endpoint}", body, timeout=25)
+                            if kind == "compaction":
+                                request(base, password, "POST", f"/api/experimental/session/{session}/wait", timeout=25)
+                        except urllib.error.HTTPError:
+                            pass
+                        with state.lock:
+                            no_request = len(state.requests) == auxiliary_start
+                        auxiliary_blocked[kind] = no_request and Path(str(quarantine_marker) + "-" + kind).is_file()
+                if mode == "interrupt_plain":
+                    wait_for(lambda: settled_marker.is_file(), process)
+                    with state.lock:
+                        retry_start = len(state.requests)
+                    request(base, password, "POST", f"/api/session/{session}/prompt", {"text": "RETRY_PERMISSION_PROBE"})
+                    request(base, password, "POST", f"/api/experimental/session/{session}/wait", timeout=25)
+                    with state.lock:
+                        retry_requests = list(state.requests[retry_start:])
+                    retry_info = request(base, password, "GET", f"/api/session/{session}")["data"]
+                    retry_completed = bool(retry_requests) and retry_info.get("outcome") == "succeeded"
                 return {
                     "permission_requested": not cancel,
                     "tool_returned_to_model": any(
@@ -319,6 +402,15 @@ def run_case(
                     "after_hook_seen": after.is_file(),
                     "control_applied": control_observation.get("mode") == mode
                     and control_observation.get("applied") is True,
+                    "interrupt_phase": control_observation.get("phase"),
+                    "interrupt_result": control_observation.get("result"),
+                    "quarantine_enforced": quarantine_marker.is_file(),
+                    "peer_pending_preserved": peer_pending_preserved,
+                    "peer_completed": peer_completed,
+                    "retry_blocked": retry_blocked,
+                    "auxiliary_blocked": auxiliary_blocked,
+                    "retry_completed": retry_completed,
+                    "interrupt_guard_registered": registered_marker.is_file(),
                     "host_cause_is_captured": control_observation.get("same"),
                     "forged_exposed_to_inspect": control_observation.get("exposed"),
                     "forged_canary_on_wire": FORGED_CANARY in wire,
@@ -354,6 +446,62 @@ def control_evidence_passed(controls: dict[str, dict[str, Any]]) -> bool:
     return controls["host_clone"].get("host_cause_is_captured") is True
 
 
+def interrupt_evidence_passed(rows: dict[str, dict[str, Any]]) -> bool:
+    expected = {"plain", "failure", "unprotected", "forged", "feedback"}
+    if set(rows) != expected or not all(isinstance(row, dict) for row in rows.values()):
+        return False
+    for row in rows.values():
+        if any(row.get(field) is not True for field in ("permission_requested", "after_hook_seen")):
+            return False
+        if any(row.get(field) is not False for field in (
+            "permission_bypassed", "redactor_exception_on_wire", "redactor_exception_in_database", "redactor_exception_in_server_log",
+            "forged_canary_on_wire", "forged_canary_in_database", "forged_canary_in_server_log",
+        )):
+            return False
+    for mode in ("plain", "forged"):
+        row = rows[mode]
+        result = row.get("interrupt_result")
+        if (
+            row.get("interrupt_guard_registered") is not True
+            or row.get("control_applied") is not True
+            or row.get("interrupt_phase") != "after"
+            or not isinstance(result, dict)
+            or result.get("interrupted") is not True
+            or row.get("session_outcome") != "interrupted"
+            or row.get("tool_returned_to_model") is not False
+            or row.get("peer_pending_preserved") is not True
+            or row.get("peer_completed") is not True
+        ):
+            return False
+    failure = rows["failure"]
+    auxiliary = failure.get("auxiliary_blocked")
+    feedback = rows["feedback"]
+    unprotected = rows["unprotected"]
+    return (
+        rows["plain"].get("retry_completed") is True
+        and failure.get("interrupt_guard_registered") is True
+        and failure.get("control_applied") is True
+        and failure.get("session_outcome") == "failed"
+        and failure.get("tool_returned_to_model") is False
+        and failure.get("quarantine_enforced") is True
+        and failure.get("retry_blocked") is True
+        and isinstance(auxiliary, dict)
+        and set(auxiliary) == {"generate", "compaction"}
+        and all(auxiliary.get(kind) is True for kind in ("generate", "compaction"))
+        and failure.get("peer_pending_preserved") is True
+        and failure.get("peer_completed") is True
+        and unprotected.get("control_applied") is True
+        and unprotected.get("tool_returned_to_model") is True
+        and feedback.get("interrupt_guard_registered") is True
+        and feedback.get("control_applied") is False
+        and feedback.get("tool_returned_to_model") is True
+        and feedback.get("redacted_feedback_on_wire") is True
+        and feedback.get("feedback_on_wire") is False
+        and feedback.get("feedback_in_database") is False
+        and feedback.get("feedback_in_server_log") is False
+    )
+
+
 def main() -> int:
     capture = ThreadingHTTPServer(("127.0.0.1", 0), ErrorHandler)
     state = CaptureState()
@@ -381,6 +529,16 @@ def main() -> int:
             for mode in ("forged", "forged_unprotected")
         }
         independent_schema = run_case(capture, state, "schema_clone", False)
+        interrupt_cases = {
+            name: run_case(capture, state, mode, feedback)
+            for name, mode, feedback in (
+                ("plain", "interrupt_plain", False),
+                ("failure", "interrupt_fail", False),
+                ("unprotected", "interrupt_fail_unprotected", False),
+                ("forged", "interrupt_forged", False),
+                ("feedback", "interrupt_feedback", True),
+            )
+        }
         passed = (
             all(
                 row["permission_requested"]
@@ -421,6 +579,7 @@ def main() -> int:
                 for row in cancellation.values()
             )
             and control_evidence_passed(controls)
+            and interrupt_evidence_passed(interrupt_cases)
             and forged["forged"]["control_applied"]
             and forged["forged"]["host_cause_is_captured"] is True
             and forged["forged"]["forged_exposed_to_inspect"] is False
@@ -444,6 +603,7 @@ def main() -> int:
                     "controls": controls,
                     "forged": forged,
                     "independent_schema": independent_schema,
+                    "interrupt_cases": interrupt_cases,
                 }
             )
         )

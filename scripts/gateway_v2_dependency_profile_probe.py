@@ -300,6 +300,8 @@ class PrivateRuntime:
         # thread fails to start. Never spawn inside a fallible constructor.
         env = child_env(self.root)
         env["OPENCODE_PASSWORD"] = self.password
+        if self.cancelled.is_set() or time.monotonic() >= self.deadline:
+            raise ProbeFailure("case_timeout")
         self.process = subprocess.Popen(
             [self.binary, "serve", "--hostname", "127.0.0.1", "--port", str(self.port)],
             cwd=self.root / "project", env=env, stdin=subprocess.DEVNULL,
@@ -1016,7 +1018,11 @@ def run_case(binary: str, parent: Path, case: str) -> dict[str, Any]:
         provider_thread.start()
         provider_started = True
         config = prepare_fixture(root, state, provider.server_port)
+        if state.stopped.is_set() or time.monotonic() >= state.deadline:
+            raise ProbeFailure("case_timeout")
         runtime = PrivateRuntime(binary, root, state.deadline)
+        if state.stopped.is_set() or time.monotonic() >= state.deadline:
+            raise ProbeFailure("case_timeout")
         runtime.start()
         control = control_case(root, state, runtime, config)
         control["ownership"] = {"expected_pid": runtime.process.pid, "observed_pid": runtime.observed_pid}
