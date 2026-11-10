@@ -49,6 +49,11 @@ jobs:
           npm --prefix plugin/gateway-core run lint
           npm --prefix plugin/gateway-core run test
 
+      - name: Validate V1 execution sidebar
+        run: |
+          npm --prefix plugin/gateway-sidebar ci --ignore-scripts --no-audit --no-fund
+          npm --prefix plugin/gateway-sidebar test
+
       - name: Install pinned OpenCode resume-test runtime
         run: |
           npm install --global opencode-ai@1.18.18 --no-audit --no-fund

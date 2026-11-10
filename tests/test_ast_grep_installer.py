@@ -678,6 +678,21 @@ class AstGrepInstallerTest(unittest.TestCase):
         )
         settle.assert_called_once_with(process.pid, 1.0)
 
+    def test_postkill_wait_retries_transient_darwin_permission_error(self) -> None:
+        with mock.patch.object(installer.sys, "platform", "darwin"), mock.patch.object(
+            installer, "_process_group_exists", side_effect=[PermissionError, False]
+        ):
+            self.assertTrue(installer._wait_process_group_gone(40, 1.0))
+
+    def test_postkill_wait_rejects_persistent_or_non_darwin_permission_error(self) -> None:
+        for platform, timeout in (("darwin", 0), ("linux", 1.0)):
+            with self.subTest(platform=platform), mock.patch.object(
+                installer.sys, "platform", platform
+            ), mock.patch.object(
+                installer, "_process_group_exists", side_effect=PermissionError
+            ), self.assertRaises(PermissionError):
+                installer._wait_process_group_gone(40, timeout)
+
     def test_binary_only_journal_recovers_without_download(self) -> None:
         archive_bytes, artifact = fixture_artifact()
         with tempfile.TemporaryDirectory() as raw:

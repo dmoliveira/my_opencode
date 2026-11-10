@@ -1237,11 +1237,21 @@ def _signal_process_group(process_group: int, signal_number: int) -> None:
 
 def _wait_process_group_gone(process_group: int, timeout_seconds: float) -> bool:
     deadline = time.monotonic() + timeout_seconds
-    while _process_group_exists(process_group):
+    while True:
+        try:
+            exists = _process_group_exists(process_group)
+        except PermissionError:
+            # XNU can briefly return EPERM while a killed group is being reaped.
+            # Retry only within the existing bound; persistent errors still fail.
+            if sys.platform != "darwin" or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.02)
+            continue
+        if not exists:
+            return True
         if time.monotonic() >= deadline:
             return False
         time.sleep(0.02)
-    return True
 
 
 def _terminate_process_group(

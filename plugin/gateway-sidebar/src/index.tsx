@@ -3,14 +3,14 @@
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createExecutionStatusSidebar } from "./sidebar.js"
 
-const SUPPORTED_OPENCODE_VERSION = "1.18.18"
+const SUPPORTED_OPENCODE_VERSIONS = ["1.18.18", "1.18.33"]
 
 const tui: TuiPlugin = async (api) => {
-  if (api.app.version !== SUPPORTED_OPENCODE_VERSION || typeof api.slots?.register !== "function") {
+  if (!SUPPORTED_OPENCODE_VERSIONS.includes(api.app.version) || typeof api.slots?.register !== "function") {
     api.ui.toast({
       variant: "warning",
       title: "Execution sidebar disabled",
-      message: `Requires OpenCode ${SUPPORTED_OPENCODE_VERSION}; found ${api.app.version}.`,
+      message: `Requires OpenCode ${SUPPORTED_OPENCODE_VERSIONS.join(" or ")}; found ${api.app.version}.`,
     })
     return
   }
