@@ -39,14 +39,24 @@ The experimental V2 execution sidebar is a separate, unconfigured TUI plugin
 under `plugin/gateway-sidebar-v2`. It reads the existing private, bounded status
 format for the displayed session's location. Its unit tests and isolated tmux
 smoke cover status updates and plugin unload/reload on OpenCode 2.2.6. It does
-not provide a V2 status writer or establish gateway security parity; leave it
-unconfigured until the V2 gateway and its activation gates are complete.
+not establish gateway security parity; leave it unconfigured until the V2
+gateway and its activation gates are complete.
+
+The separate, unconfigured `plugin/gateway-core/src/v2/execution-status.ts`
+adapter translates V2 tool and session events into the existing bounded status
+ledger. It checks each session's actual location against its own plugin
+location and records generic milestones rather than tool output. Deletion and
+move cleanup are best-effort for sessions observed during that plugin lifetime;
+old entries remain bounded. A private-server smoke exercises a real V2 shell,
+session deletion and, on 2.2.6, the rendered sidebar. This adapter is not a V2
+gateway entrypoint and does not enforce or qualify security policy.
 
 ```sh
 npm ci --prefix plugin/gateway-sidebar-v2 --ignore-scripts
 npm --prefix plugin/gateway-sidebar-v2 run typecheck
 npm --prefix plugin/gateway-sidebar-v2 test
 npm --prefix plugin/gateway-sidebar-v2 run test:live -- --opencode-bin /path/to/opencode-2.2.6
+make gateway-v2-execution-status-live-smoke OPENCODE_BIN=/path/to/opencode-2.2.6
 ```
 
 The separate [native dependency-boundary probe](../../specs/opencode-v2-dependency-boundary-contract.md)

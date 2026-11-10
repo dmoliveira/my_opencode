@@ -106,12 +106,15 @@ jobs:
           sudo apt-get install -y tmux
           npm install --global @opencode/cli@2.2.6 --no-audit --no-fund
           npm ci --prefix plugin/gateway-sidebar-v2 --ignore-scripts --no-audit --no-fund
+          npm ci --prefix plugin/gateway-core --ignore-scripts --no-audit --no-fund
+          npm --prefix plugin/gateway-core run build
 
       - name: Validate V2 sidebar and live terminal behavior
         run: |
           npm --prefix plugin/gateway-sidebar-v2 run typecheck
           npm --prefix plugin/gateway-sidebar-v2 test
           npm --prefix plugin/gateway-sidebar-v2 run test:live -- --opencode-bin "$(command -v opencode)"
+          python plugin/gateway-core/test/v2/execution_status_live_smoke.py --opencode-bin "$(command -v opencode)" --with-tui
 
   gateway-v2-permission:
     runs-on: ubuntu-latest
@@ -145,6 +148,7 @@ jobs:
           python scripts/gateway_v2_permission_rejection_live_smoke.py
           python scripts/gateway_v2_tool_error_live_smoke.py
           python scripts/gateway_v2_shell_live_smoke.py
+          python plugin/gateway-core/test/v2/execution_status_live_smoke.py
 
   windows-bounded-subprocess:
     runs-on: windows-latest
