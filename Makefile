@@ -22,7 +22,7 @@ python-check: ## Verify Python $(PYTHON_MIN_VERSION)+ runtime
 
 validate: ## Validate scripts and JSON config
 	$(PYTHON) -m py_compile scripts/*.py
-	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
+	$(PYTHON) scripts/isolated_unittest.py discover -s tests -p 'test_*.py'
 	$(PYTHON) -m json.tool opencode.json >/dev/null
 	$(PYTHON) -m json.tool tui.json >/dev/null
 	$(PYTHON) scripts/hygiene_drift_check.py
