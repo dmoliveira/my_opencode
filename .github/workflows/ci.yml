@@ -149,6 +149,7 @@ jobs:
           python scripts/gateway_v2_tool_error_live_smoke.py
           python scripts/gateway_v2_shell_live_smoke.py
           python plugin/gateway-core/test/v2/execution_status_live_smoke.py
+          python plugin/gateway-core/test/v2/direct_shell_activation_live_smoke.py
 
   windows-bounded-subprocess:
     runs-on: windows-latest

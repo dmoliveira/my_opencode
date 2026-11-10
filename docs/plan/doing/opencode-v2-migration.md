@@ -69,6 +69,21 @@ trusted later hook from changing the shell and `BASH_ENV` so that an owned
 startup file ran the same denied command. This is a process-binding limitation,
 not a claim that policies sandbox plugin code.
 
+`python plugin/gateway-core/test/v2/direct_shell_activation_live_smoke.py`
+measures a separate, authenticated direct-shell path in disposable local
+servers on 2.2.5 and 2.2.6. With a configured plugin deliberately paused in
+setup, a benign direct API command completes before the shell hook is
+registered. After setup, the hook sees and can reject a direct command, but
+the host does not supply the session-ID update observed for model-driven shell
+calls. `tool.use` is an agent-tool policy; these controls do not claim that it
+governs direct user API calls or demonstrate external access. MEASURED means
+the known host behavior was reproduced, not that a guard is active. CI measures
+both pinned versions. A plugin-only universal admission boundary cannot rely
+on this hook being active from server startup; the host's
+[direct-shell handler](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/server/src/handlers/shell.ts)
+and [shell creation](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/core/src/shell.ts)
+remain relevant to a host-level solution.
+
 Experimental, unconfigured adapters cover V2 model-context and native transport redaction, tool-output and error redaction, two shell guards, and write/protected-worktree guards. `make gateway-v2-slice-smoke` builds and exercises them with isolated OpenCode processes, synthetic data, disposable Git worktrees and a localhost provider. The live checks cover a late context mutation before the HTTP hook, rejection of unsupported HTTP content, allowed and blocked shell commands, tool-output redaction, sanitized tool errors and redactor failures, explicit permission denial, interactive rejection with or without feedback, one running-tool interruption, and linked versus primary worktree writes. The error adapter accepts only OpenCode 2.2.5 or 2.2.6. It replaces the error with a host `Tool.Error` containing a redacted or generic message and no original metadata. For a plain rejection, it builds a clean cause from a separately supplied trusted host-decline factory and never takes a prototype from the tool's error. Registration calls the factory once and refuses to install the hook if it fails or produces a structurally invalid sample. The structural check cannot authenticate a host type; the caller must establish that the sample and its prototype are trusted.
 
 The permission smoke first captures a genuine decline from its own controlled `ctx.permission.assert` call, then registers the adapter with that independently obtained sample. On both tested versions, a forged matching prototype exposed a synthetic canary through custom inspection without the adapter; with the adapter, inspection was clean and the rejection still stopped the step. This fixture is not a production source of trusted types. The 2.2.6 public plugin API does not expose the host's decline constructor, and a factory that derives its prototype from an arbitrary tool error would reintroduce the vulnerability. A trusted production capability is still required; this adapter does not protect the trusted prototype against same-privilege mutation by other plugins. Other AFTER-hook failures can reach the model as tool errors rather than stop the step, so registration alone does not establish an independent fail-closed boundary.
