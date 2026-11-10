@@ -252,7 +252,8 @@ export async function registerV2InterruptingToolOutputRedaction(session, tool, r
         for (const kind of ["context", "compaction", "generate", "title", "http.request", "experimental.ws.send"]) {
             registrations.push(await session.hook(kind, async (event) => {
                 try {
-                    if (globallyClosed || !validSessionID(event.sessionID) || quarantined.has(event.sessionID))
+                    const id = event.sessionID;
+                    if (globallyClosed || !validSessionID(id) || quarantined.has(id))
                         throw new Error();
                 }
                 catch {

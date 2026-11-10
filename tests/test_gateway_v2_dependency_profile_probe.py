@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -351,22 +352,65 @@ class ProfileProbeTests(unittest.TestCase):
             self.assertEqual(result["measurement"], "FAIL")
             self.assertTrue(result["cleanup_complete"])
 
-    def test_absolute_case_deadline_cancels_controller_connections(self) -> None:
+    def test_watchdog_cancels_active_controller_connections(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             cancelled = threading.Event()
+            controller_entered = threading.Event()
             runtime = MagicMock()
             runtime.abort_connections.side_effect = cancelled.set
+            real_timer = threading.Timer
 
             def blocked_controller(*args: object) -> None:
-                self.assertTrue(cancelled.wait(1))
+                controller_entered.set()
+                self.assertTrue(cancelled.wait(3))
                 raise profile.ProbeFailure("cancelled_controller")
 
-            with patch.object(profile, "PRIMARY_SECONDS", 0.02), patch.object(profile, "PrivateRuntime", return_value=runtime), patch.object(profile, "control_case", side_effect=blocked_controller):
+            def coordinated_timer(_delay: float, expire: Callable[[], None]) -> threading.Timer:
+                def fire() -> None:
+                    if controller_entered.wait(3):
+                        expire()
+                return real_timer(0, fire)
+
+            with patch.object(profile, "PRIMARY_SECONDS", 10), patch.object(profile.threading, "Timer", side_effect=coordinated_timer), patch.object(profile, "PrivateRuntime", return_value=runtime), patch.object(profile, "control_case", side_effect=blocked_controller):
                 result = profile.run_case("/not-executed", Path(temporary), "baseline")
             self.assertEqual(result["reason"], "case_timeout")
             runtime.abort_connections.assert_called_once()
             runtime.close.assert_called_once()
             self.assertTrue(result["cleanup_complete"])
+
+    def test_expiry_during_fixture_setup_does_not_start_a_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            def slow_fixture(_root: Path, current: profile.ProfileState, _port: int) -> dict:
+                self.assertTrue(current.stopped.wait(3))
+                return {}
+
+            with patch.object(profile, "PRIMARY_SECONDS", 0.02), patch.object(profile, "prepare_fixture", side_effect=slow_fixture), patch.object(profile, "PrivateRuntime") as runtime:
+                result = profile.run_case("/not-executed", Path(temporary), "baseline")
+            self.assertEqual(result["reason"], "case_timeout")
+            self.assertTrue(result["cleanup_complete"])
+            runtime.assert_not_called()
+
+    def test_expired_or_cancelled_runtime_never_spawns(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            for expired in (True, False):
+                with self.subTest(expired=expired):
+                    deadline = time.monotonic() + (-1 if expired else 10)
+                    runtime = profile.PrivateRuntime("/not-executed", Path(temporary), deadline)
+                    if not expired:
+                        runtime.cancelled.set()
+                    with patch.object(profile.subprocess, "Popen") as spawn:
+                        with self.assertRaisesRegex(profile.ProbeFailure, "case_timeout"):
+                            runtime.start()
+                        spawn.assert_not_called()
+
+            runtime = profile.PrivateRuntime("/not-executed", Path(temporary), time.monotonic() + 10)
+            def cancelled_during_environment(_root: Path) -> dict:
+                runtime.cancelled.set()
+                return {}
+            with patch.object(profile, "child_env", side_effect=cancelled_during_environment), patch.object(profile.subprocess, "Popen") as spawn:
+                with self.assertRaisesRegex(profile.ProbeFailure, "case_timeout"):
+                    runtime.start()
+                spawn.assert_not_called()
 
     def test_abort_interrupts_partial_native_response_headers(self) -> None:
         with socket.socket() as server, tempfile.TemporaryDirectory() as temporary:

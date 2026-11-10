@@ -59,6 +59,10 @@ test("plain V2 rejection is sanitized and quarantined until the interrupted sess
     await assert.rejects(f.hooks.get(name)({ sessionID: "ses-one" }), /interruption is unresolved/)
     await f.hooks.get(name)({ sessionID: "ses-other" })
   }
+  let reads = 0
+  const changingIdentity = { get sessionID() { reads += 1; return reads === 1 ? "ses-one" : "ses-other" } }
+  await assert.rejects(f.hooks.get("context")(changingIdentity), /interruption is unresolved/)
+  assert.equal(reads, 1)
   assert.equal(f.waits.length, 1)
   f.waits[0].resolve()
   await tick()
