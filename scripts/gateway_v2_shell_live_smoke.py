@@ -106,6 +106,7 @@ def main() -> int:
             project = root / "project"
             plugin = project / "v2-probe"
             plugin.mkdir(parents=True)
+            unexpected_decline = root / "unexpected-plain-decline"
             server.safe_marker = project / "safe-marker"
             server.blocked_marker = project / "blocked-marker"
             server.secret_file = project / "synthetic-tool-output.txt"
@@ -113,12 +114,16 @@ def main() -> int:
             (plugin / "index.ts").write_text(
                 'import { Plugin } from "@opencode/plugin"\n'
                 'import { Error as ToolError } from "@opencode/plugin/promise/tool"\n'
+                'import { writeFileSync } from "node:fs"\n'
                 f"import {{ registerV2ShellGuards }} from {json.dumps(dist.as_uri())}\n"
                 f"import {{ registerV2ToolOutputRedaction }} from {json.dumps(output_dist.as_uri())}\n"
                 f"import {{ createSecretRedactor }} from {json.dumps(redactor_dist.as_uri())}\n"
                 'export default Plugin.define({ id: "v2-shell-probe", async setup(ctx) {\n'
                 f'  const redactor = createSecretRedactor({{ patterns: [{json.dumps(CANARY)}], redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
-                "  const disposeOutput = await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version)\n"
+                # This non-interactive fixture never exercises plain rejection.
+                '  const fixtureOnlyDecline = Object.assign(new Error(), { _tag: "Permission.DeclinedError" })\n'
+                f'  await ctx.tool.hook("execute.after", event => {{ if (event.status === "error" && Object.getOwnPropertyDescriptor(event.error, "error")?.value?._tag === "Permission.DeclinedError") writeFileSync({json.dumps(str(unexpected_decline))}, "unexpected") }})\n'
+                "  const disposeOutput = await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version, () => fixtureOnlyDecline)\n"
                 "  const disposeShell = await registerV2ShellGuards(ctx.tool, async (sessionID) => (await ctx.session.get({ sessionID })).location.directory, {\n"
                 "    directory: ctx.location.directory, noninteractive: { enabled: true, injectEnvPrefix: false, envPrefixes: [], prefixCommands: [], blockedPatterns: [] },\n"
                 '    dangerous: { enabled: true, blockedPatterns: ["BLOCKED_SYNTHETIC"] }\n'
@@ -185,7 +190,7 @@ def main() -> int:
                 results[1].stdout + results[1].stderr
             )
             output_redacted = CANARY not in captured and "[REDACTED]" in captured
-            passed = allowed and blocked and output_redacted and "shell" in tool_names
+            passed = allowed and blocked and output_redacted and "shell" in tool_names and not unexpected_decline.exists()
             print(
                 json.dumps(
                     {

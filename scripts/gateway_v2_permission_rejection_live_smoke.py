@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FEEDBACK_CANARY = "V2PermissionFeedbackSynthetic_123456789"
 REDACTOR_CANARY = "V2PermissionRedactorSynthetic_123456789"
 ABORT_CANARY = "V2CancellationSynthetic_123456789"
+FORGED_CANARY = "V2ForgedPrototypeSynthetic_123456789"
 
 
 def request(
@@ -86,18 +87,22 @@ def run_case(
         plugin.mkdir(parents=True)
         marker = root / "redactor-called"
         identity_marker = root / "host-cause.json"
+        registered_marker = root / "guard-registered"
         started, aborted, after = root / "started", root / "aborted", root / "after"
         dist = ROOT / "plugin/gateway-core/dist"
         (plugin / "index.ts").write_text(
             'import { Plugin } from "@opencode/plugin"\n'
+            'import { Schema } from "effect"\n'
             'import { Error as ToolError } from "@opencode/plugin/promise/tool"\n'
             'import { writeFileSync } from "node:fs"\n'
+            'import { inspect } from "node:util"\n'
             f"import {{ registerV2ToolOutputRedaction }} from {json.dumps((dist / 'v2/tool-output-redaction.js').as_uri())}\n"
             f"import {{ createSecretRedactor }} from {json.dumps((dist / 'hooks/shared/secret-redaction.js').as_uri())}\n"
             'export default Plugin.define({ id: "v2-permission-rejection-probe", async setup(ctx) {\n'
-            '  if (ctx.app.version !== "2.2.5") throw new Error("fixture requires OpenCode 2.2.5")\n'
-            '  let capturedDecline\n'
+            '  if (!["2.2.5", "2.2.6"].includes(ctx.app.version)) throw new Error("fixture requires OpenCode 2.2.5 or 2.2.6")\n'
+            '  let capturedDecline, registered = false, activeCase = false\n'
             '  await ctx.tool.hook("execute.after", event => {\n'
+            '    if (event.input?.kind === "bootstrap") return\n'
             f'    writeFileSync({json.dumps(str(after))}, "after")\n'
             '    if (event.tool !== "synthetic_probe" || event.status !== "error") return\n'
             '    const mode = process.env.V2_SMOKE_CONTROL\n'
@@ -109,6 +114,13 @@ def run_case(
             f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true }}))\n'
             '      throw new Error("synthetic after-hook failure")\n'
             '    }\n'
+            '    if (mode === "schema_clone") {\n'
+            '      const LocalDecline = Schema.TaggedError()("Permission.DeclinedError", {})\n'
+            '      const fresh = new LocalDecline()\n'
+            '      const same = !!capturedDecline && fresh instanceof capturedDecline.constructor\n'
+            '      event.error = new ToolError({ message: "synthetic rejection", error: fresh })\n'
+            f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, same }}))\n'
+            '    }\n'
             '    if (mode === "host_clone") {\n'
             '      const cause = Object.getOwnPropertyDescriptor(event.error, "error")?.value\n'
             '      const tag = capturedDecline && Object.getOwnPropertyDescriptor(capturedDecline, "_tag")?.value\n'
@@ -119,12 +131,39 @@ def run_case(
             '      event.error = new ToolError({ message: "synthetic rejection", error: clone })\n'
             f'      writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, same }}))\n'
             '    }\n'
+            '    if (mode === "forged" || mode === "forged_unprotected") {\n'
+            '      const base = Object.create(Error.prototype)\n'
+            '      for (const key of ["constructor", "~effect/Effect", "pipe", "toJSON", "~effect/Effect/identifier", "~effect/Effect/evaluate", "~effect/Effect/successCont", "~effect/Effect/failureCont", "~effect/Effect/ensureCont", Symbol.for("nodejs.util.inspect.custom"), Symbol.iterator])\n'
+            f'        Object.defineProperty(base, key, {{ value() {{ return {json.dumps(FORGED_CANARY)} }} }})\n'
+            '      const schemaBase = Object.create(base, { constructor: { value() {} }, toJSON: { value() {} } })\n'
+            '      const schema = Object.create(schemaBase, { constructor: { value() {} }, name: { value: "Permission.DeclinedError" }, "~effect/Schema/Class/Permission.DeclinedError": { get() { return true } } })\n'
+            '      const prototype = Object.create(schema, { constructor: { value() {} } })\n'
+            '      const forged = Object.create(prototype, { _tag: { value: "Permission.DeclinedError" } })\n'
+            '      event.error = new ToolError({ message: "synthetic rejection", error: forged })\n'
+            '    }\n'
             '  })\n'
-            f'  const redactor = process.env.V2_SMOKE_REDACTOR_FAIL === "1" ? {{ async redactMutableValueAsync() {{ writeFileSync({json.dumps(str(marker))}, "called"); throw new Error({json.dumps(REDACTOR_CANARY)}) }} }} : createSecretRedactor({{ patterns: {json.dumps([FEEDBACK_CANARY, ABORT_CANARY])}, redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
-            '  if (process.env.V2_SMOKE_GUARD !== "off") await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version)\n'
+            f'  const redactor = process.env.V2_SMOKE_REDACTOR_FAIL === "1" ? {{ async redactMutableValueAsync() {{ if (activeCase) writeFileSync({json.dumps(str(marker))}, "called"); throw new Error({json.dumps(REDACTOR_CANARY)}) }} }} : createSecretRedactor({{ patterns: {json.dumps([FEEDBACK_CANARY, ABORT_CANARY])}, redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
+            '  const inspectForged = event => {\n'
+            '    const mode = process.env.V2_SMOKE_CONTROL\n'
+            '    if ((mode !== "forged" && mode !== "forged_unprotected") || event.tool !== "synthetic_probe" || event.status !== "error" || event.input?.kind === "bootstrap") return\n'
+            '    const cause = Object.getOwnPropertyDescriptor(event.error, "error")?.value\n'
+            f'    const exposed = inspect(cause, {{ showHidden: true }}).includes({json.dumps(FORGED_CANARY)})\n'
+            '    const same = !!capturedDecline && Object.getPrototypeOf(cause) === Object.getPrototypeOf(capturedDecline)\n'
+            f'    writeFileSync({json.dumps(str(identity_marker))}, JSON.stringify({{ mode, applied: true, same, exposed }}))\n'
+            '  }\n'
+            '  if (process.env.V2_SMOKE_GUARD === "off") await ctx.tool.hook("execute.after", inspectForged)\n'
+            # Capture a trusted host decline through a fixture-owned assertion
+            # before registering the adapter. This is not a production bootstrap.
+            '  const registerGuard = async () => {\n'
+            '    if (registered) return\n'
+            '    await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version, () => capturedDecline)\n'
+            '    await ctx.tool.hook("execute.after", inspectForged)\n'
+            f'    registered = true; writeFileSync({json.dumps(str(registered_marker))}, "registered")\n'
+            '  }\n'
             '  await ctx.tool.transform((editor) => editor.add({ name: "synthetic_probe", description: "permission rejection probe", options: { codemode: false }, input: { type: "object", properties: { kind: { type: "string" } }, required: ["kind"], additionalProperties: false }, async execute(input, tool) {\n'
-            f'    if (process.env.V2_SMOKE_CANCEL === "1") {{ writeFileSync({json.dumps(str(started))}, "started"); await new Promise((_resolve, reject) => {{ const stop = () => {{ writeFileSync({json.dumps(str(aborted))}, "aborted"); reject(new Error({json.dumps(ABORT_CANARY)})) }}; if (tool.signal.aborted) stop(); else tool.signal.addEventListener("abort", stop, {{ once: true }}) }}); return {{ content: "CANCELLATION_BYPASSED" }} }}\n'
-            '    try { await ctx.permission.assert({ sessionID: tool.sessionID, agent: tool.agent, source: { type: "tool", messageID: tool.messageID, id: tool.id }, action: "synthetic_ask", resources: ["synthetic-resource"], save: ["synthetic-resource"] }) } catch (error) { capturedDecline = error; throw error }\n'
+            '    if (input.kind !== "bootstrap") activeCase = true\n'
+            f'    if (process.env.V2_SMOKE_CANCEL === "1" && input.kind !== "bootstrap") {{ writeFileSync({json.dumps(str(started))}, "started"); await new Promise((_resolve, reject) => {{ const stop = () => {{ writeFileSync({json.dumps(str(aborted))}, "aborted"); reject(new Error({json.dumps(ABORT_CANARY)})) }}; if (tool.signal.aborted) stop(); else tool.signal.addEventListener("abort", stop, {{ once: true }}) }}); return {{ content: "CANCELLATION_BYPASSED" }} }}\n'
+            '    try { await ctx.permission.assert({ sessionID: tool.sessionID, agent: tool.agent, source: { type: "tool", messageID: tool.messageID, id: tool.id }, action: "synthetic_ask", resources: ["synthetic-resource"], save: ["synthetic-resource"] }) } catch (error) { capturedDecline = error; if (input.kind === "bootstrap" && process.env.V2_SMOKE_GUARD !== "off") await registerGuard(); throw error }\n'
             '    return { content: "PERMISSION_BYPASSED" }\n'
             "  } }))\n} })\n",
             encoding="utf-8",
@@ -155,9 +194,9 @@ def run_case(
         env.pop("OPENCODE_SESSION_ID", None)
         password = secrets.token_urlsafe(24)
         env["OPENCODE_PASSWORD"] = password
-        if mode in {"baseline", "host_clone", "drop_cause", "throw_after"}:
+        if mode in {"baseline", "host_clone", "drop_cause", "throw_after", "forged_unprotected", "schema_clone"}:
             env["V2_SMOKE_GUARD"] = "off"
-        if mode in {"host_clone", "drop_cause", "throw_after"}:
+        if mode in {"host_clone", "drop_cause", "throw_after", "forged", "forged_unprotected", "schema_clone"}:
             env["V2_SMOKE_CONTROL"] = mode
         if mode == "redactor_failure":
             env["V2_SMOKE_REDACTOR_FAIL"] = "1"
@@ -165,8 +204,6 @@ def run_case(
             env["V2_SMOKE_CANCEL"] = "1"
         port = free_port()
         base = f"http://127.0.0.1:{port}"
-        with state.lock:
-            start = len(state.requests)
         with (root / "server.log").open("wb") as log:
             process = subprocess.Popen(
                 ["opencode", "serve", "--hostname", "127.0.0.1", "--port", str(port)],
@@ -181,15 +218,28 @@ def run_case(
                 )
                 if info.get("pid") != process.pid:
                     raise RuntimeError("isolated server identity mismatch")
+                session_body = {
+                    "location": {"directory": str(project)},
+                    "model": {"providerID": "capture", "id": "mock"},
+                }
+                if env.get("V2_SMOKE_GUARD") != "off":
+                    bootstrap = request(base, password, "POST", "/api/session", session_body)["data"]["id"]
+                    request(base, password, "POST", f"/api/session/{bootstrap}/prompt", {"text": "BOOTSTRAP_PERMISSION_PROBE"})
+                    pending = wait_for(
+                        lambda: request(base, password, "GET", f"/api/session/{bootstrap}/permission").get("data"),
+                        process,
+                    )
+                    request(base, password, "POST", f"/api/session/{bootstrap}/permission/{pending[0]['id']}/reply", {"decision": "reject"})
+                    request(base, password, "POST", f"/api/experimental/session/{bootstrap}/wait", timeout=25)
+                    wait_for(lambda: registered_marker.is_file(), process)
+                with state.lock:
+                    start = len(state.requests)
                 session = request(
                     base,
                     password,
                     "POST",
                     "/api/session",
-                    {
-                        "location": {"directory": str(project)},
-                        "model": {"providerID": "capture", "id": "mock"},
-                    },
+                    session_body,
                 )["data"]["id"]
                 request(
                     base,
@@ -235,7 +285,7 @@ def run_case(
                 wire = json.dumps(requests)
                 info = request(base, password, "GET", f"/api/session/{session}")["data"]
                 persisted = persisted_markers(
-                    home, (ABORT_CANARY, FEEDBACK_CANARY, REDACTOR_CANARY)
+                    home, (ABORT_CANARY, FEEDBACK_CANARY, REDACTOR_CANARY, FORGED_CANARY)
                 )
                 server_log = (root / "server.log").read_text(
                     encoding="utf-8", errors="replace"
@@ -270,6 +320,10 @@ def run_case(
                     "control_applied": control_observation.get("mode") == mode
                     and control_observation.get("applied") is True,
                     "host_cause_is_captured": control_observation.get("same"),
+                    "forged_exposed_to_inspect": control_observation.get("exposed"),
+                    "forged_canary_on_wire": FORGED_CANARY in wire,
+                    "forged_canary_in_database": persisted[FORGED_CANARY],
+                    "forged_canary_in_server_log": FORGED_CANARY in server_log,
                     "abort_canary_on_wire": ABORT_CANARY in wire,
                     "abort_canary_in_database": persisted[ABORT_CANARY],
                 }
@@ -322,6 +376,11 @@ def main() -> int:
             mode: run_case(capture, state, mode, False)
             for mode in ("host_clone", "drop_cause", "throw_after")
         }
+        forged = {
+            mode: run_case(capture, state, mode, False)
+            for mode in ("forged", "forged_unprotected")
+        }
+        independent_schema = run_case(capture, state, "schema_clone", False)
         passed = (
             all(
                 row["permission_requested"]
@@ -362,6 +421,19 @@ def main() -> int:
                 for row in cancellation.values()
             )
             and control_evidence_passed(controls)
+            and forged["forged"]["control_applied"]
+            and forged["forged"]["host_cause_is_captured"] is True
+            and forged["forged"]["forged_exposed_to_inspect"] is False
+            and not forged["forged"]["tool_returned_to_model"]
+            and not forged["forged"]["forged_canary_on_wire"]
+            and not forged["forged"]["forged_canary_in_database"]
+            and not forged["forged"]["forged_canary_in_server_log"]
+            and forged["forged_unprotected"]["control_applied"]
+            and forged["forged_unprotected"]["host_cause_is_captured"] is False
+            and forged["forged_unprotected"]["forged_exposed_to_inspect"] is True
+            and independent_schema["control_applied"]
+            and independent_schema["host_cause_is_captured"] is False
+            and independent_schema["tool_returned_to_model"]
         )
         print(
             json.dumps(
@@ -370,6 +442,8 @@ def main() -> int:
                     "cases": cases,
                     "cancellation": cancellation,
                     "controls": controls,
+                    "forged": forged,
+                    "independent_schema": independent_schema,
                 }
             )
         )

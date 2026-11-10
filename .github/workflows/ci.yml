@@ -113,6 +113,39 @@ jobs:
           npm --prefix plugin/gateway-sidebar-v2 test
           npm --prefix plugin/gateway-sidebar-v2 run test:live -- --opencode-bin "$(command -v opencode)"
 
+  gateway-v2-permission:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        opencode: [2.2.5, 2.2.6]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned test runtime and build gateway
+        run: |
+          npm install --global "@opencode/cli@${{ matrix.opencode }}" --no-audit --no-fund
+          opencode --version | grep -Fx "opencode v${{ matrix.opencode }}"
+          npm ci --prefix plugin/gateway-core --ignore-scripts --no-audit --no-fund
+          npm --prefix plugin/gateway-core run build
+
+      - name: Exercise V2 permission, tool-error and shell boundaries
+        run: |
+          python scripts/gateway_v2_permission_rejection_live_smoke.py
+          python scripts/gateway_v2_tool_error_live_smoke.py
+          python scripts/gateway_v2_shell_live_smoke.py
+
   windows-bounded-subprocess:
     runs-on: windows-latest
     steps:
