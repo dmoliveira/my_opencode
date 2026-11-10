@@ -8,6 +8,8 @@ plugin/gateway-core/*.tgz
 plugin/gateway-core@latest
 plugin/gateway-sidebar/node_modules/
 plugin/gateway-sidebar/*.tgz
+plugin/gateway-sidebar-v2/node_modules/
+plugin/gateway-sidebar-v2/*.tgz
 runtime/
 bg/
 .codememory/*.sqlite3
