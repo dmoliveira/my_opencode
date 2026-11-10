@@ -73,6 +73,24 @@ Experimental, unconfigured adapters cover V2 model-context and native transport 
 
 The permission smoke first captures a genuine decline from its own controlled `ctx.permission.assert` call, then registers the adapter with that independently obtained sample. On both tested versions, a forged matching prototype exposed a synthetic canary through custom inspection without the adapter; with the adapter, inspection was clean and the rejection still stopped the step. This fixture is not a production source of trusted types. The 2.2.6 public plugin API does not expose the host's decline constructor, and a factory that derives its prototype from an arbitrary tool error would reintroduce the vulnerability. A trusted production capability is still required; this adapter does not protect the trusted prototype against same-privilege mutation by other plugins. Other AFTER-hook failures can reach the model as tool errors rather than stop the step, so registration alone does not establish an independent fail-closed boundary.
 
+An alternative, also unconfigured, `registerV2InterruptingToolOutputRedaction`
+does not copy a decline prototype. It replaces the error with a generic host
+tool error, interrupts the affected session, and blocks its model-request hooks
+until a successful interruption settles. Failed, refused, timed-out or
+unverifiable settlement leaves that session quarantined for the plugin's
+lifetime; unknown identity or exhausted bounds closes the guard globally.
+Interruption is session-wide and reports an interrupted outcome. On 2.2.5 and
+2.2.6, isolated controls observed a stopped plain rejection, redacted feedback,
+forged-cause containment, blocked retry, generate and compaction requests after
+a simulated interruption failure, and an unaffected second session. A new
+user prompt succeeded after a successful interruption settled. These tests
+cover synthetic native HTTP requests, not every provider, title request,
+concurrent in-flight operation or native question dismissal. Quarantine is in
+memory and is lost on unload or restart; an unresolved host interrupt may also
+outlive the plugin. The adapter
+does not establish an independent enforcement boundary or authorize V2
+activation.
+
 These are **not** complete gateway protection or parity. Transport-hook ordering and non-native providers, WebSocket behavior, images and other encodings, large/resumed histories, all four request kinds live, other error paths, command and event lifecycles, and the remaining guards also require validation. The adapters are intentionally not registered in the user's configuration.
 
 The 2.2.5 and 2.2.6 permission smokes also measure synthetic controls. A rejection caught directly from `ctx.permission.assert` in a tool owned by the fixture is the same cause later exposed to its after-hook; a fresh object with that observed prototype still stops the step. Dropping the cause or throwing a generic error from the after-hook instead allows a tool result to reach the model. An independently constructed Effect tagged-error class with the same name also fails the host's decline check on both versions. These observations neither authenticate an arbitrary tool's cause nor authorize the adapter. CI runs the permission, tool-error and shell smokes on each pinned version; the smoke fails if a supported host does not reproduce the controls.

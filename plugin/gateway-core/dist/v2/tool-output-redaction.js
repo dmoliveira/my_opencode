@@ -119,3 +119,187 @@ export async function registerV2ToolOutputRedaction(tool, redactor, createToolEr
     });
     return () => registration.dispose();
 }
+const INTERRUPT_FAILURE = "Tool step withheld because session interruption is unresolved";
+const INTERRUPT_TIMEOUT_MS = 2000;
+const MAX_INTERRUPTS = 8;
+const MAX_QUARANTINED = 64;
+const BAD_SESSION_ID = /[\u0000-\u001f\u007f]/;
+function validSessionID(id) {
+    return typeof id === "string" && id.length > 0 && id.length <= 160 && id === id.trim() && !BAD_SESSION_ID.test(id);
+}
+// Only inspect own data properties. An opaque cause cannot be classified safely.
+function cancellationKind(error) {
+    try {
+        if (!error || typeof error !== "object")
+            return "unknown";
+        const descriptor = Object.getOwnPropertyDescriptor(error, "error");
+        if (!descriptor)
+            return "other";
+        if (!("value" in descriptor))
+            return "unknown";
+        const cause = descriptor.value;
+        if (cause === undefined || cause === null)
+            return "other";
+        if (typeof cause !== "object")
+            return "unknown";
+        const tag = Object.getOwnPropertyDescriptor(cause, "_tag");
+        if (!tag)
+            return "other";
+        if (!("value" in tag) || typeof tag.value !== "string")
+            return "unknown";
+        return tag.value === PERMISSION_DECLINED || tag.value === "QuestionTool.CancelledError" ? "stop" : "other";
+    }
+    catch {
+        return "unknown";
+    }
+}
+/**
+ * Experimental alternative to copying a host decline prototype. It is not a
+ * complete provider boundary and must not be configured as a standalone guard.
+ */
+export async function registerV2InterruptingToolOutputRedaction(session, tool, redactor, createToolError, runtimeVersion) {
+    if (!VERIFIED_OPENCODE_VERSIONS.includes(runtimeVersion))
+        throw new Error("V2 tool-output adapter requires verified OpenCode 2.2.5 or 2.2.6");
+    if (typeof createToolError !== "function")
+        throw new Error("V2 Tool.Error factory required");
+    const registrations = [];
+    const quarantined = new Map();
+    let globallyClosed = false;
+    let activeInterrupts = 0;
+    const maybeRelease = (id, entry) => {
+        if (!entry.failed && entry.idle && !entry.waiter && entry.inflight === 0 && quarantined.get(id) === entry) {
+            quarantined.delete(id);
+        }
+    };
+    const observeSettlement = (id, entry) => {
+        entry.idle = false;
+        if (entry.waiter || entry.failed)
+            return;
+        entry.waiter = true;
+        void Promise.resolve().then(() => session.wait({ sessionID: id })).then(() => {
+            entry.idle = true;
+        }, () => {
+            entry.failed = true;
+        }).finally(() => {
+            entry.waiter = false;
+            maybeRelease(id, entry);
+        });
+    };
+    const interrupt = async (event) => {
+        let id;
+        try {
+            id = event.sessionID;
+        }
+        catch {
+            globallyClosed = true;
+            throw new Error(INTERRUPT_FAILURE);
+        }
+        if (!validSessionID(id)) {
+            globallyClosed = true;
+            throw new Error(INTERRUPT_FAILURE);
+        }
+        let entry = quarantined.get(id);
+        if (!entry) {
+            if (quarantined.size >= MAX_QUARANTINED) {
+                globallyClosed = true;
+                throw new Error(INTERRUPT_FAILURE);
+            }
+            entry = { inflight: 0, idle: false, waiter: false, failed: false };
+            quarantined.set(id, entry);
+        }
+        entry.inflight += 1;
+        let assignmentFailed = false;
+        try {
+            try {
+                event.error = createToolError("Tool step stopped");
+            }
+            catch {
+                assignmentFailed = true;
+                entry.failed = true;
+            }
+            if (activeInterrupts >= MAX_INTERRUPTS) {
+                globallyClosed = true;
+                throw new Error(INTERRUPT_FAILURE);
+            }
+            activeInterrupts += 1;
+            const pending = Promise.resolve().then(() => session.interrupt({ sessionID: id, resume: false }));
+            void pending.finally(() => { activeInterrupts -= 1; }).catch(() => { });
+            let timer;
+            try {
+                const timeout = new Promise((_, reject) => {
+                    timer = setTimeout(() => reject(new Error(INTERRUPT_FAILURE)), INTERRUPT_TIMEOUT_MS);
+                });
+                const outcome = await Promise.race([pending, timeout]);
+                if (!outcome || outcome.interrupted !== true || assignmentFailed)
+                    throw new Error(INTERRUPT_FAILURE);
+                observeSettlement(id, entry);
+            }
+            finally {
+                if (timer)
+                    clearTimeout(timer);
+            }
+        }
+        catch {
+            entry.failed = true;
+            throw new Error(INTERRUPT_FAILURE);
+        }
+        finally {
+            entry.inflight -= 1;
+            maybeRelease(id, entry);
+        }
+    };
+    try {
+        for (const kind of ["context", "compaction", "generate", "title", "http.request", "experimental.ws.send"]) {
+            registrations.push(await session.hook(kind, async (event) => {
+                try {
+                    if (globallyClosed || !validSessionID(event.sessionID) || quarantined.has(event.sessionID))
+                        throw new Error();
+                }
+                catch {
+                    throw new Error(INTERRUPT_FAILURE);
+                }
+            }));
+        }
+        registrations.push(await tool.hook("execute.after", async (event) => {
+            let status;
+            let original;
+            try {
+                status = event.status;
+                if (status === "error")
+                    original = event.error;
+            }
+            catch {
+                globallyClosed = true;
+                throw new Error(REDACTION_FAILURE);
+            }
+            if (status === "error") {
+                if (cancellationKind(original) !== "other")
+                    return interrupt(event);
+                try {
+                    event.error = createToolError(await safeErrorMessage(original, redactor));
+                }
+                catch {
+                    throw new Error(REDACTION_FAILURE);
+                }
+                return;
+            }
+            if (status !== "completed")
+                return interrupt(event);
+            try {
+                const wrapper = { result: event.result };
+                await redactor.redactMutableValueAsync(wrapper);
+                event.result = wrapper.result;
+            }
+            catch {
+                throw new Error(REDACTION_FAILURE);
+            }
+        }));
+    }
+    catch {
+        await Promise.allSettled(registrations.map(async (registration) => registration.dispose()));
+        throw new Error("Unable to register V2 tool-output redaction");
+    }
+    return async () => {
+        await Promise.allSettled(registrations.map(async (registration) => registration.dispose()));
+    };
+}
