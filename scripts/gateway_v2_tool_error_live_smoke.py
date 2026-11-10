@@ -40,7 +40,9 @@ class ErrorHandler(CaptureHandler):
         finished = any(item.get("role") == "tool" for item in messages)
         if "synthetic_probe" in names and not finished:
             kind = (
-                "safe"
+                "bootstrap"
+                if "BOOTSTRAP_PERMISSION_PROBE" in text
+                else "safe"
                 if "SAFE_ERROR_PROBE" in text
                 else "completed"
                 if "COMPLETED_FAILURE_PROBE" in text
@@ -147,15 +149,20 @@ def run_case(
         home, project = root / "home", root / "project"
         plugin = project / "v2-probe"
         plugin.mkdir(parents=True)
+        unexpected_decline = root / "unexpected-plain-decline"
         dist = ROOT / "plugin/gateway-core/dist"
         (plugin / "index.ts").write_text(
             'import { Plugin } from "@opencode/plugin"\n'
             'import { Error as ToolError } from "@opencode/plugin/promise/tool"\n'
+            'import { writeFileSync } from "node:fs"\n'
             f"import {{ registerV2ToolOutputRedaction }} from {json.dumps((dist / 'v2/tool-output-redaction.js').as_uri())}\n"
             f"import {{ createSecretRedactor }} from {json.dumps((dist / 'hooks/shared/secret-redaction.js').as_uri())}\n"
             'export default Plugin.define({ id: "v2-tool-error-probe", async setup(ctx) {\n'
             f'  const redactor = process.env.V2_SMOKE_REDACTOR_FAIL === "1" ? {{ async redactMutableValueAsync() {{ throw new Error({json.dumps(REDACTOR_CANARY)}) }} }} : createSecretRedactor({{ patterns: {json.dumps(list(CANARIES))}, redactionToken: "[REDACTED]", limits: {{ maxDepth: 32, maxNodes: 10000, maxChars: 1000000 }} }})\n'
-            '  if (process.env.V2_SMOKE_GUARD !== "off") await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version)\n'
+            # This non-interactive fixture never exercises plain rejection.
+            '  const fixtureOnlyDecline = Object.assign(new Error(), { _tag: "Permission.DeclinedError" })\n'
+            f'  await ctx.tool.hook("execute.after", event => {{ if (event.status === "error" && Object.getOwnPropertyDescriptor(event.error, "error")?.value?._tag === "Permission.DeclinedError") writeFileSync({json.dumps(str(unexpected_decline))}, "unexpected") }})\n'
+            '  if (process.env.V2_SMOKE_GUARD !== "off") await registerV2ToolOutputRedaction(ctx.tool, redactor, (message, cause) => new ToolError({ message, ...(cause === undefined ? {} : { error: cause }) }), ctx.app.version, () => fixtureOnlyDecline)\n'
             '  await ctx.tool.transform((editor) => editor.add({ name: "synthetic_probe", description: "synthetic error probe", options: { codemode: false }, input: { type: "object", properties: { kind: { type: "string" } }, required: ["kind"], additionalProperties: false }, async execute(input, tool) {\n'
             '    if (input.kind === "permission") { await ctx.permission.assert({ sessionID: tool.sessionID, agent: tool.agent, source: { type: "tool", messageID: tool.messageID, id: tool.id }, action: "synthetic_blocked_action", resources: ["synthetic-resource"], save: ["synthetic-resource"] }); return { content: "PERMISSION_BYPASSED" } }\n'
             f'    if (input.kind === "completed") return {{ content: "result-control {MESSAGE_CANARY}" }}\n'
@@ -270,6 +277,7 @@ def run_case(
             in terminal,
             "permission_bypassed": "PERMISSION_BYPASSED" in wire
             or "PERMISSION_BYPASSED" in terminal,
+            "unexpected_plain_decline": unexpected_decline.is_file(),
         }
         return case_result
 
@@ -324,7 +332,7 @@ def main() -> int:
         permission = cases["permission"]
         permission_failure = cases["permission_redactor_failure"]
         passed = (
-            all(active(row) for row in cases.values())
+            all(active(row) and not row["unexpected_plain_decline"] for row in cases.values())
             and all(
                 baseline[key]
                 for key in (

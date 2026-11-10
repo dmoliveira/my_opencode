@@ -2,22 +2,11 @@ const REDACTION_FAILURE = "Tool output withheld because redaction failed";
 const ERROR_WITHHELD = "Tool execution failed; details withheld by gateway";
 const UNSAFE_CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 const PERMISSION_DECLINED = "Permission.DeclinedError";
-const DECLINED_SCHEMA_BRAND = `~effect/Schema/Class/${PERMISSION_DECLINED}`;
-const VERIFIED_OPENCODE_VERSION = "2.2.5";
-function hasOnlyKeys(value, expected, accessor) {
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expected.length || !keys.every((key) => expected.includes(key)))
-        return false;
-    return keys.every((key) => {
-        const descriptor = Object.getOwnPropertyDescriptor(value, key);
-        if (!descriptor)
-            return false;
-        return key === accessor ? typeof descriptor.get === "function" && !descriptor.set : "value" in descriptor;
-    });
-}
-// OpenCode 2.2.5 uses the cause's class to stop a plain permission rejection.
-// Preserve only that type and its tag, never the original cause's data or stack.
-function copyPermissionDecline(error) {
+const VERIFIED_OPENCODE_VERSIONS = ["2.2.5", "2.2.6"];
+// The prototype comes from a genuine host-created decline at registration,
+// independently of the event being sanitized. The event's prototype is never used.
+function copyPermissionDecline(error, trustedPrototype) {
+    let isDecline = false;
     try {
         if (!error || typeof error !== "object")
             return undefined;
@@ -26,51 +15,24 @@ function copyPermissionDecline(error) {
         if (!cause || typeof cause !== "object")
             return undefined;
         const tag = Object.getOwnPropertyDescriptor(cause, "_tag");
-        if (!tag || !("value" in tag) || tag.value !== PERMISSION_DECLINED)
-            return undefined;
-        const prototype = Object.getPrototypeOf(cause);
-        if (!prototype)
-            return undefined;
-        // Reject extra properties or accessors that a copied prototype could expose.
-        // This exact internal shape was observed in OpenCode 2.2.5 only.
-        if (!hasOnlyKeys(prototype, ["constructor"]))
-            return undefined;
-        const constructor = Object.getOwnPropertyDescriptor(prototype, "constructor");
-        if (!constructor || !("value" in constructor) || typeof constructor.value !== "function")
-            return undefined;
-        const schema = Object.getPrototypeOf(prototype);
-        if (!schema)
-            return undefined;
-        if (!hasOnlyKeys(schema, ["constructor", "name", DECLINED_SCHEMA_BRAND], DECLINED_SCHEMA_BRAND))
-            return undefined;
-        const name = Object.getOwnPropertyDescriptor(schema, "name");
-        const brand = Object.getOwnPropertyDescriptor(schema, DECLINED_SCHEMA_BRAND);
-        if (!name || !("value" in name) || name.value !== PERMISSION_DECLINED || !brand || typeof brand.get !== "function" || brand.set)
-            return undefined;
-        const schemaBase = Object.getPrototypeOf(schema);
-        if (!schemaBase || !hasOnlyKeys(schemaBase, ["constructor", "toJSON"]))
-            return undefined;
-        const effectBase = Object.getPrototypeOf(schemaBase);
-        if (!effectBase || !hasOnlyKeys(effectBase, [
-            "constructor", "~effect/Effect", "pipe", "toJSON", "~effect/Effect/identifier",
-            "~effect/Effect/evaluate", "~effect/Effect/successCont", "~effect/Effect/failureCont",
-            "~effect/Effect/ensureCont", Symbol.for("nodejs.util.inspect.custom"), Symbol.iterator,
-        ]) || Object.getPrototypeOf(effectBase) !== Error.prototype)
-            return undefined;
-        const copy = Object.create(prototype);
-        Object.defineProperties(copy, {
-            _tag: { value: PERMISSION_DECLINED, enumerable: true },
-            name: { value: PERMISSION_DECLINED },
-            message: { value: "" },
-            stack: { value: "" },
-            toString: { value: () => PERMISSION_DECLINED },
-            toJSON: { value: () => ({ _tag: PERMISSION_DECLINED }) },
-        });
-        return copy;
+        isDecline = !!tag && "value" in tag && tag.value === PERMISSION_DECLINED;
     }
     catch {
         return undefined;
     }
+    if (!isDecline)
+        return undefined;
+    const copy = Object.create(trustedPrototype);
+    Object.defineProperties(copy, {
+        _tag: { value: PERMISSION_DECLINED, enumerable: true },
+        name: { value: PERMISSION_DECLINED },
+        message: { value: "" },
+        stack: { value: "" },
+        toString: { value: () => PERMISSION_DECLINED },
+        toJSON: { value: () => ({ _tag: PERMISSION_DECLINED }) },
+        [Symbol.for("nodejs.util.inspect.custom")]: { value: () => PERMISSION_DECLINED },
+    });
+    return copy;
 }
 async function safeErrorMessage(error, redactor) {
     try {
@@ -90,12 +52,32 @@ async function safeErrorMessage(error, redactor) {
         return ERROR_WITHHELD;
     }
 }
-/** Experimental output adapter. The factory must create the host's V2 Tool.Error. */
-export async function registerV2ToolOutputRedaction(tool, redactor, createToolError, runtimeVersion) {
+/**
+ * Experimental: both factories must come from trusted host capabilities.
+ * The decline factory is sampled before registration and must not derive its
+ * result from a tool error. A matching tag cannot authenticate a host type.
+ */
+export async function registerV2ToolOutputRedaction(tool, redactor, createToolError, runtimeVersion, createTrustedDecline) {
     if (typeof createToolError !== "function")
         throw new Error("V2 Tool.Error factory required");
-    if (runtimeVersion !== VERIFIED_OPENCODE_VERSION)
-        throw new Error("V2 tool-output adapter requires verified OpenCode 2.2.5");
+    if (!VERIFIED_OPENCODE_VERSIONS.includes(runtimeVersion))
+        throw new Error("V2 tool-output adapter requires verified OpenCode 2.2.5 or 2.2.6");
+    if (typeof createTrustedDecline !== "function")
+        throw new Error("V2 trusted permission-decline factory required");
+    let trustedPrototype;
+    try {
+        const trusted = createTrustedDecline();
+        if (!trusted || typeof trusted !== "object")
+            throw new Error();
+        const tag = Object.getOwnPropertyDescriptor(trusted, "_tag");
+        const prototype = Object.getPrototypeOf(trusted);
+        if (!tag || !("value" in tag) || tag.value !== PERMISSION_DECLINED || !prototype)
+            throw new Error();
+        trustedPrototype = prototype;
+    }
+    catch {
+        throw new Error("V2 trusted permission-decline factory unavailable");
+    }
     const registration = await tool.hook("execute.after", async (event) => {
         let status;
         try {
@@ -113,7 +95,7 @@ export async function registerV2ToolOutputRedaction(tool, redactor, createToolEr
                 const failed = event;
                 const original = failed.error;
                 message = await safeErrorMessage(original, redactor);
-                cause = copyPermissionDecline(original);
+                cause = copyPermissionDecline(original, trustedPrototype);
                 failed.error = createToolError(message, cause);
             }
             catch {
