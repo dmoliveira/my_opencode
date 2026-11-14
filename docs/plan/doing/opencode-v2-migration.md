@@ -70,16 +70,36 @@ startup file ran the same denied command. This is a process-binding limitation,
 not a claim that policies sandbox plugin code.
 
 `python plugin/gateway-core/test/v2/direct_shell_activation_live_smoke.py`
-measures a separate, authenticated direct-shell path in disposable local
-servers on 2.2.5 and 2.2.6. With a configured plugin deliberately paused in
-setup, a benign direct API command completes before the shell hook is
-registered. After setup, the hook sees and can reject a direct command, but
-the host does not supply the session-ID update observed for model-driven shell
-calls. `tool.use` is an agent-tool policy; these controls do not claim that it
-governs direct user API calls or demonstrate external access. MEASURED means
-the known host behavior was reproduced, not that a guard is active. CI measures
-both pinned versions. A plugin-only universal admission boundary cannot rely
-on this hook being active from server startup; the host's
+measures a separate, authenticated direct-shell path in private local servers
+using selected executables reporting 2.2.5 and 2.2.6. With a configured plugin
+deliberately paused in setup, a benign direct API command completes before the
+shell hook is registered. After setup, the hook sees and can reject a direct
+command; the tested executions did not supply the session-ID update observed
+for model-driven shell calls. `tool.use` is an agent-tool policy; these controls
+do not claim that it governs direct user API calls or demonstrate external
+access. MEASURED means the known host behavior was reproduced, not that a guard
+is active. CI measures both pinned versions. The probe uses authenticated
+localhost trace, gate and synthetic witness controls rather than pathname-based
+witness writes. It checks successful shell identity, exit and captured output,
+and retains its fixture on every outcome. A missing blocked witness is only an
+observation during that run, not proof that no delayed or external action can
+occur. A private home is not an OS sandbox, and same-user interference remains
+outside this measurement.
+Teardown reports the checked runtime process group and controller, not proof
+that no process escaped that group or executed a delayed external action.
+The version check describes only the selected executable; it does not identify
+a separate service or prevent executable replacement during a run.
+Retained fixtures may contain synthetic credentials and runtime metadata; inspect
+them before sharing or cleaning them up.
+
+The probe does not support 2.2.7 or 2.3.0. The
+[2.2.7 release notes](https://github.com/anomalyco/opencode/releases/tag/v2.2.7)
+say `agent.list` can return before plugins finish loading; do not treat that
+endpoint as an activation barrier on later versions. The
+[2.3.0 release notes](https://github.com/anomalyco/opencode/releases/tag/v2.3.0)
+also describe changed background subagent and shell lifecycles, which are not
+qualified by these older-version results. A plugin-only universal admission
+boundary cannot rely on this hook being active from server startup; the host's
 [direct-shell handler](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/server/src/handlers/shell.ts)
 and [shell creation](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/core/src/shell.ts)
 remain relevant to a host-level solution.
