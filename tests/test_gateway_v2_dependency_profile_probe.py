@@ -8,12 +8,45 @@ import tempfile
 import threading
 import time
 import unittest
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import gateway_v2_dependency_profile_probe as profile
+
+
+@contextmanager
+def retained_directory() -> Iterator[str]:
+    """Keep synthetic fixtures and version-probe directories for inspection."""
+    yield tempfile.mkdtemp(prefix="v2-profile-unit-")
+
+
+@contextmanager
+def mocked_case(
+    *, collection_failure: bool = False, teardown_error: Exception | None = None,
+    fixture_verified: bool = True,
+) -> Iterator[MagicMock]:
+    runtime = MagicMock(observed_pid=12345)
+    runtime.process.pid = 12345
+    verify_fixture = profile.owned_fixture if fixture_verified else lambda *_args: False
+    if teardown_error is not None:
+        runtime.close.side_effect = teardown_error
+    with (
+        patch.object(profile, "PrivateRuntime", return_value=runtime),
+        patch.object(profile, "prepare_fixture", return_value={}),
+        patch.object(profile, "control_case", return_value={}),
+        patch.object(profile, "traces", return_value=[]),
+        patch.object(profile, "read_witness", return_value="PROFILE_BASELINE"),
+        patch.object(
+            profile, "assess", return_value=(True, []),
+            side_effect=profile.ProbeFailure("collection_failed") if collection_failure else None,
+        ),
+        patch.object(profile, "owned_fixture", side_effect=verify_fixture),
+        patch.object(profile.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+    ):
+        yield runtime
 
 
 def sample_request() -> dict:
@@ -110,7 +143,7 @@ class ProfileProbeTests(unittest.TestCase):
             current.answer(sample_request())
 
     def test_fixture_uses_native_sdk_only_and_tripwires_are_not_invoked(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             root = Path(temporary)
             config = profile.prepare_fixture(root, state(root=root), 12345)
             self.assertIn('@opencode/plugin/effect', (root / "project/owned/index.ts").read_text())
@@ -131,7 +164,7 @@ class ProfileProbeTests(unittest.TestCase):
         self.assertFalse(any(rule["action"] == "plugin.use" for rule in control["policies"]))
 
     def test_owned_rewrite_is_atomic_and_private(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             root = Path(temporary)
             profile.prepare_fixture(root, state(root=root), 12345)
             profile.rewrite_config(root, {"plugins": []})
@@ -292,17 +325,133 @@ class ProfileProbeTests(unittest.TestCase):
                 current.stop(); server.shutdown(); server.close_connections(); server.server_close(); worker.join(1)
 
     def test_wrong_host_stops_before_native_cases_and_hides_diagnostics(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            parent = Path(temporary);binary = parent / "fake-opencode";binary.write_bytes(b"unit-binary")
-            with patch.object(profile, "run_child", return_value=(0, b"opencode v9.9.9\n", b"SECRET_CANARY")), patch.object(profile, "run_case") as run:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            binary = parent / "fake-opencode"
+            binary.write_bytes(b"unit-binary")
+            with (
+                patch.object(profile, "run_child", return_value=(0, b"opencode v9.9.9\n", b"SECRET_CANARY")),
+                patch.object(profile, "run_case") as run,
+                patch.object(profile.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+            ):
                 result = profile.probe(str(binary), parent)
             self.assertEqual(result["reason"], "unsupported_host_version")
             self.assertEqual(result["authority"], "disabled-unqualified")
             self.assertNotIn("SECRET_CANARY", json.dumps(result))
+            self.assertTrue((parent / result["retained_version_fixture"]).is_dir())
+            self.assertTrue(result["version_fixture_identity_verified"])
             run.assert_not_called()
 
+    def test_version_fixture_is_retained_after_child_failure(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            binary = parent / "fake-opencode"
+            binary.write_bytes(b"unit-binary")
+            for error, expected in (
+                (profile.ProbeFailure("child_timeout"), "child_timeout"),
+                (RuntimeError("synthetic internal failure"), "profile_internal_error"),
+            ):
+                with (
+                    self.subTest(error=type(error).__name__),
+                    patch.object(profile, "run_child", side_effect=error),
+                    patch.object(profile.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+                ):
+                    result = profile.probe(str(binary), parent)
+                self.assertEqual(result["reason"], expected)
+                self.assertTrue((parent / result["retained_version_fixture"]).is_dir())
+                self.assertTrue(result["version_fixture_identity_verified"])
+
+    def test_version_fixture_is_retained_for_supported_executable(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            binary = parent / "fake-opencode"
+            binary.write_bytes(b"unit-binary")
+            observed = {"case": "baseline", "measurement": "PASS", "witnesses_pass": True, "cleanup_complete": True}
+            with (
+                patch.object(profile, "run_child", return_value=(0, b"opencode v2.2.5\n", b"")),
+                patch.object(profile, "run_case", return_value=observed),
+                patch.object(profile.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+            ):
+                result = profile.probe(str(binary), parent, ("baseline",))
+            self.assertEqual(result["reason"], "incomplete_case_selection")
+            self.assertTrue((parent / result["retained_version_fixture"]).is_dir())
+            self.assertTrue(result["version_fixture_identity_verified"])
+
+    def test_version_fixture_identity_failure_cannot_run_cases(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            binary = parent / "fake-opencode"
+            binary.write_bytes(b"unit-binary")
+            with (
+                patch.object(profile, "run_child", return_value=(0, b"opencode v2.2.5\n", b"")),
+                patch.object(profile, "owned_fixture", return_value=False),
+                patch.object(profile, "run_case") as run,
+                patch.object(profile.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+            ):
+                result = profile.probe(str(binary), parent)
+            self.assertEqual(result["reason"], "version_fixture_identity_changed")
+            self.assertFalse(result["version_fixture_identity_verified"])
+            self.assertTrue((parent / result["retained_version_fixture"]).is_dir())
+            run.assert_not_called()
+
+    def test_case_fixture_is_retained_on_success_and_collection_failure(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            for fail in (False, True):
+                with self.subTest(fail=fail):
+                    with mocked_case(collection_failure=fail) as runtime:
+                        result = profile.run_case("/not-executed", parent, "baseline")
+                    self.assertEqual(result["measurement"], "FAIL" if fail else "PASS")
+                    self.assertTrue(result["cleanup_complete"])
+                    self.assertTrue(result["teardown_complete"])
+                    self.assertTrue(result["fixture_identity_verified"])
+                    self.assertTrue((parent / result["retained_fixture"]).is_dir())
+                    runtime.close.assert_called_once()
+
+    def test_teardown_failure_does_not_remove_case_or_report_complete(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            for error in (OSError("synthetic"), RuntimeError("synthetic")):
+                with self.subTest(error=type(error).__name__), mocked_case(teardown_error=error):
+                    result = profile.run_case("/not-executed", parent, "baseline")
+                self.assertEqual(result["measurement"], "FAIL")
+                self.assertFalse(result["cleanup_complete"])
+                self.assertFalse(result["teardown_complete"])
+                self.assertIn("runtime-stop", result["cleanup_failures"])
+                self.assertTrue((parent / result["retained_fixture"]).is_dir())
+
+    def test_changed_case_fixture_cannot_pass_measurement(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            with mocked_case(fixture_verified=False):
+                result = profile.run_case("/not-executed", parent, "baseline")
+            self.assertEqual(result["reason"], "fixture_identity_changed")
+            self.assertEqual(result["measurement"], "FAIL")
+            self.assertTrue(result["teardown_complete"])
+            self.assertFalse(result["fixture_identity_verified"])
+            self.assertFalse(result["cleanup_complete"])
+            self.assertTrue((parent / result["retained_fixture"]).is_dir())
+
+    def test_cli_does_not_resolve_symlinked_fixture_parent(self) -> None:
+        with retained_directory() as temporary:
+            parent = Path(temporary)
+            link = parent / "link"
+            link.symlink_to(parent, target_is_directory=True)
+            with (
+                patch.object(sys, "argv", ["probe", "--opencode-bin", sys.executable, "--temp-parent", str(link)]),
+                patch.object(profile, "probe", return_value={"measurement": "FAIL"}) as run,
+                patch("builtins.print"),
+            ):
+                self.assertEqual(profile.main(), 1)
+            self.assertEqual(run.call_args.args[1], link.absolute())
+            with patch.object(profile, "run_child") as child:
+                result = profile.probe(sys.executable, link)
+            self.assertEqual(result["reason"], "temporary_parent_unavailable")
+            self.assertNotIn("retained_version_fixture", result)
+            child.assert_not_called()
+
     def test_all_required_cases_and_only_complete_witnesses_qualify(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             parent = Path(temporary);binary = parent / "fake-opencode";binary.write_bytes(b"unit-binary")
             child = (0, b"opencode v2.2.5\n", b"")
             with patch.object(profile, "run_child", return_value=child), patch.object(profile, "run_case", side_effect=lambda b, p, case: {"case": case, "measurement": "PASS", "witnesses_pass": True, "cleanup_complete": True}):
@@ -313,7 +462,7 @@ class ProfileProbeTests(unittest.TestCase):
             self.assertEqual((result["measurement"], result["profile_qualification"]), ("PASS", "UNQUALIFIED"))
 
     def test_debug_subset_cannot_claim_required_coverage(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             parent = Path(temporary);binary = parent / "fake-opencode";binary.write_bytes(b"unit-binary")
             with patch.object(profile, "run_child", return_value=(0, b"opencode v2.2.5\n", b"")), patch.object(profile, "run_case", return_value={"measurement": "PASS", "witnesses_pass": True, "cleanup_complete": True}):
                 result = profile.probe(str(binary), parent, ("baseline",))
@@ -328,7 +477,7 @@ class ProfileProbeTests(unittest.TestCase):
             child.assert_not_called();case.assert_not_called()
 
     def test_reader_startup_failure_retains_process_handle_for_cleanup(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             runtime = profile.PrivateRuntime("/not-executed", Path(temporary), time.monotonic() + 1)
             process = MagicMock()
             with patch.object(profile.subprocess, "Popen", return_value=process), patch.object(profile.threading, "Thread") as thread, patch.object(profile, "stop_group") as stop:
@@ -340,7 +489,7 @@ class ProfileProbeTests(unittest.TestCase):
                 stop.assert_called_once_with(process)
 
     def test_unstarted_provider_is_never_shutdown_or_joined(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             provider = MagicMock(workers=[], admissions=0)
             timer = MagicMock(ident=None);timer.is_alive.return_value = False
             with patch.object(profile, "ProfileProvider", return_value=provider), patch.object(profile.threading, "Timer", return_value=timer), patch.object(profile.threading, "Thread") as thread:
@@ -353,7 +502,7 @@ class ProfileProbeTests(unittest.TestCase):
             self.assertTrue(result["cleanup_complete"])
 
     def test_watchdog_cancels_active_controller_connections(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             cancelled = threading.Event()
             controller_entered = threading.Event()
             runtime = MagicMock()
@@ -379,7 +528,7 @@ class ProfileProbeTests(unittest.TestCase):
             self.assertTrue(result["cleanup_complete"])
 
     def test_expiry_during_fixture_setup_does_not_start_a_runtime(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             def slow_fixture(_root: Path, current: profile.ProfileState, _port: int) -> dict:
                 self.assertTrue(current.stopped.wait(3))
                 return {}
@@ -391,7 +540,7 @@ class ProfileProbeTests(unittest.TestCase):
             runtime.assert_not_called()
 
     def test_expired_or_cancelled_runtime_never_spawns(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             for expired in (True, False):
                 with self.subTest(expired=expired):
                     deadline = time.monotonic() + (-1 if expired else 10)
@@ -413,7 +562,7 @@ class ProfileProbeTests(unittest.TestCase):
                 spawn.assert_not_called()
 
     def test_abort_interrupts_partial_native_response_headers(self) -> None:
-        with socket.socket() as server, tempfile.TemporaryDirectory() as temporary:
+        with socket.socket() as server, retained_directory() as temporary:
             server.bind(("127.0.0.1", 0));server.listen(1);server.settimeout(1)
             runtime = profile.PrivateRuntime("/not-executed", Path(temporary), time.monotonic() + 1)
             runtime.port = server.getsockname()[1]
@@ -442,14 +591,14 @@ class ProfileProbeTests(unittest.TestCase):
             self.assertFalse(worker.is_alive())
 
     def test_late_reader_fault_prevents_measurement_success(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             runtime = profile.PrivateRuntime("/not-executed", Path(temporary), time.monotonic() + 1)
             runtime.fault = "runtime_output_limit"
             with self.assertRaisesRegex(profile.ProbeFailure, "runtime_output_limit"):
                 runtime.close(time.monotonic() + 1)
 
     def test_foreign_or_replaced_fixture_is_preserved(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             root = Path(temporary)
             identity = root.lstat()
             self.assertTrue(profile.owned_fixture(root, identity))
@@ -576,7 +725,7 @@ class ProfileProbeTests(unittest.TestCase):
         self.assertLessEqual(runtime.verify_owner.call_count, 2)
 
     def test_witness_absence_is_distinct_from_invalid_artifacts(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             root = Path(temporary);path = root / "witness"
             self.assertIsNone(profile.read_witness(path))
             path.write_text("PROFILE_BASELINE")
@@ -622,7 +771,7 @@ class ProfileProbeTests(unittest.TestCase):
         self.assertTrue(result["refused"])
 
     def test_assessment_failure_preserves_collected_control_details(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
+        with retained_directory() as temporary:
             runtime = MagicMock(observed_pid=12345);runtime.process.pid = 12345
             control = {"admission": {"admitted": False, "reason": "measured-gate"}}
             with patch.object(profile, "PrivateRuntime", return_value=runtime), patch.object(profile, "control_case", return_value=control), patch.object(profile, "assess", side_effect=profile.ProbeFailure("collection-failed")):

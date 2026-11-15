@@ -991,14 +991,27 @@ def owned_fixture(root: Path, identity: os.stat_result) -> bool:
 
 def run_case(binary: str, parent: Path, case: str) -> dict[str, Any]:
     root = Path(tempfile.mkdtemp(prefix="v2-profile-", dir=parent))
-    identity = root.lstat()
+    report: dict[str, Any] = {
+        "case": case,
+        "measurement": "FAIL",
+        "witnesses_pass": False,
+        "retained_fixture": root.name,
+    }
+    try:
+        identity = root.lstat()
+    except OSError:
+        report.update({
+            "reason": "fixture_identity_changed",
+            "teardown_complete": True,
+            "fixture_identity_verified": False,
+            "cleanup_complete": False,
+        })
+        return report
     state = ProfileState(case, root, time.monotonic() + PRIMARY_SECONDS)
     provider: ProfileProvider | None = None
     provider_thread: threading.Thread | None = None
     provider_started = False
     runtime: PrivateRuntime | None = None
-    report: dict[str, Any] = {"case": case, "measurement": "FAIL", "witnesses_pass": False}
-    cleanup_safe = True
 
     def expire() -> None:
         state.failure = state.failure or "case_timeout"
@@ -1014,7 +1027,6 @@ def run_case(binary: str, parent: Path, case: str) -> dict[str, Any]:
         watchdog.start()
         provider = ProfileProvider(state)
         provider_thread = threading.Thread(target=provider.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
-        cleanup_safe = False
         provider_thread.start()
         provider_started = True
         config = prepare_fixture(root, state, provider.server_port)
@@ -1053,17 +1065,17 @@ def run_case(binary: str, parent: Path, case: str) -> dict[str, Any]:
                 if provider_started:
                     provider.shutdown()
                 provider.close_connections()
-            except OSError:
+            except (OSError, RuntimeError):
                 cleanup_errors.append("provider-stop")
         if runtime is not None:
             try:
                 runtime.close(cleanup_deadline)
-            except (ProbeFailure, OSError, subprocess.SubprocessError):
+            except (ProbeFailure, OSError, RuntimeError, subprocess.SubprocessError):
                 cleanup_errors.append("runtime-stop")
         if provider is not None:
             try:
                 provider.server_close()
-            except OSError:
+            except (OSError, RuntimeError):
                 cleanup_errors.append("provider-close")
             for worker in provider.workers:
                 worker.join(max(0, cleanup_deadline - time.monotonic()))
@@ -1077,21 +1089,16 @@ def run_case(binary: str, parent: Path, case: str) -> dict[str, Any]:
                 cleanup_errors.append("provider-thread")
         if watchdog.is_alive() or time.monotonic() > cleanup_deadline:
             cleanup_errors.append("deadline-teardown")
-        cleanup_safe = not cleanup_errors
+        teardown_complete = not cleanup_errors
         if cleanup_errors or state.failure:
             report.update({"measurement": "FAIL", "witnesses_pass": False, "reason": state.failure or "profile_cleanup_failed", "cleanup_failures": cleanup_errors})
-        if not owned_fixture(root, identity):
-            cleanup_safe = False
+        fixture_verified = owned_fixture(root, identity)
+        if not fixture_verified:
             report.update({"measurement": "FAIL", "witnesses_pass": False, "reason": "fixture_identity_changed"})
-        if cleanup_safe:
-            try:
-                shutil.rmtree(root)
-            except OSError:
-                cleanup_safe = False
-                report.update({"measurement": "FAIL", "witnesses_pass": False, "reason": "fixture_cleanup_failed"})
-        if not cleanup_safe:
-            report["retained_fixture"] = root.name
-        report["cleanup_complete"] = cleanup_safe
+        report["teardown_complete"] = teardown_complete
+        report["fixture_identity_verified"] = fixture_verified
+        # Keep the existing qualification gate, without treating retention as a teardown failure.
+        report["cleanup_complete"] = teardown_complete and fixture_verified
     return report
 
 
@@ -1108,11 +1115,19 @@ def probe(binary: str, parent: Path, selected: tuple[str, ...] = CASES) -> dict[
         with path.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         report["binary_identity"] = {"sha256": digest, "device": initial.st_dev, "inode": initial.st_ino, "bytes": initial.st_size}
-        with tempfile.TemporaryDirectory(prefix="v2-profile-version-", dir=parent) as temporary:
-            root = Path(temporary)
+        root = Path(tempfile.mkdtemp(prefix="v2-profile-version-", dir=parent))
+        report["retained_version_fixture"] = root.name
+        report["version_fixture_identity_verified"] = False
+        identity = root.lstat()
+        try:
             code, output, _ = run_child([binary, "--version"], root, child_env(root), timeout=10)
-            if code != 0 or output.decode().strip() != "opencode v2.2.5":
-                raise ProbeFailure("unsupported_host_version")
+        finally:
+            verified = owned_fixture(root, identity)
+            report["version_fixture_identity_verified"] = verified
+            if not verified:
+                raise ProbeFailure("version_fixture_identity_changed")
+        if code != 0 or output.decode().strip() != "opencode v2.2.5":
+            raise ProbeFailure("unsupported_host_version")
         for case in selected:
             observed = run_case(binary, parent, case)
             report["cases"].append(observed)
@@ -1128,7 +1143,7 @@ def probe(binary: str, parent: Path, selected: tuple[str, ...] = CASES) -> dict[
         report["measurement"] = "PASS"
         if all(case["witnesses_pass"] and case["cleanup_complete"] for case in report["cases"]):
             report["profile_qualification"] = "QUALIFIED"
-    except (ProbeFailure, OSError, ValueError, subprocess.SubprocessError) as error:
+    except (ProbeFailure, OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         report["reason"] = str(error) if isinstance(error, ProbeFailure) else "profile_internal_error"
     return report
 
@@ -1144,7 +1159,7 @@ def main() -> int:
     binary = shutil.which(args.opencode_bin)
     if not binary or os.name != "posix":
         parser.error("an installed POSIX OpenCode2.2.5 host is required")
-    result = probe(str(Path(binary).resolve()), args.temp_parent.resolve(), tuple(args.case) if args.case else CASES)
+    result = probe(str(Path(binary).resolve()), args.temp_parent.absolute(), tuple(args.case) if args.case else CASES)
     print(json.dumps(result, sort_keys=True))
     return 0 if result["measurement"] == "PASS" else 1
 
