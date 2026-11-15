@@ -19,6 +19,14 @@ canonical case order leaves overall measurement incomplete and profile
 UNQUALIFIED. Do not use the combined experimental adapter smoke target as a
 substitute.
 
+**Run only within an independently verified OS sandbox when local data must be
+preserved.** This older probe still writes trace, witness, configuration and
+tripwire paths by name. A private home, identity checks and a successful result
+do not prevent same-user interference or establish filesystem containment.
+The sandbox must restrict filesystem writes, outbound network and signals to
+owned resources; those restrictions and their limitations need independent
+verification. Do not treat this probe as an OS sandbox.
+
 ## Contract and outcomes
 
 The [earlier native-boundary probe](opencode-v2-dependency-boundary-contract.md)
@@ -30,7 +38,7 @@ enforce selected boundaries. It does not change the legacy Python/uv-only policy
 | Outcome | Measurement | Profile qualification |
 | --- | --- | --- |
 | Every required observation collected, including a counterexample | PASS | UNQUALIFIED if any target witness fails |
-| Unsupported required mechanism, missing collection, timeout or failed cleanup | FAIL | UNQUALIFIED |
+| Unsupported required mechanism, missing collection, timeout or failed teardown/fixture verification | FAIL | UNQUALIFIED |
 | All 18 required cases and defined controls pass | PASS | QUALIFIED for the measured synthetic child boundaries only |
 
 `authority` is always `disabled-unqualified`. QUALIFIED is not production admission
@@ -99,10 +107,17 @@ early `plugin.list` snapshot can be empty while activation is still pending.
   inactivity timeouts alone do not establish that bound. Unknown protocol traffic
   fails collection rather than disappearing into an omitted trace.
 - Teardown releases barriers, closes accepted sockets, terminates/reaps only the
-  owned group, and joins all writers/readers. Root device/inode/ownership is
-  checked before deletion. Unsafe or unsettled roots are retained and measurement
-  fails. Reports omit credentials, raw contexts, environment values and arbitrary
-  native diagnostics.
+  owned group, and joins all writers/readers. Every case root and the version
+  probe root is retained on success and failure; the report includes their
+  basenames. The version root and each case root are checked for expected
+  identity, ownership and entries, and failed checks fail measurement. The
+  compatibility field `cleanup_complete` now means teardown and root
+  verification succeeded, not that a fixture was deleted. `teardown_complete`
+  and `fixture_identity_verified` are also reported separately per case.
+  Teardown does not prove that no process escaped the checked group.
+- Retained fixtures can contain synthetic credentials, prompts and runtime
+  metadata. Inspect them before sharing or cleaning them up. Reports omit
+  credentials, raw contexts, environment values and arbitrary native diagnostics.
 
 ## Evidence and remaining gates
 
