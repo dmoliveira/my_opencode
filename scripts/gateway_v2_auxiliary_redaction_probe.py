@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -272,14 +273,15 @@ export default Plugin.define({ id: "profile-owned", async setup(ctx) {
 
 
 def prepare_fixture(
-    root: Path, port: int, key: str, provider_key: str, *, protected: bool
+    root: Path, port: int, key: str, provider_key: str, *, protected: bool,
+    plugin_source: str | None = None,
 ) -> dict[str, Any]:
     for name in ("home", "tmp", "bin"):
         (root / name).mkdir(mode=0o700)
     write_fixture(
         root,
         "project/owned/index.ts",
-        fixture_plugin(root, port, key, protected=protected),
+        plugin_source if plugin_source is not None else fixture_plugin(root, port, key, protected=protected),
     )
     rules = [{"action": "*", "resource": "*", "effect": "deny"}]
     config = {
@@ -478,17 +480,40 @@ def exercise(
     wait_until(all_kinds_seen, state, "provider_observation_incomplete")
 
 
-def run_case(binary: str, parent: Path, mode: str) -> dict[str, Any]:
-    root = Path(tempfile.mkdtemp(prefix="v2-aux-redaction-", dir=parent))
-    identity = root.lstat()
-    state = CaptureState(mode, root, time.monotonic() + PRIMARY_SECONDS)
+@dataclass(frozen=True)
+class CaseHooks:
+    """Owned fixture callbacks sharing the same bounded runtime and teardown."""
+
+    state: Callable[..., CaptureState]
+    provider: Callable[..., CaptureProvider]
+    prepare: Callable[..., dict[str, Any]]
+    exercise: Callable[..., None]
+    assess: Callable[..., dict[str, int]]
+    prefix: str = "v2-aux-redaction-"
+
+
+def run_case(
+    binary: str, parent: Path, mode: str, *, hooks: CaseHooks | None = None,
+) -> dict[str, Any]:
+    if hooks is None:
+        hooks = CaseHooks(CaptureState, CaptureProvider, prepare_fixture, exercise, assess)
+    if not hooks.prefix.startswith("v2-") or not hooks.prefix.endswith("-") or any(
+        char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in hooks.prefix
+    ) or len(hooks.prefix) > 64:
+        raise ProbeFailure("fixture_prefix_invalid")
+    root = Path(tempfile.mkdtemp(prefix=hooks.prefix, dir=parent))
+    report: dict[str, Any] = {"case": mode, "measurement": "FAIL", "retained_fixture": root.name}
+    try:
+        identity = root.lstat()
+        state = hooks.state(mode, root, time.monotonic() + PRIMARY_SECONDS)
+    except (ProbeFailure, OSError, ValueError, TypeError, RuntimeError):
+        report.update({"reason": "fixture_initialization_failed", "teardown_complete": False})
+        return report
     provider: CaptureProvider | None = None
     provider_thread: threading.Thread | None = None
     provider_started = False
     runtime: PrivateRuntime | None = None
     completed = False
-    report: dict[str, Any] = {"case": mode, "measurement": "FAIL"}
-
     def expire() -> None:
         state.failure = state.failure or "case_timeout"
         state.stop()
@@ -501,13 +526,13 @@ def run_case(binary: str, parent: Path, mode: str) -> dict[str, Any]:
     watchdog.daemon = True
     try:
         watchdog.start()
-        provider = CaptureProvider(state)
+        provider = hooks.provider(state)
         provider_thread = threading.Thread(
             target=provider.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
         )
         provider_thread.start()
         provider_started = True
-        config = prepare_fixture(
+        config = hooks.prepare(
             root,
             provider.server_port,
             state.control_key,
@@ -516,7 +541,7 @@ def run_case(binary: str, parent: Path, mode: str) -> dict[str, Any]:
         )
         runtime = PrivateRuntime(binary, root, state.deadline)
         runtime.start()
-        exercise(runtime, root, config, state)
+        hooks.exercise(runtime, root, config, state)
         completed = True
     except (
         ProbeFailure,
@@ -541,18 +566,21 @@ def run_case(binary: str, parent: Path, mode: str) -> dict[str, Any]:
             try:
                 if provider_started:
                     provider.shutdown()
-                provider.close_connections()
-            except OSError:
+            except (OSError, RuntimeError):
                 cleanup_errors.append("provider-stop")
+            try:
+                provider.close_connections()
+            except (OSError, RuntimeError):
+                cleanup_errors.append("provider-connections")
         if runtime is not None:
             try:
                 runtime.close(deadline)
-            except (ProbeFailure, OSError, subprocess.SubprocessError):
+            except (ProbeFailure, OSError, RuntimeError, subprocess.SubprocessError):
                 cleanup_errors.append("runtime-stop")
         if provider is not None:
             try:
                 provider.server_close()
-            except OSError:
+            except (OSError, RuntimeError):
                 cleanup_errors.append("provider-close")
             for worker in provider.workers:
                 worker.join(max(0, deadline - time.monotonic()))
@@ -574,7 +602,7 @@ def run_case(binary: str, parent: Path, mode: str) -> dict[str, Any]:
                     state.observations
                 ):
                     raise ProbeFailure("provider_response_incomplete")
-                counts = assess(mode, state.trace_rows, state.observations)
+                counts = hooks.assess(mode, state.trace_rows, state.observations)
                 report.update(
                     {"measurement": "PASS", "provider_requests_by_kind": counts}
                 )

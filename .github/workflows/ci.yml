@@ -151,6 +151,10 @@ jobs:
           python plugin/gateway-core/test/v2/execution_status_live_smoke.py
           python plugin/gateway-core/test/v2/direct_shell_activation_live_smoke.py
 
+      - name: Measure native V2 interruption settlement
+        if: matrix.opencode == '2.2.5'
+        run: python scripts/gateway_v2_native_settlement_probe.py --opencode-bin "$(command -v opencode)"
+
   windows-bounded-subprocess:
     runs-on: windows-latest
     steps:
