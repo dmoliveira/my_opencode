@@ -118,6 +118,10 @@ tool error, interrupts the affected session, and blocks its model-request hooks
 until a successful interruption settles. Failed, refused, timed-out or
 unverifiable settlement leaves that session quarantined for the plugin's
 lifetime; unknown identity or exhausted bounds closes the guard globally.
+An accepted interruption invalidates any earlier settlement wait: if that wait
+succeeds, the adapter starts another before releasing quarantine. This local
+ordering fence does not prove the host's `session.wait` identifies or settles a
+particular interruption.
 Interruption is session-wide and reports an interrupted outcome. On 2.2.5 and
 2.2.6, isolated controls observed a stopped plain rejection, redacted feedback,
 forged-cause containment, blocked retry, generate and compaction requests after

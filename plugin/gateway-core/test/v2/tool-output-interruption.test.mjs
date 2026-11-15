@@ -151,6 +151,138 @@ test("a second interruption cannot release an earlier session quarantine", async
   await f.hooks.get("context")({ sessionID: "ses-one" })
 })
 
+test("a wait begun before a second accepted interruption cannot release quarantine", async () => {
+  const f = fixture()
+  await f.register()
+  await f.hooks.get("execute.after")(rejected("ses-one"))
+  await tick()
+  assert.equal(f.waits.length, 1)
+  await f.hooks.get("execute.after")(rejected("ses-one"))
+  await tick()
+  assert.equal(f.waits.length, 1)
+  assert.equal(f.interrupts.length, 2)
+
+  f.waits[0].resolve()
+  await tick()
+  assert.equal(f.waits.length, 2)
+  for (const name of ["context", "compaction", "generate", "title", "http.request", "experimental.ws.send"]) {
+    await assert.rejects(f.hooks.get(name)({ sessionID: "ses-one" }), /interruption is unresolved/)
+    await f.hooks.get(name)({ sessionID: "ses-peer" })
+  }
+  f.waits[1].resolve()
+  await tick()
+  await f.hooks.get("context")({ sessionID: "ses-one" })
+})
+
+test("reordered interruption acknowledgements require a wait after the last acceptance", async () => {
+  const f = fixture()
+  const first = deferred()
+  const second = deferred()
+  let calls = 0
+  f.session.interrupt = () => (++calls === 1 ? first.promise : second.promise)
+  await f.register()
+  const a = f.hooks.get("execute.after")(rejected("ses-one"))
+  const b = f.hooks.get("execute.after")(rejected("ses-one"))
+  await tick()
+  second.resolve({ interrupted: true })
+  await b
+  await tick()
+  assert.equal(f.waits.length, 1)
+  first.resolve({ interrupted: true })
+  await a
+  f.waits[0].resolve()
+  await tick()
+  assert.equal(f.waits.length, 2)
+  await assert.rejects(f.hooks.get("context")({ sessionID: "ses-one" }), /interruption is unresolved/)
+  await f.hooks.get("context")({ sessionID: "ses-peer" })
+  f.waits[1].resolve()
+  await tick()
+  await f.hooks.get("context")({ sessionID: "ses-one" })
+})
+
+test("settlement is rechecked for interruptions accepted during successive waits", async () => {
+  const f = fixture()
+  await f.register()
+  for (let index = 0; index < 3; index += 1) {
+    await f.hooks.get("execute.after")(rejected("ses-one"))
+    await tick()
+  }
+  assert.equal(f.waits.length, 1)
+  f.waits[0].resolve()
+  await tick()
+  assert.equal(f.waits.length, 2)
+  await f.hooks.get("execute.after")(rejected("ses-one"))
+  f.waits[1].resolve()
+  await tick()
+  assert.equal(f.waits.length, 3)
+  await assert.rejects(f.hooks.get("context")({ sessionID: "ses-one" }), /interruption is unresolved/)
+  f.waits[2].resolve()
+  await tick()
+  await f.hooks.get("context")({ sessionID: "ses-one" })
+})
+
+test("a failed stale or current settlement remains quarantined across later interruptions", async () => {
+  for (const failStale of [true, false]) {
+    const f = fixture()
+    await f.register()
+    await f.hooks.get("execute.after")(rejected("ses-one"))
+    await tick()
+    await f.hooks.get("execute.after")(rejected("ses-one"))
+    if (failStale) {
+      f.waits[0].reject(new Error("secret-sentinel"))
+    } else {
+      f.waits[0].resolve()
+      await tick()
+      assert.equal(f.waits.length, 2)
+      f.waits[1].reject(new Error("secret-sentinel"))
+    }
+    await tick()
+    const waitCount = f.waits.length
+    await f.hooks.get("execute.after")(rejected("ses-one"))
+    await tick()
+    assert.equal(f.waits.length, waitCount)
+    await assert.rejects(f.hooks.get("context")({ sessionID: "ses-one" }), /interruption is unresolved/)
+    await f.hooks.get("context")({ sessionID: "ses-peer" })
+  }
+})
+
+test("a failed later interruption cannot be released by an earlier successful wait", async () => {
+  const f = fixture()
+  let calls = 0
+  f.session.interrupt = async () => ({ interrupted: ++calls === 1 })
+  await f.register()
+  await f.hooks.get("execute.after")(rejected("ses-one"))
+  await tick()
+  await assert.rejects(f.hooks.get("execute.after")(rejected("ses-one")), /interruption is unresolved/)
+  f.waits[0].resolve()
+  await tick()
+  await assert.rejects(f.hooks.get("context")({ sessionID: "ses-one" }), /interruption is unresolved/)
+  await f.hooks.get("context")({ sessionID: "ses-peer" })
+})
+
+test("settlement generations are independent across quarantined sessions", async () => {
+  const f = fixture()
+  await f.register()
+  await f.hooks.get("execute.after")(rejected("ses-one"))
+  await tick()
+  await f.hooks.get("execute.after")(rejected("ses-peer"))
+  await tick()
+  assert.deepEqual(f.waits.map((item) => item.input.sessionID), ["ses-one", "ses-peer"])
+  await f.hooks.get("execute.after")(rejected("ses-one"))
+  f.waits[1].resolve()
+  await tick()
+  await f.hooks.get("context")({ sessionID: "ses-peer" })
+  await assert.rejects(f.hooks.get("context")({ sessionID: "ses-one" }), /interruption is unresolved/)
+  f.waits[0].resolve()
+  await tick()
+  assert.equal(f.waits[2].input.sessionID, "ses-one")
+  await f.hooks.get("context")({ sessionID: "ses-peer" })
+  await assert.rejects(f.hooks.get("context")({ sessionID: "ses-one" }), /interruption is unresolved/)
+  f.waits[2].resolve()
+  await tick()
+  await f.hooks.get("context")({ sessionID: "ses-one" })
+})
+
 test("opaque cancellation, missing identity, and partial registration fail safely", async () => {
   const f = fixture()
   await f.register()
