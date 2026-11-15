@@ -132,7 +132,7 @@ interface InterruptSessionHooks {
   interrupt(input: { sessionID: string; resume: false }): Promise<{ interrupted: boolean }>
   wait(input: { sessionID: string }): Promise<unknown>
 }
-type Quarantine = { inflight: number; idle: boolean; waiter: boolean; failed: boolean }
+type Quarantine = { inflight: number; idle: boolean; waiter: boolean; failed: boolean; generation: symbol }
 
 const INTERRUPT_FAILURE = "Tool step withheld because session interruption is unresolved"
 const INTERRUPT_TIMEOUT_MS = 2000
@@ -187,16 +187,18 @@ export async function registerV2InterruptingToolOutputRedaction(
     }
   }
   const observeSettlement = (id: string, entry: Quarantine): void => {
-    entry.idle = false
     if (entry.waiter || entry.failed) return
     entry.waiter = true
+    const generation = entry.generation
     void Promise.resolve().then(() => session.wait({ sessionID: id })).then(() => {
-      entry.idle = true
+      if (entry.generation === generation) entry.idle = true
     }, () => {
       entry.failed = true
     }).finally(() => {
       entry.waiter = false
-      maybeRelease(id, entry)
+      // A wait started before a later accepted interruption cannot settle it.
+      if (!entry.failed && entry.generation !== generation) observeSettlement(id, entry)
+      else maybeRelease(id, entry)
     })
   }
   const interrupt = async (event: InterruptEvent): Promise<void> => {
@@ -217,7 +219,7 @@ export async function registerV2InterruptingToolOutputRedaction(
         globallyClosed = true
         throw new Error(INTERRUPT_FAILURE)
       }
-      entry = { inflight: 0, idle: false, waiter: false, failed: false }
+      entry = { inflight: 0, idle: false, waiter: false, failed: false, generation: Symbol() }
       quarantined.set(id, entry)
     }
     entry.inflight += 1
@@ -243,6 +245,8 @@ export async function registerV2InterruptingToolOutputRedaction(
         })
         const outcome = await Promise.race([pending, timeout])
         if (!outcome || outcome.interrupted !== true || assignmentFailed) throw new Error(INTERRUPT_FAILURE)
+        entry.generation = Symbol()
+        entry.idle = false
         observeSettlement(id, entry)
       } finally {
         if (timer) clearTimeout(timer)
