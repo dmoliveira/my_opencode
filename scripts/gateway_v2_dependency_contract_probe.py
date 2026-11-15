@@ -125,11 +125,14 @@ def owned_fixture(parent: Path):
     try:
         yield root
     finally:
-        current = root.lstat()
-        if not stat.S_ISDIR(current.st_mode) or (identity.st_dev, identity.st_ino) != (current.st_dev, current.st_ino):
-            # Preserve unexpected replacement state; never delete through it.
+        try:
+            current = root.lstat()
+        except OSError:
+            raise ProbeFailure("fixture_identity_changed") from None
+        if (not stat.S_ISDIR(current.st_mode) or current.st_uid != os.getuid()
+                or stat.S_IMODE(current.st_mode) != 0o700
+                or (identity.st_dev, identity.st_ino) != (current.st_dev, current.st_ino)):
             raise ProbeFailure("fixture_identity_changed")
-        shutil.rmtree(root)
 
 
 def darwin_zombie_group(pid: int) -> bool:
@@ -664,9 +667,12 @@ def run_case(root: Path, case: str, binary: str) -> dict[str, Any]:
     state = ProviderState(project, command)
     server = BoundedProvider(state)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
+    thread_started = False
+    child_settled = False
     evidence: dict[str, Any] = {"case": case, "measurement": "FAIL"}
     try:
+        thread.start()
+        thread_started = True
         settings = json.dumps({"project": str(project), "trace": str(trace), "commands": commands, "case": case})
         write_fixture(root, "project/observer/index.ts", OBSERVER_PLUGIN.replace("SETTINGS", settings))
         write_fixture(root, "project/late/index.ts", LATE_PLUGIN.replace("SETTINGS", settings))
@@ -679,6 +685,7 @@ def run_case(root: Path, case: str, binary: str) -> dict[str, Any]:
             write_fixture(root, f"bin/{manager}", f"#!/bin/sh\nprintf 'INSTALLER_REQUESTED\\n' >> {shlex.quote(str(root / 'installer-requested'))}\nexit 97\n", executable=True)
         env = child_env(root)
         code, stdout, stderr = run_child([binary, "run", "--standalone", "--model", "boundary/mock", "--title", "Synthetic boundary probe", "Measure the single synthetic shell call."], project, env)
+        child_settled = True
         evidence.update({"returncode": code, "stdout_bytes": len(stdout), "stderr_bytes": len(stderr), "provider_requests": state.requests})
         if (root / "installer-requested").exists():
             raise ProbeFailure("installer_requested")
@@ -691,17 +698,37 @@ def run_case(root: Path, case: str, binary: str) -> dict[str, Any]:
         rows = read_trace(trace)
         evidence["observations"] = rows
         observed = read_witness(project / "witness")
-        return assess(case, rows, observed, state, code, b"PROBE_FINISHED" in stdout)
+        evidence = assess(case, rows, observed, state, code, b"PROBE_FINISHED" in stdout)
     except ProbeFailure as error:
         evidence["reason"] = str(error)
-        return evidence
     finally:
-        server.shutdown()
-        server.close_connections()
-        server.server_close()
-        thread.join(timeout=5)
-        if thread.is_alive():
+        cleanup_failed = False
+        try:
+            if thread_started:
+                server.shutdown()
+        except (OSError, RuntimeError):
+            cleanup_failed = True
+        try:
+            server.close_connections()
+        except (OSError, RuntimeError):
+            cleanup_failed = True
+        try:
+            server.server_close()
+        except (OSError, RuntimeError):
+            cleanup_failed = True
+        if thread_started:
+            try:
+                thread.join(timeout=5)
+                cleanup_failed = cleanup_failed or thread.is_alive()
+            except RuntimeError:
+                cleanup_failed = True
+        if cleanup_failed:
             raise ProbeFailure("provider_cleanup_failed")
+    if state.failure:
+        evidence.update({"measurement": "FAIL", "reason": state.failure})
+    # A timeout or failed child cleanup does not establish process settlement.
+    evidence["teardown_complete"] = child_settled
+    return evidence
 
 
 def probe(binary: str, parent: Path) -> dict[str, Any]:
@@ -709,23 +736,30 @@ def probe(binary: str, parent: Path) -> dict[str, Any]:
         "schema_version": 1, "result": "FAIL", "authority": "disabled-unqualified",
         "meaning": "measurement only; not an authorization or installation receipt",
         "unproven": ["terminal immutable binding", "authoritative raw numeric exit", "exactly-once observation", "later-error revocation", "cancellation", "compaction", "session deletion", "plugin unload", "captured executor snapshots"],
-        "cases": [],
+        "cases": [], "retained_case_fixtures": [], "version_teardown_complete": False,
     }
     try:
         preflight(parent)
         with owned_fixture(parent) as root:
+            report["retained_version_fixture"] = root.name
             code, stdout, _ = run_child([binary, "--version"], root, child_env(root), timeout=10)
-            if code != 0 or stdout.decode().strip() != VERSION:
-                raise ProbeFailure("unsupported_host_version")
+            report["version_teardown_complete"] = True
+        if code != 0 or stdout.decode().strip() != VERSION:
+            raise ProbeFailure("unsupported_host_version")
         report["host"] = VERSION
         for case in CASES:
             with owned_fixture(parent) as root:
+                report["retained_case_fixtures"].append(root.name)
                 observed = run_case(root, case, binary)
+                observed["retained_fixture"] = root.name
                 report["cases"].append(observed)
                 if observed["measurement"] != "PASS":
                     raise ProbeFailure(observed["reason"])
+                if observed.get("teardown_complete") is not True:
+                    observed.update({"measurement": "FAIL", "reason": "teardown_unconfirmed"})
+                    raise ProbeFailure("teardown_unconfirmed")
         report["result"] = "PASS"
-    except (ProbeFailure, OSError, ValueError, subprocess.SubprocessError) as error:
+    except (ProbeFailure, OSError, ValueError, TypeError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
         report["reason"] = str(error) if isinstance(error, ProbeFailure) else "probe_internal_error"
     return report
 
@@ -740,7 +774,7 @@ def main() -> int:
     binary = shutil.which(args.opencode_bin)
     if not binary or os.name != "posix":
         parser.error("an installed POSIX OpenCode 2.2.5 host is required")
-    report = probe(str(Path(binary).resolve()), args.temp_parent.resolve())
+    report = probe(str(Path(binary).resolve()), args.temp_parent.absolute())
     print(json.dumps(report, sort_keys=True))
     return 0 if report["result"] == "PASS" else 1
 

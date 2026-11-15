@@ -18,6 +18,13 @@ version fails measurement rather than inheriting these observations. The
 script's stdout is one JSON report; Make also prints its usual command/runtime
 lines. Run the Python script directly when machine-readable stdout is needed.
 
+**Run only within an independently verified OS sandbox when local data must be
+preserved.** The probe still writes trace, witness, startup and tripwire paths by
+name. A private home, fixture identity checks and a successful result do not
+prevent same-user interference or establish filesystem containment. Independently
+verify restrictions on writes, outbound network and signals, and understand their
+limits; the probe is not itself an OS sandbox.
+
 ## What is measured
 
 The actual native `shell` tool is inspected, never replaced or wrapped. Its
@@ -142,9 +149,14 @@ expected outcomes; missing, ambiguous or uncorrelated evidence fails the probe.
   production dependency guard.
 - Caps: 60 seconds per runtime, 128 KiB per stdout/stderr stream, 1 MiB per
   provider request, eight requests per case, 64 trace rows and 64 KiB per trace.
-  Socket reads time out. Owned process groups are terminated and reaped; cleanup
-  verifies the temporary root's device/inode before removing it. Unexpected
-  replacement state is preserved, not deleted.
+  Socket reads time out. The version root and every case root are retained on
+  success and failure; the report identifies their basenames. Root device, inode,
+  ownership and privacy checks remain required. `version_teardown_complete` and
+  each case's `teardown_complete` report confirmed checked teardown, not fixture
+  deletion. A failed or uncertain child remains unconfirmed; process-group
+  teardown does not prove no process escaped. Retained fixtures may contain
+  synthetic credentials, prompts and runtime metadata; inspect before sharing or
+  cleaning them up.
 - Reports omit prompts, request bodies, environment values and raw native
   diagnostics. They are observations, not capability tokens or receipt frames.
 
