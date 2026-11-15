@@ -353,6 +353,86 @@ class AuxiliaryRedactionEvidenceTest(unittest.TestCase):
             self.assertTrue(retained.is_dir())
             self.assertEqual("preserve", sentinel.read_text(encoding="utf-8"))
 
+    @unittest.skipUnless(os.name == "posix", "POSIX fixture ownership required")
+    def test_explicit_case_hooks_share_bounded_teardown_and_retain_root(self) -> None:
+        with retained_test_directory() as raw:
+            parent = Path(raw)
+            make_state = Mock(side_effect=probe.CaptureState)
+            make_provider = Mock(side_effect=probe.CaptureProvider)
+            prepare = Mock(return_value={"synthetic": True})
+            exercise = Mock()
+            assess = Mock(return_value={"owned": 1})
+            hooks = probe.CaseHooks(
+                make_state, make_provider, prepare, exercise, assess,
+                prefix="v2-native-unit-",
+            )
+            with patch.object(probe, "PrivateRuntime") as runtime:
+                report = probe.run_case("/not-executed", parent, "native", hooks=hooks)
+            self.assertEqual("PASS", report["measurement"])
+            self.assertIs(report["teardown_complete"], True)
+            self.assertTrue((parent / report["retained_fixture"]).is_dir())
+            self.assertTrue(report["retained_fixture"].startswith("v2-native-unit-"))
+            make_state.assert_called_once()
+            make_provider.assert_called_once()
+            prepare.assert_called_once()
+            exercise.assert_called_once()
+            assess.assert_called_once()
+            runtime.return_value.close.assert_called_once()
+
+    def test_case_hooks_refuse_unsafe_fixture_prefixes_before_creation(self) -> None:
+        with retained_test_directory() as raw:
+            parent = Path(raw)
+            for prefix in ("../v2-bad-", "/v2-bad-", "v2-bad/", "v2-" + "x" * 65 + "-"):
+                hooks = probe.CaseHooks(Mock(), Mock(), Mock(), Mock(), Mock(), prefix=prefix)
+                with self.subTest(prefix=prefix), self.assertRaisesRegex(probe.ProbeFailure, "fixture_prefix_invalid"):
+                    probe.run_case("/not-executed", parent, "native", hooks=hooks)
+            self.assertEqual([], list(parent.iterdir()))
+
+    def test_case_state_initialization_failure_retains_root_without_claiming_teardown(self) -> None:
+        with retained_test_directory() as raw:
+            parent = Path(raw)
+            state = Mock(side_effect=RuntimeError("SECRET_CANARY"))
+            hooks = probe.CaseHooks(state, Mock(), Mock(), Mock(), Mock(), prefix="v2-native-unit-")
+            report = probe.run_case("/not-executed", parent, "native", hooks=hooks)
+            self.assertEqual("fixture_initialization_failed", report["reason"])
+            self.assertIs(report["teardown_complete"], False)
+            self.assertTrue((parent / report["retained_fixture"]).is_dir())
+            self.assertNotIn("SECRET_CANARY", json.dumps(report))
+
+    def test_provider_cleanup_attempts_remaining_steps_after_failure(self) -> None:
+        with retained_test_directory() as raw:
+            parent = Path(raw)
+            for method, reason in (("shutdown", "provider-stop"), ("close_connections", "provider-connections")):
+                with self.subTest(method=method):
+                    provider = Mock()
+                    provider.workers = []
+                    provider.admissions = 0
+                    getattr(provider, method).side_effect = RuntimeError("synthetic")
+                    hooks = probe.CaseHooks(
+                        probe.CaptureState, Mock(return_value=provider), Mock(return_value={}),
+                        Mock(), Mock(return_value={"owned": 1}), prefix="v2-native-unit-",
+                    )
+                    with patch.object(probe, "PrivateRuntime") as runtime:
+                        report = probe.run_case("/not-executed", parent, "native", hooks=hooks)
+                    self.assertEqual("FAIL", report["measurement"])
+                    self.assertFalse(report["teardown_complete"])
+                    self.assertIn(reason, report["teardown_failures"])
+                    self.assertTrue((parent / report["retained_fixture"]).is_dir())
+                    provider.close_connections.assert_called_once()
+                    provider.server_close.assert_called_once()
+                    runtime.return_value.close.assert_called_once()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX fixture creation required")
+    def test_fixture_accepts_explicit_owned_plugin_source(self) -> None:
+        with retained_test_directory() as raw:
+            root = Path(raw)
+            config = probe.prepare_fixture(
+                root, 12345, "control-token", "provider-token", protected=True,
+                plugin_source="// synthetic plugin source\n",
+            )
+            self.assertEqual("// synthetic plugin source\n", (root / "project/owned/index.ts").read_text())
+            self.assertEqual([str(root / "project/owned")], config["plugins"])
+
     @unittest.skipUnless(os.name == "posix", "POSIX fixture creation required")
     def test_fixture_creation_is_exclusive_and_does_not_follow_links(self) -> None:
         with retained_test_directory() as raw:

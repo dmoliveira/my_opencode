@@ -122,6 +122,10 @@ An accepted interruption invalidates any earlier settlement wait: if that wait
 succeeds, the adapter starts another before releasing quarantine. This local
 ordering fence does not prove the host's `session.wait` identifies or settles a
 particular interruption.
+The [native settlement probe](../../specs/opencode-v2-native-settlement-probe.md)
+measures two accepted interruptions and native waits in an isolated 2.2.5
+runtime, using injected error events and deliberately delayed wait delivery. It
+does not establish complete lifecycle or provider protection.
 Interruption is session-wide and reports an interrupted outcome. On 2.2.5 and
 2.2.6, isolated controls observed a stopped plain rejection, redacted feedback,
 forged-cause containment, blocked retry, generate and compaction requests after
