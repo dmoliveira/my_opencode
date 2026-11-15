@@ -144,6 +144,13 @@ The 2.2.5 and 2.2.6 permission smokes also measure synthetic controls. A rejecti
 
 The isolated V2 runtime created `session_v2`, `session_message`, and `session_part` tables. The legacy stale-session scanner reports an incompatible schema and refuses repairs when a `session_v2` table or view exists, case-insensitively, even if old V1 tables remain. A scoped repair retains scan errors rather than reporting success, including an incomplete rescan after a committed repair round. Database path resolution honors `OPENCODE_DB` and explicit XDG data directories without falling back to an unrelated existing database; a separately started service may still have different environment variables. V2-native diagnosis and repair remain unimplemented. The standalone installer, local setup scripts, and gateway diagnostics run their executable-version probes in disposable homes; installer and setup refuse V2 or an unidentifiable executable before installation or configuration changes. Gateway enable also refuses incompatible executables even with `--force`. These probes do not establish the version or protection of a separate service. The local development setup refuses conflicting instruction and agent paths rather than replacing them.
 
+The [execution-claim probe](../../specs/opencode-v2-claim-lifecycle-probe.md)
+observes an active native 2.2.5 session with a durable claim, and claim release
+after a controlled interruption or peer completion. A claim alone is not a
+stale-session signal: upstream also retains it for certain restart recovery.
+This unregistered-server measurement does not validate managed restart, jobs,
+live owner identity, V2 repair, or another executable.
+
 Runtime snapshot application validation still uses the V1-only `--pure db` command. The snapshot flow rejects V2 and unidentifiable validator versions without publishing a bundle; the version of that executable does not establish the source service version. A synthetic V2 `session list --standalone` control opened its selected database but changed the disposable copy, so it is not a qualified replacement for the current strict-copy validation.
 
 The tasker E2E evaluator examines both V1 `bash` and V2 `shell` event records and rejects incomplete or unrecognized evidence, including delegated tools whose nested execution it cannot see. This is a post-run check, not a sandbox. Both tasker harness entrypoints reject V2 and unidentifiable selected executables before fixture creation. This executable-version probe does not verify a separate service or protect against replacement after the probe. The live harness still uses V1 invocation and plugin configuration and is not qualified for V2; event parsing is not a harness port.

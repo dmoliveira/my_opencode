@@ -155,6 +155,10 @@ jobs:
         if: matrix.opencode == '2.2.5'
         run: python scripts/gateway_v2_native_settlement_probe.py --opencode-bin "$(command -v opencode)"
 
+      - name: Measure native V2 execution claims
+        if: matrix.opencode == '2.2.5'
+        run: python scripts/gateway_v2_claim_lifecycle_probe.py --opencode-bin "$(command -v opencode)"
+
   windows-bounded-subprocess:
     runs-on: windows-latest
     steps:
