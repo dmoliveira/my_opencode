@@ -50,10 +50,48 @@ describes managed-server recovery after the previous owner is confirmed dead;
 unregistered servers do not automatically perform that sweep. Those are source
 observations, not proof that a selected executable matches that source.
 
-This probe does **not** test shutdown, crashes, managed restart, background job
+The reusable probe does **not** test shutdown, crashes, managed restart, background job
 recovery, multiple services, live owner identity, V2-native diagnosis, or
 repair. Do not clear a claim or run V1 repairs based on these measurements. It
 also does not replace strict snapshot application validation.
+
+## Separate managed-restart control
+
+On 2026-11-15, a separate restricted tmux control used the selected 2.2.5
+executable and a fresh synthetic database. This control is **not part of the
+reusable command** above. It checked that the synthetic job and schedule
+tables were empty, held a session at a native context hook, and sent SIGKILL
+to the verified owned service process group. A query-only read afterward still
+found the session's claim. Before starting a successor, the control retained a
+SQLite online backup that passed `quick_check` and contained that claim; the
+backup used an exclusively created, identity-checked **pathname**, not the
+production descriptor-bound snapshot path.
+
+The successor had a distinct PID and service registration. Its native
+context hook observed the same synthetic session with `resume_attempts` at
+one. After the hook was released, a synthetic marker reached the localhost
+provider; native wait returned with the claim absent and `resume_attempts`
+reset to zero. The control retained both registration generations and the
+pre-restart backup. A subsequent process check found neither checked group
+present. This is one forced-kill observation, not a test of graceful shutdown,
+background-job recovery, other executables, or complete process containment.
+
+Two earlier feasibility attempts stopped before starting a successor. In the
+first, descriptor-path backup failed with `SQLITE_READONLY` under the tested
+OS restrictions; a separate synthetic control reproduced the failure. In the
+second, redundant signalling after SIGKILL returned a teardown error, but that
+attempt's report incorrectly said teardown was complete. An independent
+process check found its recorded leader and group absent. The later successful
+control checked the killed group before reaping rather than relying on that
+flag. All three case and version roots were retained.
+
+Upstream's pinned
+[server startup](https://github.com/anomalyco/opencode/blob/9bbb8ce18c80f099e0e448775f59d965ead40a21/packages/server/src/process.ts)
+also starts the schedule loop in unregistered servers and starts managed restart
+recovery during boot. Never use a user's database or a copy of production
+history for this control: startup can execute pending work before the API is
+ready. The synthetic pathname backup and process checks do not defeat same-user
+races and do not qualify strict snapshot validation or V2 repair.
 
 ## Retention and teardown
 
