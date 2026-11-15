@@ -150,6 +150,9 @@ after a controlled interruption or peer completion. A claim alone is not a
 stale-session signal: upstream also retains it for certain restart recovery.
 This unregistered-server measurement does not validate managed restart, jobs,
 live owner identity, V2 repair, or another executable.
+A separate [synthetic managed-restart control](../../specs/opencode-v2-claim-lifecycle-probe.md#separate-managed-restart-control)
+observed one forced-kill claim resume and settlement on the selected 2.2.5
+executable. It did not exercise jobs, graceful shutdown, or other versions.
 
 Runtime snapshot application validation still uses the V1-only `--pure db` command. The snapshot flow rejects V2 and unidentifiable validator versions without publishing a bundle; the version of that executable does not establish the source service version. A synthetic V2 `session list --standalone` control opened its selected database but changed the disposable copy, so it is not a qualified replacement for the current strict-copy validation.
 
