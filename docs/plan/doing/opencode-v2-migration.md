@@ -63,11 +63,10 @@ The separate [native dependency-boundary probe](../../specs/opencode-v2-dependen
 measures the installed 2.2.5 built-in shell with synthetic fixtures only. It does
 not enable the gateway or qualify dependency installation authority; terminal
 binding, raw-result guarantees and lifecycle revocation remain separate gates.
-Unlike the retained dependency-profile and direct-shell probes, the older
-native dependency-boundary probe still removes fixture roots by pathname; do not
-run it when those roots must be preserved. The dependency-profile probe also
-still writes its witnesses and traces by pathname and requires independently
-verified OS restrictions when preserving local data matters.
+The native dependency-boundary and dependency-profile probes retain case and
+version fixtures, but still write witnesses and traces by pathname. They require
+independently verified OS restrictions when preserving local data matters; neither
+probe is itself an OS sandbox.
 Native shell permission and `tool.use` policy denied directly submitted and
 late-mutated command text in the synthetic controls. They did not prevent a
 trusted later hook from changing the shell and `BASH_ENV` so that an owned

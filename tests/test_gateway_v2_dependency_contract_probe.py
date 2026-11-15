@@ -10,11 +10,19 @@ import tempfile
 import threading
 import time
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import gateway_v2_dependency_contract_probe as probe
+
+
+@contextmanager
+def retained_directory() -> Iterator[str]:
+    """Retain synthetic fixtures and version-probe roots."""
+    yield tempfile.mkdtemp(prefix="v2-boundary-unit-")
 
 
 class BoundaryProbeTests(unittest.TestCase):
@@ -36,7 +44,7 @@ class BoundaryProbeTests(unittest.TestCase):
         self.assertNotIn("SECRET_CANARY", json.dumps(env))
 
     def test_preflight_rejects_ancestor_configuration_and_dangling_links(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             root = Path(temp)
             child = root / "child"
             child.mkdir()
@@ -49,7 +57,7 @@ class BoundaryProbeTests(unittest.TestCase):
                 config.unlink()
 
     def test_preflight_does_not_bypass_system_policy(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             original = Path.exists
 
             def exists(path: Path) -> bool:
@@ -59,7 +67,7 @@ class BoundaryProbeTests(unittest.TestCase):
                 probe.preflight(Path(temp))
 
     def test_provisioning_is_owned_and_private(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             root = Path(temp)
             sentinel = root / "sentinel"
             sentinel.write_text("UNCHANGED")
@@ -74,7 +82,7 @@ class BoundaryProbeTests(unittest.TestCase):
                 probe.write_fixture(root, "link/new-file", "bad")
 
     def test_cleanup_preserves_replaced_fixture_and_host_sentinel(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             parent = Path(temp)
             sentinel = parent / "host-sentinel"
             sentinel.write_text("UNCHANGED")
@@ -85,16 +93,69 @@ class BoundaryProbeTests(unittest.TestCase):
             self.assertEqual(sentinel.read_text(), "UNCHANGED")
             self.assertTrue(original.is_dir())
             self.assertTrue(root.is_symlink())
-            root.unlink()
+
+    def test_owned_fixture_retains_success_and_failure_without_removal(self) -> None:
+        with retained_directory() as temp:
+            parent = Path(temp)
+            with patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")):
+                with probe.owned_fixture(parent) as success:
+                    (success / "witness").write_text("synthetic")
+                with self.assertRaisesRegex(probe.ProbeFailure, "synthetic_failure"), probe.owned_fixture(parent) as failure:
+                    raise probe.ProbeFailure("synthetic_failure")
+            self.assertTrue(success.is_dir())
+            self.assertEqual((success / "witness").read_text(), "synthetic")
+            self.assertTrue(failure.is_dir())
+
+    def test_owned_fixture_privacy_change_fails_without_removing_it(self) -> None:
+        with retained_directory() as temp:
+            with (
+                patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+                self.assertRaisesRegex(probe.ProbeFailure, "fixture_identity_changed"),
+                probe.owned_fixture(Path(temp)) as root,
+            ):
+                root.chmod(0o755)
+            self.assertTrue(root.is_dir())
+
+    def test_provider_thread_start_failure_closes_unstarted_server(self) -> None:
+        with retained_directory() as temp:
+            server = MagicMock()
+            with (
+                patch.object(probe, "BoundedProvider", return_value=server),
+                patch.object(probe.threading, "Thread") as thread,
+            ):
+                thread.return_value.start.side_effect = RuntimeError("synthetic startup failure")
+                with self.assertRaises(RuntimeError):
+                    probe.run_case(Path(temp), "baseline", "/not-executed")
+            server.shutdown.assert_not_called()
+            server.close_connections.assert_called_once()
+            server.server_close.assert_called_once()
+            thread.return_value.join.assert_not_called()
+
+    def test_provider_cleanup_failure_still_attempts_each_teardown_step(self) -> None:
+        with retained_directory() as temp:
+            server = MagicMock()
+            server.shutdown.side_effect = OSError("synthetic failure")
+            with (
+                patch.object(probe, "BoundedProvider", return_value=server),
+                patch.object(probe.threading, "Thread") as thread,
+                patch.object(probe, "write_fixture", side_effect=probe.ProbeFailure("setup_failed")),
+            ):
+                thread.return_value.is_alive.return_value = False
+                with self.assertRaisesRegex(probe.ProbeFailure, "provider_cleanup_failed"):
+                    probe.run_case(Path(temp), "baseline", "/not-executed")
+            server.shutdown.assert_called_once()
+            server.close_connections.assert_called_once()
+            server.server_close.assert_called_once()
+            thread.return_value.join.assert_called_once()
 
     def test_process_success_and_nonzero_are_not_relabelled(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             root = Path(temp)
             code, out, err = probe.run_child([sys.executable, "-c", "print('SAFE'); raise SystemExit(7)"], root, probe.child_env(root), timeout=5)
             self.assertEqual((code, out, err), (7, b"SAFE\n", b""))
 
     def test_process_timeout_and_overflow_are_failures_and_reaped(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             root = Path(temp)
             for code, timeout, reason in (
                 ("import time; time.sleep(30)", 0.1, "child_timeout"),
@@ -214,7 +275,7 @@ class BoundaryProbeTests(unittest.TestCase):
         self.assertEqual(config["providers"]["boundary"]["settings"]["baseURL"], "http://127.0.0.1:12345/v1")
 
     def test_trace_bounds_fail_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             path = Path(temp) / "trace.jsonl"
             with self.assertRaises(probe.ProbeFailure):
                 probe.read_trace(path)
@@ -226,7 +287,7 @@ class BoundaryProbeTests(unittest.TestCase):
                 probe.read_trace(path)
 
     def test_absent_witness_differs_from_invalid_entries(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+        with retained_directory() as temp:
             path = Path(temp) / "witness"
             self.assertIsNone(probe.read_witness(path))
             path.write_text("PROBE_DENIED")
@@ -244,16 +305,20 @@ class BoundaryProbeTests(unittest.TestCase):
                 probe.read_witness(path)
 
     def test_failure_never_echoes_native_diagnostics_or_qualifies_authority(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, patch.object(probe, "run_child", side_effect=OSError("SECRET_CANARY /real/consumer/path")):
+        with retained_directory() as temp, patch.object(probe, "run_child", side_effect=OSError("SECRET_CANARY /real/consumer/path")), patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")):
             report = probe.probe("/native/host", Path(temp))
+            self.assertTrue((Path(temp) / report["retained_version_fixture"]).is_dir())
+            self.assertFalse(report["version_teardown_complete"])
         self.assertEqual(report["result"], "FAIL")
         self.assertEqual(report["authority"], "disabled-unqualified")
         self.assertNotIn("SECRET_CANARY", json.dumps(report))
         self.assertNotIn("/real/consumer", json.dumps(report))
 
     def test_wrong_version_stops_before_fixtures(self) -> None:
-        with tempfile.TemporaryDirectory() as temp, patch.object(probe, "run_child", return_value=(0, b"opencode v9.9.9\n", b"")), patch.object(probe, "run_case") as case:
+        with retained_directory() as temp, patch.object(probe, "run_child", return_value=(0, b"opencode v9.9.9\n", b"")), patch.object(probe, "run_case") as case, patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")):
             report = probe.probe("/native/host", Path(temp))
+            self.assertTrue((Path(temp) / report["retained_version_fixture"]).is_dir())
+            self.assertTrue(report["version_teardown_complete"])
         self.assertEqual(report["reason"], "unsupported_host_version")
         case.assert_not_called()
 
@@ -263,14 +328,103 @@ class BoundaryProbeTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0], "/trusted/opencode")
 
     def test_measurement_requires_all_cases_and_keeps_authority_disabled(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            with patch.object(probe, "run_child", return_value=(0, (probe.VERSION + "\n").encode(), b"")), patch.object(probe, "run_case", side_effect=lambda root, case, binary: {"case": case, "measurement": "PASS"}):
+        with retained_directory() as temp:
+            with patch.object(probe, "run_child", return_value=(0, (probe.VERSION + "\n").encode(), b"")), patch.object(probe, "run_case", side_effect=lambda root, case, binary: {"case": case, "measurement": "PASS", "teardown_complete": True}), patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")):
                 report = probe.probe("/native/host", Path(temp))
-            self.assertEqual(list(Path(temp).iterdir()), [])
+            roots = [report["retained_version_fixture"], *report["retained_case_fixtures"]]
+            self.assertEqual(len(roots), len(probe.CASES) + 1)
+            self.assertEqual(len(set(roots)), len(roots))
+            self.assertTrue(all((Path(temp) / name).is_dir() for name in roots))
         self.assertEqual(report["result"], "PASS")
         self.assertEqual([case["case"] for case in report["cases"]], list(probe.CASES))
         self.assertEqual(report["authority"], "disabled-unqualified")
         self.assertIn("captured executor snapshots", report["unproven"])
+
+    def test_failed_case_preserves_its_fixture_and_does_not_claim_teardown(self) -> None:
+        with retained_directory() as temp:
+            child = (0, (probe.VERSION + "\n").encode(), b"")
+            with (
+                patch.object(probe, "run_child", return_value=child),
+                patch.object(probe, "run_case", side_effect=RuntimeError("SECRET_CANARY")),
+                patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+            ):
+                report = probe.probe("/native/host", Path(temp))
+            self.assertEqual(report["result"], "FAIL")
+            self.assertEqual(report["reason"], "probe_internal_error")
+            self.assertNotIn("SECRET_CANARY", json.dumps(report))
+            self.assertEqual(len(report["retained_case_fixtures"]), 1)
+            self.assertTrue((Path(temp) / report["retained_case_fixtures"][0]).is_dir())
+
+    def test_missing_case_teardown_cannot_pass_measurement(self) -> None:
+        with retained_directory() as temp:
+            child = (0, (probe.VERSION + "\n").encode(), b"")
+            with (
+                patch.object(probe, "run_child", return_value=child),
+                patch.object(probe, "run_case", return_value={"case": "baseline", "measurement": "PASS", "teardown_complete": False}),
+                patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+            ):
+                report = probe.probe("/native/host", Path(temp))
+            self.assertEqual(report["result"], "FAIL")
+            self.assertEqual(report["reason"], "teardown_unconfirmed")
+            self.assertTrue((Path(temp) / report["retained_case_fixtures"][0]).is_dir())
+
+    def test_case_reports_conservative_child_settlement(self) -> None:
+        with retained_directory() as temp:
+            for fail in (False, True):
+                with (
+                    self.subTest(fail=fail),
+                    patch.object(probe.shutil, "rmtree", side_effect=AssertionError("unexpected deletion")),
+                    probe.owned_fixture(Path(temp)) as root,
+                ):
+                    child = probe.ProbeFailure("child_timeout") if fail else (0, b"PROBE_FINISHED", b"")
+                    with (
+                        patch.object(probe, "run_child", side_effect=child if fail else None, return_value=child if not fail else None),
+                        patch.object(probe, "read_trace", return_value=[]),
+                        patch.object(probe, "read_witness", return_value="PROBE_BASELINE\n"),
+                        patch.object(probe, "assess", return_value={"case": "baseline", "measurement": "PASS"}),
+                    ):
+                        observed = probe.run_case(root, "baseline", "/not-executed")
+                self.assertEqual(observed["measurement"], "FAIL" if fail else "PASS")
+                self.assertIs(observed["teardown_complete"], not fail)
+                self.assertTrue(root.is_dir())
+
+    def test_late_provider_failure_cannot_be_measured_as_success(self) -> None:
+        with retained_directory() as temp:
+            root = Path(temp)
+            state = probe.ProviderState(root / "project", "synthetic")
+
+            def assessment(*_args: object) -> dict:
+                state.failure = "provider_handler_error"
+                return {"case": "baseline", "measurement": "PASS"}
+
+            with (
+                patch.object(probe, "ProviderState", return_value=state),
+                patch.object(probe, "run_child", return_value=(0, b"PROBE_FINISHED", b"")),
+                patch.object(probe, "read_trace", return_value=[]),
+                patch.object(probe, "read_witness", return_value="PROBE_BASELINE\n"),
+                patch.object(probe, "assess", side_effect=assessment),
+            ):
+                observed = probe.run_case(root, "baseline", "/not-executed")
+            self.assertEqual(observed["measurement"], "FAIL")
+            self.assertEqual(observed["reason"], "provider_handler_error")
+            self.assertTrue(observed["teardown_complete"])
+
+    def test_cli_preserves_symlink_parent_for_preflight_refusal(self) -> None:
+        with retained_directory() as temp:
+            parent = Path(temp)
+            link = parent / "link"
+            link.symlink_to(parent, target_is_directory=True)
+            with (
+                patch.object(sys, "argv", ["probe", "--opencode-bin", sys.executable, "--temp-parent", str(link)]),
+                patch.object(probe, "probe", return_value={"result": "FAIL"}) as run,
+                patch("builtins.print"),
+            ):
+                self.assertEqual(probe.main(), 1)
+            self.assertEqual(run.call_args.args[1], link.absolute())
+            with patch.object(probe, "run_child") as child:
+                report = probe.probe(sys.executable, link)
+            self.assertEqual(report["reason"], "temporary_parent_unavailable")
+            child.assert_not_called()
 
     def test_measured_missing_exit_is_not_missing_collection(self) -> None:
         state = probe.ProviderState(Path("/owned"), "synthetic", requests=2, dispatched=1, continued=True, schema={"type": "object"}, tool_outcome={"call_id": probe.CALL_ID, "content_type": "str", "baseline_marker": True, "late_error_marker": False})
