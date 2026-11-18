@@ -113,20 +113,158 @@
         }
       },
       "models": {
-        "@azure-openai-useast2-nonprod/gpt-6.1-terra": {
-          "name": "GPT-6.1 Terra (Portkey USEast2)"
-        },
-        "@azure-openai-useast2-nonprod/gpt-6.1-sol": {
-          "name": "GPT-6.1 Sol (Portkey USEast2)"
-        },
-        "@azure-openai-useast2-nonprod/gpt-6.1-luna": {
-          "name": "GPT-6.1 Luna (Portkey USEast2)"
-        },
         "@azure-openai-useast2-nonprod/gpt-5-mini": {
           "name": "GPT-5 Mini (USEast2)"
         },
         "@azure-openai-useast2-nonprod/gpt-5.3-codex": {
           "name": "GPT-5.3 Codex (USEast2)"
+        }
+      }
+    },
+    "portkey-openai-direct": {
+      "name": "Portkey OpenAI Direct",
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_DIRECT_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@ws-xp-ai-experimentation-openai/gpt-6-luna": {
+          "name": "GPT-6 Luna (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "none": {
+              "reasoningEffort": "none"
+            },
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "@ws-xp-ai-experimentation-openai/gpt-6.1-terra": {
+          "name": "GPT-6.1 Terra (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "@ws-xp-ai-experimentation-openai/gpt-6.1-sol": {
+          "name": "GPT-6.1 Sol (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "@ws-xp-ai-experimentation-openai/gpt-6.2-astra": {
+          "name": "GPT-6.2 Astra (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "@ws-xp-ai-experimentation-openai/gpt-6.2-sol": {
+          "name": "GPT-6.2 Sol (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        }
+      }
+    },
+    "portkey-foundry-compatible": {
+      "name": "Portkey Foundry (OpenAI-compatible)",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_FOUNDRY_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@azure-foundry-useast2-nonprod/DeepSeek-V4.1-Flash": {
+          "name": "DeepSeek V4.1 Flash (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/DeepSeek-V4-Pro": {
+          "name": "DeepSeek V4 Pro (Foundry USEast2)"
+        },
+        "@azure-foundry-useast2-nonprod/Kimi-K2.6": {
+          "name": "Kimi K2.6 (Foundry USEast2)"
         }
       }
     },
@@ -161,16 +299,13 @@
         }
       },
       "models": {
-        "@bedrock-use1-nonprod/global.anthropic.claude-fable-5-2": {
-          "name": "Claude Fable 5.2 (Bedrock USE1)"
-        },
-        "@bedrock-use1-nonprod/anthropic.claude-opus-5-5": {
+        "@bedrock-use1-nonprod/global.anthropic.claude-opus-5-5": {
           "name": "Claude Opus 5.5 (Bedrock USE1)"
         },
-        "@bedrock-use1-nonprod/anthropic.claude-sonnet-5-5": {
+        "@bedrock-use1-nonprod/global.anthropic.claude-sonnet-5-5": {
           "name": "Claude Sonnet 5.5 (Bedrock USE1)"
         },
-        "@bedrock-use1-nonprod/anthropic.claude-haiku-5-5": {
+        "@bedrock-use1-nonprod/global.anthropic.claude-haiku-5-5": {
           "name": "Claude Haiku 5.5 (Bedrock USE1)"
         },
         "@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8": {
@@ -193,6 +328,24 @@
         }
       }
     },
+    "portkey-bedrock": {
+      "name": "Portkey Bedrock Models",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_BEDROCK_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@bedrock-use1-nonprod/global.zai.glm-5.3": {
+          "name": "GLM 5.3 (Bedrock USE1)"
+        }
+      }
+    },
     "portkey-gemini": {
       "name": "Portkey Gemini",
       "npm": "@ai-sdk/openai-compatible",
@@ -206,6 +359,12 @@
         }
       },
       "models": {
+        "@vertex-ai-global-nonprod/gemini-4-argon": {
+          "name": "Gemini 4 Argon (Vertex Global)"
+        },
+        "@vertex-ai-global-nonprod/gemini-3.8-flash": {
+          "name": "Gemini 3.8 Flash (Vertex Global)"
+        },
         "@vertex-ai-global-nonprod/gemini-3.5-flash": {
           "name": "Gemini 3.5 Flash (Vertex Global)"
         },

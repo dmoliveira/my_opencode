@@ -1,6 +1,6 @@
 # Portkey provider quickstart (OpenCode)
 
-`opencode.json` now includes optional `portkey-openai`, `portkey-claude`, and `portkey-gemini` providers for smoke-testing current models through Portkey, without changing the repo default model.
+`opencode.json` now includes optional Portkey providers for OpenAI, Claude, Gemini, Azure Foundry-compatible, and Bedrock models, without changing the repo default model.
 
 ## Required env
 
@@ -18,8 +18,10 @@ export PORTKEY_API_KEY="$PORTKEYAI_API_KEY"
 
 ```bash
 export PORTKEY_OPENAI_VIRTUAL_KEY="<virtual-key-id>"
+export PORTKEY_OPENAI_DIRECT_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_OPENAI_FOUNDRY_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_CLAUDE_VIRTUAL_KEY="<virtual-key-id>"
+export PORTKEY_BEDROCK_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_GEMINI_VIRTUAL_KEY="<virtual-key-id>"
 ```
 
@@ -38,32 +40,51 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
 
 ## Configured model sets
 
-- OpenAI (reliability-curated)
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-terra`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-sol`
-  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-luna`
+- OpenAI / Azure OpenAI (reliability-curated)
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
+- OpenAI Direct (Portkey OpenAI integration; Responses API tested)
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6-luna`
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.1-terra`
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.1-sol`
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.2-astra`
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.2-sol`
 - OpenAI Foundry (alternative route, reliability-curated)
   - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-mini`
+- Foundry OpenAI-compatible
+  - `portkey-foundry-compatible/@azure-foundry-useast2-nonprod/DeepSeek-V4.1-Flash`
+  - `portkey-foundry-compatible/@azure-foundry-useast2-nonprod/DeepSeek-V4-Pro`
+  - `portkey-foundry-compatible/@azure-foundry-useast2-nonprod/Kimi-K2.6`
 - Claude
-  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-fable-5-2`
-  - `portkey-claude/@bedrock-use1-nonprod/anthropic.claude-opus-5-5`
-  - `portkey-claude/@bedrock-use1-nonprod/anthropic.claude-sonnet-5-5`
-  - `portkey-claude/@bedrock-use1-nonprod/anthropic.claude-haiku-5-5`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-5-5`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-sonnet-5-5`
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-haiku-5-5`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-6-v1`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-6`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-5-20250929-v1:0`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-haiku-4-5-20251001-v1:0`
+- Bedrock non-Claude
+  - `portkey-bedrock/@bedrock-use1-nonprod/global.zai.glm-5.3`
 - Gemini
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-4-argon`
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.8-flash`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.5-flash`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.1-pro-preview`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.1-flash-lite-preview`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-pro`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite`
+
+GPT-6 Luna, GPT-6.1 Terra/Sol, and GPT-6.2 Astra/Sol use the separate
+`PORTKEY_OPENAI_DIRECT_VIRTUAL_KEY`; the Azure OpenAI route returned a different
+model for GPT-6.2 aliases. The active Portkey model catalog exposes Gemini 4
+Argon but not Carbon or Hydrogen; live requests to all active Vertex routes
+rejected Carbon and Hydrogen as `model_not_allowed`. Claude Fable 5.2 is also
+`model_not_allowed` on the active Bedrock route. Kimi K3 is listed by Portkey,
+but timed out on Bedrock US East 1 and returned a gateway error on AP Southeast
+2, so Kimi K2.6 is the verified Kimi route included here.
 
 ## Response caching and provider prompt caching
 
