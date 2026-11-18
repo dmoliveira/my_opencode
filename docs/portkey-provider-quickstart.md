@@ -36,14 +36,21 @@ curl -fsS "https://api.portkey.ai/v1/virtual-keys" \
 
 Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
 
-## Added model sets (tested)
+## Configured model sets
 
 - OpenAI (reliability-curated)
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-terra`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-sol`
+  - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-luna`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
 - OpenAI Foundry (alternative route, reliability-curated)
   - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-mini`
 - Claude
+  - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-fable-5-2`
+  - `portkey-claude/@bedrock-use1-nonprod/anthropic.claude-opus-5-5`
+  - `portkey-claude/@bedrock-use1-nonprod/anthropic.claude-sonnet-5-5`
+  - `portkey-claude/@bedrock-use1-nonprod/anthropic.claude-haiku-5-5`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-8`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-7`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-opus-4-6-v1`
