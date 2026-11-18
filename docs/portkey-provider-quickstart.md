@@ -1,6 +1,6 @@
 # Portkey provider quickstart (OpenCode)
 
-`opencode.json` now includes optional `portkey-openai`, `portkey-claude`, and `portkey-gemini` providers for smoke-testing current models through Portkey, without changing the repo default model.
+`opencode.json` now includes optional Portkey providers for OpenAI, Claude, and Gemini models, without changing the repo default model.
 
 ## Required env
 
@@ -18,6 +18,7 @@ export PORTKEY_API_KEY="$PORTKEYAI_API_KEY"
 
 ```bash
 export PORTKEY_OPENAI_VIRTUAL_KEY="<virtual-key-id>"
+export PORTKEY_OPENAI_DIRECT_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_OPENAI_FOUNDRY_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_CLAUDE_VIRTUAL_KEY="<virtual-key-id>"
 export PORTKEY_GEMINI_VIRTUAL_KEY="<virtual-key-id>"
@@ -44,6 +45,9 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-6.1-luna`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
+- OpenAI Direct (Portkey OpenAI integration; Responses API tested)
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.2-astra`
+  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.2-sol`
 - OpenAI Foundry (alternative route, reliability-curated)
   - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-mini`
 - Claude
@@ -58,12 +62,18 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-sonnet-4-5-20250929-v1:0`
   - `portkey-claude/@bedrock-use1-nonprod/global.anthropic.claude-haiku-4-5-20251001-v1:0`
 - Gemini
+  - `portkey-gemini/@vertex-ai-global-nonprod/gemini-4-argon`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.5-flash`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.1-pro-preview`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-3.1-flash-lite-preview`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-pro`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash`
   - `portkey-gemini/@vertex-ai-global-nonprod/gemini-2.5-flash-lite`
+
+Gemini 4 Carbon and Hydrogen are omitted because the active Vertex integrations
+reject them as `model_not_allowed`. GPT-6.2 Astra and Sol use the separate
+`PORTKEY_OPENAI_DIRECT_VIRTUAL_KEY`; the Azure route currently resolves those
+aliases to a different model.
 
 ## Response caching and provider prompt caching
 

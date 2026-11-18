@@ -130,6 +130,63 @@
         }
       }
     },
+    "portkey-openai-direct": {
+      "name": "Portkey OpenAI Direct",
+      "npm": "@ai-sdk/openai",
+      "options": {
+        "apiKey": "{env:PORTKEY_API_KEY}",
+        "baseURL": "https://api.portkey.ai/v1",
+        "headers": {
+          "x-portkey-api-key": "{env:PORTKEY_API_KEY}",
+          "x-portkey-virtual-key": "{env:PORTKEY_OPENAI_DIRECT_VIRTUAL_KEY}",
+          "x-portkey-config": "{\"cache\":{\"mode\":\"simple\",\"max_age\":3600}}"
+        }
+      },
+      "models": {
+        "@ws-xp-ai-experimentation-openai/gpt-6.2-astra": {
+          "name": "GPT-6.2 Astra (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "@ws-xp-ai-experimentation-openai/gpt-6.2-sol": {
+          "name": "GPT-6.2 Sol (Portkey OpenAI)",
+          "reasoning": true,
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "xhigh": {
+              "reasoningEffort": "xhigh"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        }
+      }
+    },
     "portkey-openai-foundry": {
       "name": "Portkey OpenAI Foundry",
       "npm": "@ai-sdk/openai",
@@ -206,6 +263,9 @@
         }
       },
       "models": {
+        "@vertex-ai-global-nonprod/gemini-4-argon": {
+          "name": "Gemini 4 Argon (Vertex Global)"
+        },
         "@vertex-ai-global-nonprod/gemini-3.5-flash": {
           "name": "Gemini 3.5 Flash (Vertex Global)"
         },
