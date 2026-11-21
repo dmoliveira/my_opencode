@@ -102,11 +102,13 @@ say `agent.list` can return before plugins finish loading; do not treat that
 endpoint as an activation barrier on later versions. The
 [2.3.0 release notes](https://github.com/anomalyco/opencode/releases/tag/v2.3.0)
 also describe changed background subagent and shell lifecycles, which are not
-qualified by these older-version results. A plugin-only universal admission
-boundary cannot rely on this hook being active from server startup; the host's
-[direct-shell handler](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/server/src/handlers/shell.ts)
-and [shell creation](https://github.com/anomalyco/opencode/blob/dc2ffcf8bf26f9e669b6aa22b95f50e12be15e06/packages/core/src/shell.ts)
-remain relevant to a host-level solution.
+qualified by these older-version results. Shell admission remains a host-level
+blocker: pinned 2.2.5 source routes direct `shell.create` API calls into the core
+shell service, which runs mutable plugin hooks before spawning. The direct API
+does not carry agent-tool `tool.use` context, and a plugin hook is not a final
+immutable process-binding point. See the [host admission contract](../../specs/opencode-v2-host-admission-boundary.md)
+for the exact source references, required host behavior, and regression matrix.
+No plugin-only change in this repository clears that blocker.
 
 Experimental, unconfigured adapters cover V2 model-context and native transport redaction, tool-output and error redaction, two shell guards, and write/protected-worktree guards. `make gateway-v2-slice-smoke` builds and exercises them with isolated OpenCode processes, synthetic data, disposable Git worktrees and a localhost provider. The live checks cover a late context mutation before the HTTP hook, rejection of unsupported HTTP content, allowed and blocked shell commands, tool-output redaction, sanitized tool errors and redactor failures, explicit permission denial, interactive rejection with or without feedback, one running-tool interruption, and linked versus primary worktree writes. The error adapter accepts only OpenCode 2.2.5 or 2.2.6. It replaces the error with a host `Tool.Error` containing a redacted or generic message and no original metadata. For a plain rejection, it builds a clean cause from a separately supplied trusted host-decline factory and never takes a prototype from the tool's error. Registration calls the factory once and refuses to install the hook if it fails or produces a structurally invalid sample. The structural check cannot authenticate a host type; the caller must establish that the sample and its prototype are trusted.
 
