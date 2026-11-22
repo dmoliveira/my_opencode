@@ -622,7 +622,7 @@ exit 0
         )
         expect(
             complete_inventory.get("pass") is True,
-            "task4 MCP inventory evaluator should accept exactly 68 tools and every capability representative",
+            f"task4 MCP inventory evaluator should accept exactly {MCP_REQUIRED_TOOL_COUNT} tools and every capability representative",
         )
         incomplete_inventory = evaluate_mcp_inventory(
             {"name": "Playwright"},
@@ -15461,11 +15461,11 @@ jobs:
   deploy-pages:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/pages
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
 """,
             encoding="utf-8",
         )

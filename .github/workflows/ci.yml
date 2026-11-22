@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up minimum Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -27,10 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -39,7 +39,7 @@ jobs:
           make validate
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -86,12 +86,16 @@ jobs:
 
   sidebar-v2:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        opencode: [2.2.6, 2.3.2]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
@@ -104,7 +108,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y tmux
-          npm install --global @opencode/cli@2.2.6 --no-audit --no-fund
+          npm install --global "@opencode/cli@${{ matrix.opencode }}" --no-audit --no-fund
+          opencode --version | grep -Fx "opencode v${{ matrix.opencode }}"
           npm ci --prefix plugin/gateway-sidebar-v2 --ignore-scripts --no-audit --no-fund
           npm ci --prefix plugin/gateway-core --ignore-scripts --no-audit --no-fund
           npm --prefix plugin/gateway-core run build
@@ -114,6 +119,10 @@ jobs:
           npm --prefix plugin/gateway-sidebar-v2 run typecheck
           npm --prefix plugin/gateway-sidebar-v2 test
           npm --prefix plugin/gateway-sidebar-v2 run test:live -- --opencode-bin "$(command -v opencode)"
+
+      - name: Validate known V2 status TUI behavior
+        if: matrix.opencode == '2.2.6'
+        run: |
           python plugin/gateway-core/test/v2/execution_status_live_smoke.py --opencode-bin "$(command -v opencode)" --with-tui
 
   gateway-v2-permission:
@@ -124,15 +133,15 @@ jobs:
         opencode: [2.2.5, 2.2.6]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -163,10 +172,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

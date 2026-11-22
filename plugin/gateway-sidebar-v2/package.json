@@ -12,12 +12,12 @@
     "test:live": "python3 test/live_smoke.py"
   },
   "devDependencies": {
-    "@opencode/plugin": "2.2.6",
-    "@opencode/theme": "2.2.6",
-    "@opentui/core": "0.8.1",
-    "@opentui/solid": "0.8.1",
+    "@opencode/plugin": "2.3.2",
+    "@opencode/theme": "2.3.2",
+    "@opentui/core": "0.9.7",
+    "@opentui/solid": "0.9.7",
     "@types/node": "24.12.2",
-    "solid-js": "1.9.12",
+    "solid-js": "1.9.20",
     "typescript": "5.8.2"
   }
 }

@@ -34,7 +34,7 @@ Reference config shape:
         "enabled": true,
         "command": "npx",
         "args": [
-          "@playwright/mcp@0.0.78",
+          "@playwright/mcp@0.0.86",
           "--isolated",
           "--caps=testing,network,storage,vision,devtools,pdf"
         ],
@@ -61,7 +61,7 @@ Reference config shape:
 
 - default selected provider: `playwright`
 - default enablement: selected provider enabled, non-selected provider disabled
-- default Playwright package: pinned `@playwright/mcp@0.0.78` with `--isolated`
+- default Playwright package: pinned `@playwright/mcp@0.0.86` with `--isolated`
 - default Playwright capabilities: `testing,network,storage,vision,devtools,pdf`
 - OpenCode's MCP server entry remains disabled until an explicit `/mcp` profile or enable action; browser-provider selection does not enable it
 - default failure mode: if selected provider dependencies are missing, keep selection but report exact install fixes

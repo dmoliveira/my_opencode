@@ -29,9 +29,12 @@ test("registers only for the verified V2 host and returns the slot disposer", ()
   expect(plugin.setup(context as never)).toBe(dispose)
   expect(slots).toHaveLength(1)
   expect((slots[0] as { append: string }).append).toBe("sidebar.content")
+  context.app.version = "2.3.2"
+  expect(plugin.setup(context as never)).toBe(dispose)
+  expect(slots).toHaveLength(2)
   context.app.version = "2.2.7"
   expect(plugin.setup(context as never)).toBeUndefined()
-  expect(slots).toHaveLength(1)
+  expect(slots).toHaveLength(2)
   expect(warnings).toHaveLength(1)
 })
 

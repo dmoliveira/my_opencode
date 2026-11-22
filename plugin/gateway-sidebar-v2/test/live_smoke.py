@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.request import ProxyHandler, Request, build_opener
 
 PLUGIN = Path(__file__).resolve().parents[1]
-VERSION = "opencode v2.2.6"
+SUPPORTED_VERSIONS = {"opencode v2.2.6", "opencode v2.3.2"}
 
 
 def main() -> int:
@@ -94,8 +94,9 @@ def main() -> int:
             timeout=10,
             check=True,
         )
-        if version.stdout.strip() != VERSION:
-            raise RuntimeError("OpenCode 2.2.6 is required for this smoke")
+        if version.stdout.strip() not in SUPPORTED_VERSIONS:
+            expected = " or ".join(sorted(SUPPORTED_VERSIONS))
+            raise RuntimeError(f"OpenCode {expected} is required for this smoke")
 
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
