@@ -622,7 +622,7 @@ exit 0
         )
         expect(
             complete_inventory.get("pass") is True,
-            "task4 MCP inventory evaluator should accept exactly 68 tools and every capability representative",
+            f"task4 MCP inventory evaluator should accept exactly {MCP_REQUIRED_TOOL_COUNT} tools and every capability representative",
         )
         incomplete_inventory = evaluate_mcp_inventory(
             {"name": "Playwright"},
