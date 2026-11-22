@@ -15461,11 +15461,11 @@ jobs:
   deploy-pages:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/pages
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
 """,
             encoding="utf-8",
         )

@@ -10,7 +10,7 @@ import {
 } from "../../gateway-sidebar/src/state-reader.ts"
 import { watchExecutionStatus } from "./status-watcher.ts"
 
-const VERIFIED_OPENCODE_VERSION = "2.2.6"
+const SUPPORTED_OPENCODE_VERSIONS: ReadonlySet<string> = new Set(["2.2.6", "2.3.2"])
 
 function displayText(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback
@@ -43,10 +43,10 @@ function ExecutionView(props: { context: Context; sessionID: string }) {
 export default Plugin.define({
   id: "my_opencode.gateway-sidebar-v2",
   setup(context) {
-    if (context.app.version !== VERIFIED_OPENCODE_VERSION) {
+    if (!SUPPORTED_OPENCODE_VERSIONS.has(context.app.version)) {
       context.ui.toast.show({
         variant: "warning",
-        message: `Execution sidebar requires OpenCode ${VERIFIED_OPENCODE_VERSION}; found ${context.app.version}.`,
+        message: `Execution sidebar requires OpenCode ${[...SUPPORTED_OPENCODE_VERSIONS].join(" or ")}; found ${context.app.version}.`,
       })
       return
     }
