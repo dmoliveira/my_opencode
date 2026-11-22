@@ -1,6 +1,6 @@
 # OpenCode Integration Audit Refresh
 
-Status: implementation validated; delivery and post-merge runtime sync remain.
+Status: complete; PR #816 merged as `36d54720`, and the runtime clone is synced.
 
 ## Objective
 
@@ -45,8 +45,8 @@ claiming or enabling unsupported OpenCode V2 gateway protections.
   The latest V2 dependency refresh fixes the compatible SolidJS advisory and
   all currently fixable transitive findings; 23 moderate findings remain with
   `fixAvailable: false` in the current upstream SDK/UI dependency tree.
-- The separate runtime worktree is clean but behind `origin/main`; sync it only
-  after the delivery branch is merged and after a fresh status check.
+- The separate runtime clone was cleanly fast-forwarded from `e9729951` to
+  `36d54720` after merge; the active global OpenCode CLI remains at `2.2.5`.
 
 ## Qualification results
 
