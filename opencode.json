@@ -134,7 +134,7 @@
         }
       },
       "models": {
-        "@ws-xp-ai-experimentation-openai/gpt-6-luna": {
+        "gpt-6-luna": {
           "name": "GPT-6 Luna (Portkey OpenAI)",
           "reasoning": true,
           "variants": {
@@ -158,7 +158,7 @@
             }
           }
         },
-        "@ws-xp-ai-experimentation-openai/gpt-6.1-terra": {
+        "gpt-6.1-terra": {
           "name": "GPT-6.1 Terra (Portkey OpenAI)",
           "reasoning": true,
           "variants": {
@@ -179,7 +179,7 @@
             }
           }
         },
-        "@ws-xp-ai-experimentation-openai/gpt-6.1-sol": {
+        "gpt-6.1-sol": {
           "name": "GPT-6.1 Sol (Portkey OpenAI)",
           "reasoning": true,
           "variants": {
@@ -200,7 +200,7 @@
             }
           }
         },
-        "@ws-xp-ai-experimentation-openai/gpt-6.2-astra": {
+        "gpt-6.2-astra": {
           "name": "GPT-6.2 Astra (Portkey OpenAI)",
           "reasoning": true,
           "variants": {
@@ -221,7 +221,7 @@
             }
           }
         },
-        "@ws-xp-ai-experimentation-openai/gpt-6.2-sol": {
+        "gpt-6.2-sol": {
           "name": "GPT-6.2 Sol (Portkey OpenAI)",
           "reasoning": true,
           "variants": {

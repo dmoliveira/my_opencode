@@ -44,11 +44,11 @@ Pick active virtual key ids by family (OpenAI, Claude/Bedrock, Gemini/Vertex).
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5-mini`
   - `portkey-openai/@azure-openai-useast2-nonprod/gpt-5.3-codex`
 - OpenAI Direct (Portkey OpenAI integration; Responses API tested)
-  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6-luna`
-  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.1-terra`
-  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.1-sol`
-  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.2-astra`
-  - `portkey-openai-direct/@ws-xp-ai-experimentation-openai/gpt-6.2-sol`
+  - `portkey-openai-direct/gpt-6-luna`
+  - `portkey-openai-direct/gpt-6.1-terra`
+  - `portkey-openai-direct/gpt-6.1-sol`
+  - `portkey-openai-direct/gpt-6.2-astra`
+  - `portkey-openai-direct/gpt-6.2-sol`
 - OpenAI Foundry (alternative route, reliability-curated)
   - `portkey-openai-foundry/@azure-foundry-useast2-nonprod/gpt-5-mini`
 - Foundry OpenAI-compatible
